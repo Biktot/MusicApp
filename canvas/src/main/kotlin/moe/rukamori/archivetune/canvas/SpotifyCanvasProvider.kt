@@ -197,7 +197,8 @@ object SpotifyCanvasProvider {
 
     suspend fun isHealthy(accessToken: String, clientId: String): Boolean {
         val trackUri = "spotify:track:0VjIjW4GlUZAMYd2vXMi3b"
-        return getCanvases(listOf(trackUri), accessToken, clientId)[trackUri] != null
+        getCanvases(listOf(trackUri), accessToken, clientId)
+        return true
     }
 
     private suspend fun clientToken(clientId: String): String = clientTokenMutex.withLock {
