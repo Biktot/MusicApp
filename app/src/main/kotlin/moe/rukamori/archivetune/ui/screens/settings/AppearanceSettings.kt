@@ -69,6 +69,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
 import moe.rukamori.archivetune.R
+import moe.rukamori.archivetune.aod.AodSupport
 import moe.rukamori.archivetune.constants.AppFontPreference
 import moe.rukamori.archivetune.constants.BackdropBlurAmountKey
 import moe.rukamori.archivetune.constants.BackdropEnabledKey
@@ -148,6 +149,7 @@ fun AppearanceSettings(navController: NavController) {
     val playlistTagsViewModel: PlaylistTagsViewModel = hiltViewModel()
     val playlistTagsState by playlistTagsViewModel.screenState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val isAodSupported = remember(context) { AodSupport.isSupported(context) }
     val defaultDisableAnimations = remember(context) { context.isLowRamDevice() }
     val (dynamicTheme, onDynamicThemeChange) =
         rememberPreference(
@@ -880,9 +882,17 @@ fun AppearanceSettings(navController: NavController) {
                 item {
                     PreferenceEntry(
                         title = { Text(stringResource(R.string.aod_customize_title)) },
-                        description = stringResource(R.string.aod_customize_entry_desc),
+                        description =
+                            stringResource(
+                                if (isAodSupported) {
+                                    R.string.aod_customize_entry_desc
+                                } else {
+                                    R.string.aod_not_supported
+                                },
+                            ),
                         icon = { Icon(painterResource(R.drawable.bedtime), null) },
                         onClick = { navController.navigate("settings/appearance/aod_customized") },
+                        isEnabled = isAodSupported,
                     )
                 }
 
