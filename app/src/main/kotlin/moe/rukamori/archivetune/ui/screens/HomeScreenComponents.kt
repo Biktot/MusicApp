@@ -29,6 +29,8 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -38,6 +40,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyGridState
@@ -53,11 +56,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.carousel.HorizontalCenteredHeroCarousel
@@ -77,6 +83,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -135,6 +142,8 @@ import moe.rukamori.archivetune.ui.menu.YouTubeAlbumMenu
 import moe.rukamori.archivetune.ui.menu.YouTubeArtistMenu
 import moe.rukamori.archivetune.ui.menu.YouTubePlaylistMenu
 import moe.rukamori.archivetune.ui.menu.YouTubeSongMenu
+import moe.rukamori.archivetune.ui.utils.YtimgResizePolicy
+import moe.rukamori.archivetune.ui.utils.resize
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.random.Random
@@ -204,6 +213,7 @@ fun HomeSectionHeader(
     label: String? = null,
     thumbnail: (@Composable () -> Unit)? = null,
     onClick: (() -> Unit)? = null,
+    actionContent: (@Composable () -> Unit)? = null,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -212,13 +222,17 @@ fun HomeSectionHeader(
             modifier
                 .fillMaxWidth()
                 .heightIn(min = 64.dp)
-                .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+                .then(if (onClick != null && actionContent == null) Modifier.clickable(onClick = onClick) else Modifier)
                 .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
         thumbnail?.invoke()
         Column(
             verticalArrangement = Arrangement.Center,
-            modifier = Modifier.weight(1f),
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .heightIn(min = 48.dp)
+                    .then(if (onClick != null && actionContent != null) Modifier.clickable(onClick = onClick) else Modifier),
         ) {
             label?.let {
                 Text(
@@ -238,7 +252,9 @@ fun HomeSectionHeader(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        if (onClick != null) {
+        if (actionContent != null) {
+            actionContent()
+        } else if (onClick != null) {
             Icon(
                 painter = painterResource(R.drawable.arrow_forward),
                 contentDescription = null,
@@ -1423,6 +1439,20 @@ fun HomePageSectionContent(
     onOpenRemoteItem: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    if (section.featuredCards.isNotEmpty()) {
+        FeaturedPlaylistCardsSection(
+            section = section,
+            mediaMetadata = mediaMetadata,
+            isPlaying = isPlaying,
+            navController = navController,
+            playerConnection = playerConnection,
+            menuState = menuState,
+            scope = scope,
+            modifier = modifier,
+        )
+        return
+    }
+
     LazyRow(
         contentPadding =
             WindowInsets.systemBars
@@ -1448,6 +1478,281 @@ fun HomePageSectionContent(
             )
         }
     }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun FeaturedPlaylistCardsSection(
+    section: HomePage.Section,
+    mediaMetadata: MediaMetadata?,
+    isPlaying: Boolean,
+    navController: NavController,
+    playerConnection: PlayerConnection,
+    menuState: MenuState,
+    scope: CoroutineScope,
+    modifier: Modifier = Modifier,
+) {
+    val songsById = remember(section.items) { section.items.filterIsInstance<SongItem>().associateBy(SongItem::id) }
+    val horizontalInsets = WindowInsets.systemBars.only(WindowInsetsSides.Horizontal).asPaddingValues()
+    val layoutDirection = LocalLayoutDirection.current
+    val startPadding = horizontalInsets.calculateStartPadding(layoutDirection) + 16.dp
+    val endPadding = horizontalInsets.calculateEndPadding(layoutDirection) + 16.dp
+
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        val cardWidth = (maxWidth - 40.dp).coerceAtLeast(264.dp).coerceAtMost(520.dp)
+        LazyRow(
+            contentPadding = PaddingValues(start = startPadding, end = endPadding),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            items(
+                items = section.featuredCards,
+                key = HomePage.Section.FeaturedCard::id,
+                contentType = { "featured_playlist_card" },
+            ) { card ->
+                val songs = remember(card.itemIds, songsById) { card.itemIds.mapNotNull(songsById::get).take(3) }
+                FeaturedPlaylistCard(
+                    card = card,
+                    songs = songs,
+                    mediaMetadata = mediaMetadata,
+                    isPlaying = isPlaying,
+                    navController = navController,
+                    playerConnection = playerConnection,
+                    menuState = menuState,
+                    scope = scope,
+                    modifier = Modifier.width(cardWidth),
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun FeaturedPlaylistCard(
+    card: HomePage.Section.FeaturedCard,
+    songs: List<SongItem>,
+    mediaMetadata: MediaMetadata?,
+    isPlaying: Boolean,
+    navController: NavController,
+    playerConnection: PlayerConnection,
+    menuState: MenuState,
+    scope: CoroutineScope,
+    modifier: Modifier = Modifier,
+) {
+    val playlist = remember(card) { card.toPlaylistItem() }
+    val openPlaylist =
+        remember(playlist.id, navController) {
+            { navController.navigate("online_playlist/${playlist.id}") }
+        }
+    val sequentialEndpoint = remember(card.playEndpoint, card.id) { card.playEndpoint ?: WatchEndpoint(playlistId = card.id) }
+    val playPlaylist =
+        remember(sequentialEndpoint, playerConnection) {
+            { playerConnection.playQueue(YouTubeQueue.playlist(sequentialEndpoint)) }
+        }
+    val secondaryEndpoint = card.radioEndpoint ?: card.shuffleEndpoint
+    val playSecondary =
+        remember(secondaryEndpoint, playerConnection) {
+            secondaryEndpoint?.let { endpoint -> { playerConnection.playQueue(YouTubeQueue.playlist(endpoint)) } }
+        }
+    val showPlaylistMenu =
+        remember(playlist, menuState, scope) {
+            {
+                menuState.show {
+                    YouTubePlaylistMenu(
+                        playlist = playlist,
+                        coroutineScope = scope,
+                        onDismiss = menuState::dismiss,
+                    )
+                }
+            }
+        }
+
+    Surface(
+        shape = MaterialTheme.shapes.extraLarge,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.58f)),
+        modifier = modifier,
+    ) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(16.dp),
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 96.dp)
+                        .then(
+                            Modifier.combinedClickable(
+                                onClick = openPlaylist,
+                                onLongClick = showPlaylistMenu,
+                            ),
+                        ),
+            ) {
+                card.thumbnail?.let { thumbnail ->
+                    AsyncImage(
+                        model =
+                            thumbnail.resize(
+                                width = FeaturedPlaylistArtworkSizePx,
+                                height = FeaturedPlaylistArtworkSizePx,
+                                ytimgResizePolicy = YtimgResizePolicy.PreserveOriginal,
+                            ),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier =
+                            Modifier
+                                .size(96.dp)
+                                .clip(MaterialTheme.shapes.medium),
+                    )
+                } ?: run {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier =
+                            Modifier
+                                .size(96.dp)
+                                .clip(MaterialTheme.shapes.medium)
+                                .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.queue_music),
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(36.dp),
+                        )
+                    }
+                }
+
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(
+                        text = card.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    card.subtitle?.let { subtitle ->
+                        Text(
+                            text = subtitle,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+
+            songs.forEachIndexed { index, song ->
+                val songEndpoint =
+                    remember(song.endpoint, song.id, card.id, index) {
+                        song.endpoint?.let { endpoint ->
+                            endpoint.copy(
+                                playlistId = endpoint.playlistId ?: card.id,
+                                index = endpoint.index ?: index,
+                            )
+                        } ?: WatchEndpoint(
+                            videoId = song.id,
+                            playlistId = card.id,
+                            index = index,
+                        )
+                    }
+                val playSong =
+                    remember(song.id, songEndpoint, mediaMetadata?.id, playerConnection) {
+                        {
+                            if (song.id == mediaMetadata?.id) {
+                                playerConnection.player.togglePlayPause()
+                            } else {
+                                playerConnection.playQueue(YouTubeQueue.playlist(songEndpoint))
+                            }
+                        }
+                    }
+                YouTubeListItem(
+                    item = song,
+                    isActive = song.id == mediaMetadata?.id,
+                    isPlaying = isPlaying,
+                    isSwipeable = false,
+                    showActiveContainer = false,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .combinedClickable(
+                                onClick = playSong,
+                                onLongClick = {
+                                    menuState.show {
+                                        YouTubeSongMenu(
+                                            song = song,
+                                            navController = navController,
+                                            onDismiss = menuState::dismiss,
+                                        )
+                                    }
+                                },
+                            ),
+                )
+            }
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            ) {
+                FilledIconButton(
+                    onClick = playPlaylist,
+                    modifier = Modifier.size(56.dp),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.play),
+                        contentDescription = stringResource(R.string.play),
+                    )
+                }
+                if (playSecondary != null) {
+                    FilledTonalIconButton(
+                        onClick = playSecondary,
+                        modifier = Modifier.size(56.dp),
+                    ) {
+                        Icon(
+                            painter = painterResource(if (card.radioEndpoint != null) R.drawable.radio else R.drawable.shuffle),
+                            contentDescription =
+                                stringResource(
+                                    if (card.radioEndpoint != null) {
+                                        R.string.start_radio
+                                    } else {
+                                        R.string.shuffle
+                                    },
+                                ),
+                        )
+                    }
+                }
+                FilledTonalIconButton(
+                    onClick = showPlaylistMenu,
+                    modifier = Modifier.size(56.dp),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.more_horiz),
+                        contentDescription = stringResource(R.string.more_options),
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun HomePage.Section.FeaturedCard.toPlaylistItem(): PlaylistItem {
+    return PlaylistItem(
+        id = id,
+        title = title,
+        author = subtitle?.let { moe.rukamori.archivetune.innertube.models.Artist(name = it, id = null) },
+        songCountText = null,
+        thumbnail = thumbnail,
+        playEndpoint = playEndpoint,
+        shuffleEndpoint = shuffleEndpoint,
+        radioEndpoint = radioEndpoint,
+    )
 }
 
 // ============== Helper Composables ==============
@@ -1768,6 +2073,7 @@ fun HomePageSectionTitle(
     section: HomePage.Section,
     navController: NavController,
     modifier: Modifier = Modifier,
+    onPlayAll: (() -> Unit)? = null,
 ) {
     HomeSectionHeader(
         title = section.title,
@@ -1801,6 +2107,22 @@ fun HomePageSectionTitle(
                     }
                 }
             },
+        actionContent =
+            onPlayAll?.let { playAll ->
+                {
+                    OutlinedButton(
+                        onClick = playAll,
+                        modifier = Modifier.heightIn(min = 40.dp).widthIn(min = 88.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.play_all),
+                            maxLines = 1,
+                        )
+                    }
+                }
+            },
         modifier = modifier,
     )
 }
+
+private const val FeaturedPlaylistArtworkSizePx = 320

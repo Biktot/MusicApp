@@ -67,6 +67,7 @@ import moe.rukamori.archivetune.models.MediaMetadata
 import moe.rukamori.archivetune.extensions.toMediaItem
 import moe.rukamori.archivetune.playback.PlayerConnection
 import moe.rukamori.archivetune.playback.queues.ListQueue
+import moe.rukamori.archivetune.playback.queues.YouTubeQueue
 import moe.rukamori.archivetune.ui.component.ExpressivePullToRefreshBox
 import moe.rukamori.archivetune.ui.component.LocalMenuState
 import moe.rukamori.archivetune.ui.component.MenuState
@@ -567,9 +568,16 @@ private fun HomeContent(
                             key = "home_remote_header_$sectionKey",
                             contentType = "section_header",
                         ) {
+                            val playAll =
+                                remember(section.playEndpoint, playerConnection) {
+                                    section.playEndpoint?.let { endpoint ->
+                                        { playerConnection.playQueue(YouTubeQueue.playlist(endpoint)) }
+                                    }
+                                }
                             HomePageSectionTitle(
                                 section = section,
                                 navController = navController,
+                                onPlayAll = playAll,
                                 modifier = Modifier.animateItem(),
                             )
                         }
