@@ -189,7 +189,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import moe.rukamori.archivetune.aod.ACTION_AOD_MODE
-import moe.rukamori.archivetune.aod.AodSupport
 import moe.rukamori.archivetune.constants.AodAutoStartScreenOffKey
 import moe.rukamori.archivetune.constants.AppBarHeight
 import moe.rukamori.archivetune.constants.AppFontPreference
@@ -404,7 +403,6 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestAodMode(requireAutoStart: Boolean = false) {
-        if (!AodSupport.isSupported(this)) return
         aodPreferenceReadJob?.cancel()
         aodPreferenceReadJob =
             lifecycleScope.launch {
@@ -427,7 +425,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun registerAodScreenOffReceiver() {
-        if (isAodScreenOffReceiverRegistered || !AodSupport.isSupported(this)) return
+        if (isAodScreenOffReceiverRegistered) return
         val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(aodScreenOffReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
