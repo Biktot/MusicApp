@@ -1735,7 +1735,7 @@ private fun FeaturedPlaylistCard(
                     Icon(
                         painter = painterResource(R.drawable.more_horiz),
                         contentDescription = stringResource(R.string.more_options),
-                    }
+                    )
                 }
             }
         }
