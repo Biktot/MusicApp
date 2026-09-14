@@ -89,7 +89,6 @@ import moe.rukamori.archivetune.LocalDatabase
 import moe.rukamori.archivetune.LocalDownloadUtil
 import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.R
-import moe.rukamori.archivetune.aod.AodSupport
 import moe.rukamori.archivetune.constants.ArchiveTuneCanvasKey
 import moe.rukamori.archivetune.constants.AodModeEnabledKey
 import moe.rukamori.archivetune.constants.ArtistSeparatorsKey
@@ -138,7 +137,6 @@ fun PlayerMenu(
 ) {
     mediaMetadata ?: return
     val context = LocalContext.current
-    val isAodSupported = remember(context) { AodSupport.isSupported(context) }
     val database = LocalDatabase.current
     val playerConnection = LocalPlayerConnection.current ?: return
     val deviceMusicVolumeController = rememberDeviceMusicVolumeController()
@@ -642,7 +640,6 @@ fun PlayerMenu(
                                             playerConnection.aodModeEnabled.value = true
                                             onDismiss()
                                         },
-                                        enabled = isAodSupported,
                                         backgroundColor = aodBgColor,
                                         contentColor = aodContentColor,
                                     ),
