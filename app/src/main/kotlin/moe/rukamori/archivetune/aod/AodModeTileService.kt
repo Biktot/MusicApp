@@ -24,11 +24,6 @@ class AodModeTileService : TileService() {
 
     override fun onClick() {
         super.onClick()
-        if (!AodSupport.isSupported(this)) {
-            updateTile()
-            return
-        }
-
         val launchIntent =
             Intent(this, MainActivity::class.java).apply {
                 action = ACTION_AOD_MODE
@@ -52,12 +47,7 @@ class AodModeTileService : TileService() {
 
     private fun updateTile() {
         qsTile?.apply {
-            state =
-                if (AodSupport.isSupported(this@AodModeTileService)) {
-                    Tile.STATE_INACTIVE
-                } else {
-                    Tile.STATE_UNAVAILABLE
-                }
+            state = Tile.STATE_INACTIVE
             label = getString(R.string.aod_mode)
             icon = Icon.createWithResource(this@AodModeTileService, R.drawable.bedtime)
             updateTile()

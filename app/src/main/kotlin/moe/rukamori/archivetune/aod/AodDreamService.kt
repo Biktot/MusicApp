@@ -103,11 +103,6 @@ class AodDreamService :
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_START)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
 
-        if (!AodSupport.isSupported(this)) {
-            finish()
-            return
-        }
-
         serviceScope.launch {
             val isAodEnabled =
                 try {
