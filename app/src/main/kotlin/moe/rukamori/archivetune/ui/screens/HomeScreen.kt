@@ -416,6 +416,44 @@ private fun HomeContent(
                         }
                     }
 
+                    uiState.communitySection?.takeIf { section -> section.featuredCards.isNotEmpty() }?.let { section ->
+                        sectionSpacer("community")
+                        item(
+                            key = "home_community_header",
+                            contentType = "section_header",
+                        ) {
+                            val playAll =
+                                remember(section.playEndpoint, playerConnection) {
+                                    section.playEndpoint?.let { endpoint ->
+                                        { playerConnection.playQueue(YouTubeQueue.playlist(endpoint)) }
+                                    }
+                                }
+                            HomePageSectionTitle(
+                                section = section,
+                                navController = navController,
+                                onPlayAll = playAll,
+                                modifier = Modifier.animateItem(),
+                            )
+                        }
+                        item(
+                            key = "home_community",
+                            contentType = "featured_playlist_shelf",
+                        ) {
+                            HomePageSectionContent(
+                                section = section,
+                                mediaMetadata = mediaMetadata,
+                                isPlaying = isPlaying,
+                                navController = navController,
+                                playerConnection = playerConnection,
+                                menuState = menuState,
+                                haptic = haptic,
+                                scope = scope,
+                                onOpenRemoteItem = { itemId -> onAction(HomeAction.OpenRemoteItem(itemId)) },
+                                modifier = Modifier.animateItem(),
+                            )
+                        }
+                    }
+
                     if (uiState.speedDialItems.isNotEmpty()) {
                         sectionSpacer("speed_dial")
                         item(
