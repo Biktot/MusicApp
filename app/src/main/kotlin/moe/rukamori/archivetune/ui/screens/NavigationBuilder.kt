@@ -185,7 +185,6 @@ fun NavGraphBuilder.navigationBuilder(
         BrowseScreen(
             navController,
             scrollBehavior,
-            it.arguments?.getString("browseId"),
         )
     }
     composable(
