@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -276,22 +277,22 @@ private fun CanvasHealthPreferences(
         }
 
         canvasHealthPreference(
-            title = stringResource(R.string.canvas_better_lyrics),
+            titleRes = R.string.canvas_better_lyrics,
             health = model.health.betterLyrics,
             iconRes = R.drawable.motion_photos_on,
         )
         canvasHealthPreference(
-            title = stringResource(R.string.canvas_apple_music),
+            titleRes = R.string.canvas_apple_music,
             health = model.health.appleMusic,
             iconRes = R.drawable.music_note,
         )
         canvasHealthPreference(
-            title = stringResource(R.string.canvas_tidal),
+            titleRes = R.string.canvas_tidal,
             health = model.health.tidal,
             iconRes = R.drawable.music_note,
         )
         canvasHealthPreference(
-            title = stringResource(R.string.canvas_spotify),
+            titleRes = R.string.canvas_spotify,
             health = model.health.spotify,
             iconRes = R.drawable.spotify_icon,
         )
@@ -299,13 +300,13 @@ private fun CanvasHealthPreferences(
 }
 
 private fun PreferenceGroupScope.canvasHealthPreference(
-    title: String,
+    @StringRes titleRes: Int,
     health: CanvasHealth,
     iconRes: Int,
 ) {
     item {
         PreferenceEntry(
-            title = { Text(title) },
+            title = { Text(stringResource(titleRes)) },
             description = stringResource(health.labelResource()),
             icon = { Icon(painterResource(iconRes), null) },
             trailingContent = {
