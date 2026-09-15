@@ -142,7 +142,7 @@ class MediaLibrarySessionCallback
                 .build()
             return if (session.isAutoCompanionController(controller) || session.isAutomotiveController(controller)) {
                 val carButtons = carMediaButtonPreferences(androidAutoSettings.currentConfiguration())
-                MediaSession.ConnectionResult.AcceptedResultBuilder(session, controller)
+                MediaSession.ConnectionResult.AcceptedResultBuilder(session)
                     .setAvailableSessionCommands(availableSessionCommands)
                     .setAvailablePlayerCommands(connectionResult.availablePlayerCommands)
                     .setMediaButtonPreferences(carButtons)
