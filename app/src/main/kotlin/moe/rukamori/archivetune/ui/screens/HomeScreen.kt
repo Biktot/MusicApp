@@ -569,24 +569,14 @@ private fun HomeContent(
                         }
                     }
 
-                    uiState.similarRecommendations.forEach { recommendation ->
-                        sectionSpacer("similar_${recommendation.title.id}")
+                    if (uiState.similarRecommendations.isNotEmpty()) {
+                        sectionSpacer("similar_recommendations")
                         item(
-                            key = "home_similar_header_${recommendation.title.id}",
-                            contentType = "section_header",
-                        ) {
-                            SimilarRecommendationsTitle(
-                                recommendation = recommendation,
-                                navController = navController,
-                                modifier = Modifier.animateItem(),
-                            )
-                        }
-                        item(
-                            key = "home_similar_${recommendation.title.id}",
-                            contentType = "media_shelf",
+                            key = "home_similar_recommendations",
+                            contentType = "discovery_decks",
                         ) {
                             SimilarRecommendationsSection(
-                                recommendation = recommendation,
+                                recommendations = uiState.similarRecommendations,
                                 mediaMetadata = mediaMetadata,
                                 isPlaying = isPlaying,
                                 navController = navController,
