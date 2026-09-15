@@ -126,7 +126,7 @@ class PrepareCommunityHomePageUseCase
             val titleTokens = normalizedTitle.tokens()
             val localizedCommunityTokens =
                 localizedCommunityLabel
-                    .replace(localizedPlaylistLabel, replacement = "", ignoreCase = true)
+                    .replace(localizedPlaylistLabel, newValue = "", ignoreCase = true)
                     .lowercase(Locale.getDefault())
                     .tokens()
                     .ifEmpty { localizedCommunityLabel.lowercase(Locale.getDefault()).tokens() }
