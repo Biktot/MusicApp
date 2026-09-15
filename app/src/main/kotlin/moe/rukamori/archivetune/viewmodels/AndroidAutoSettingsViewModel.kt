@@ -42,7 +42,6 @@ sealed interface AndroidAutoSettingsState {
 @Immutable
 data class AndroidAutoSettingsUiModel(
     val snapshot: AndroidAutoSettingsSnapshot,
-    val actionDialog: AndroidAutoActionSlot?,
     val busy: Boolean,
 )
 
@@ -52,9 +51,10 @@ sealed interface AndroidAutoSettingsAction {
     data class SetLocalSongs(val enabled: Boolean) : AndroidAutoSettingsAction
     data class SetMeteredPlayback(val enabled: Boolean) : AndroidAutoSettingsAction
     data class SetMeteredArtwork(val enabled: Boolean) : AndroidAutoSettingsAction
-    data class ShowActionPicker(val slot: AndroidAutoActionSlot) : AndroidAutoSettingsAction
-    data class SelectAction(val action: AndroidAutoCustomAction) : AndroidAutoSettingsAction
-    data object DismissActionPicker : AndroidAutoSettingsAction
+    data class SetAction(
+        val slot: AndroidAutoActionSlot,
+        val action: AndroidAutoCustomAction,
+    ) : AndroidAutoSettingsAction
     data object RequestAudioPermission : AndroidAutoSettingsAction
     data object OpenAppPermissions : AndroidAutoSettingsAction
     data object ExternalActionFailed : AndroidAutoSettingsAction
@@ -72,7 +72,6 @@ class AndroidAutoSettingsViewModel @Inject constructor(
     private val useCases: AndroidAutoSettingsUseCases,
 ) : ViewModel() {
     private data class Controls(
-        val actionDialog: AndroidAutoActionSlot? = null,
         val busy: Boolean = false,
         @param:StringRes val error: Int? = null,
     )
@@ -93,7 +92,6 @@ class AndroidAutoSettingsViewModel @Inject constructor(
             ?: AndroidAutoSettingsState.Success(
                 AndroidAutoSettingsUiModel(
                     snapshot = snapshot.copy(hasLocalAudioPermission = useCases.hasLocalAudioPermission()),
-                    actionDialog = controls.actionDialog,
                     busy = controls.busy,
                 ),
             )
@@ -105,8 +103,6 @@ class AndroidAutoSettingsViewModel @Inject constructor(
 
     fun onAction(action: AndroidAutoSettingsAction) {
         when (action) {
-            is AndroidAutoSettingsAction.ShowActionPicker -> controls.update { it.copy(actionDialog = action.slot) }
-            AndroidAutoSettingsAction.DismissActionPicker -> controls.update { it.copy(actionDialog = null) }
             AndroidAutoSettingsAction.RequestAudioPermission -> eventChannel.trySend(AndroidAutoSettingsEvent.RequestAudioPermission)
             AndroidAutoSettingsAction.OpenAppPermissions -> eventChannel.trySend(AndroidAutoSettingsEvent.OpenAppPermissions)
             AndroidAutoSettingsAction.ExternalActionFailed -> controls.update {
@@ -121,7 +117,7 @@ class AndroidAutoSettingsViewModel @Inject constructor(
     private fun update(action: AndroidAutoSettingsAction) {
         if (updateJob?.isActive == true) return
         val model = (state.value as? AndroidAutoSettingsState.Success)?.model ?: return
-        controls.update { it.copy(busy = true, actionDialog = null, error = null) }
+        controls.update { it.copy(busy = true, error = null) }
         updateJob = viewModelScope.launch {
             try {
                 when (action) {
@@ -131,10 +127,8 @@ class AndroidAutoSettingsViewModel @Inject constructor(
                     is AndroidAutoSettingsAction.SetLocalSongs -> useCases.setLocalSongs(action.enabled)
                     is AndroidAutoSettingsAction.SetMeteredPlayback -> useCases.setMeteredPlayback(action.enabled)
                     is AndroidAutoSettingsAction.SetMeteredArtwork -> useCases.setMeteredArtwork(action.enabled)
-                    is AndroidAutoSettingsAction.SelectAction -> {
-                        val slot = model.actionDialog ?: return@launch
-                        useCases.setAction(slot, action.action, model.snapshot.configuration)
-                    }
+                    is AndroidAutoSettingsAction.SetAction ->
+                        useCases.setAction(action.slot, action.action, model.snapshot.configuration)
                     else -> Unit
                 }
             } catch (error: CancellationException) {
