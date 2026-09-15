@@ -16,34 +16,23 @@ import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -56,9 +45,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -69,11 +55,19 @@ import moe.rukamori.archivetune.androidauto.AndroidAutoActionSlot
 import moe.rukamori.archivetune.androidauto.AndroidAutoConnectionStatus
 import moe.rukamori.archivetune.androidauto.AndroidAutoCustomAction
 import moe.rukamori.archivetune.androidauto.AndroidAutoSettingsSnapshot
+import moe.rukamori.archivetune.ui.component.ListPreference
+import moe.rukamori.archivetune.ui.component.PreferenceEntry
+import moe.rukamori.archivetune.ui.component.PreferenceGroup
+import moe.rukamori.archivetune.ui.component.SwitchPreference
 import moe.rukamori.archivetune.viewmodels.AndroidAutoSettingsAction
 import moe.rukamori.archivetune.viewmodels.AndroidAutoSettingsEvent
 import moe.rukamori.archivetune.viewmodels.AndroidAutoSettingsState
 import moe.rukamori.archivetune.viewmodels.AndroidAutoSettingsUiModel
 import moe.rukamori.archivetune.viewmodels.AndroidAutoSettingsViewModel
+
+private val primaryAndroidAutoActions =
+    AndroidAutoCustomAction.entries.filterNot { it == AndroidAutoCustomAction.NONE }
+private val secondaryAndroidAutoActions = AndroidAutoCustomAction.entries
 
 @Composable
 fun AndroidAutoSettings(
@@ -168,257 +162,178 @@ private fun AndroidAutoSettingsBody(
     modifier: Modifier = Modifier,
 ) {
     val configuration = model.snapshot.configuration
-    val contentModifier = remember(modifier) {
-        modifier.fillMaxSize().padding(horizontal = SettingsDimensions.ScreenHorizontalPadding)
-            .padding(top = SettingsDimensions.SectionSpacing, bottom = SettingsDimensions.ScreenBottomPadding)
-    }
-    val verticalArrangement = remember { Arrangement.spacedBy(SettingsDimensions.SectionSpacing) }
     Column(
-        modifier = contentModifier.verticalScroll(rememberScrollState()),
-        verticalArrangement = verticalArrangement,
+        modifier =
+            modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = SettingsDimensions.ScreenBottomPadding),
     ) {
-        AndroidAutoConnectionCard(model.snapshot, onAction)
-        AndroidAutoSection(stringResource(R.string.android_auto_content)) {
-            AndroidAutoSwitchRow(
-                title = stringResource(R.string.android_auto_online_recommendations),
-                description = stringResource(R.string.android_auto_online_recommendations_desc),
-                checked = configuration.onlineRecommendations,
-                enabled = !model.busy,
-                onCheckedChange = remember(onAction) {
-                    { onAction(AndroidAutoSettingsAction.SetOnlineRecommendations(it)) }
-                },
-            )
-            HorizontalDivider()
-            AndroidAutoSwitchRow(
-                title = stringResource(R.string.android_auto_online_voice_search),
-                description = stringResource(R.string.android_auto_online_voice_search_desc),
-                checked = configuration.onlineVoiceSearch,
-                enabled = !model.busy,
-                onCheckedChange = remember(onAction) { { onAction(AndroidAutoSettingsAction.SetOnlineVoiceSearch(it)) } },
-            )
-            HorizontalDivider()
-            AndroidAutoSwitchRow(
-                title = stringResource(R.string.android_auto_local_songs),
-                description = if (configuration.localSongs && !model.snapshot.hasLocalAudioPermission) {
-                    stringResource(R.string.android_auto_audio_permission_missing)
-                } else {
-                    stringResource(R.string.android_auto_local_songs_desc)
-                },
-                checked = configuration.localSongs,
-                enabled = !model.busy,
-                onCheckedChange = remember(onAction, model.snapshot.hasLocalAudioPermission) { { enabled ->
-                    onAction(AndroidAutoSettingsAction.SetLocalSongs(enabled))
-                    if (enabled && !model.snapshot.hasLocalAudioPermission) {
-                        onAction(AndroidAutoSettingsAction.RequestAudioPermission)
-                    }
-                } },
-            )
+        AndroidAutoConnectionPreferences(snapshot = model.snapshot, onAction = onAction)
+
+        PreferenceGroup(title = stringResource(R.string.android_auto_content)) {
+            item {
+                SwitchPreference(
+                    title = { Text(stringResource(R.string.android_auto_online_recommendations)) },
+                    description = stringResource(R.string.android_auto_online_recommendations_desc),
+                    icon = { Icon(painterResource(R.drawable.discover_tune), null) },
+                    checked = configuration.onlineRecommendations,
+                    onCheckedChange = remember(onAction) {
+                        { onAction(AndroidAutoSettingsAction.SetOnlineRecommendations(it)) }
+                    },
+                    isEnabled = !model.busy,
+                )
+            }
+            item {
+                SwitchPreference(
+                    title = { Text(stringResource(R.string.android_auto_online_voice_search)) },
+                    description = stringResource(R.string.android_auto_online_voice_search_desc),
+                    icon = { Icon(painterResource(R.drawable.mic), null) },
+                    checked = configuration.onlineVoiceSearch,
+                    onCheckedChange = remember(onAction) {
+                        { onAction(AndroidAutoSettingsAction.SetOnlineVoiceSearch(it)) }
+                    },
+                    isEnabled = !model.busy,
+                )
+            }
+            item {
+                SwitchPreference(
+                    title = { Text(stringResource(R.string.android_auto_local_songs)) },
+                    description =
+                        stringResource(
+                            if (configuration.localSongs && !model.snapshot.hasLocalAudioPermission) {
+                                R.string.android_auto_audio_permission_missing
+                            } else {
+                                R.string.android_auto_local_songs_desc
+                            },
+                        ),
+                    icon = { Icon(painterResource(R.drawable.library_music), null) },
+                    checked = configuration.localSongs,
+                    onCheckedChange = remember(onAction, model.snapshot.hasLocalAudioPermission) {
+                        { enabled ->
+                            onAction(AndroidAutoSettingsAction.SetLocalSongs(enabled))
+                            if (enabled && !model.snapshot.hasLocalAudioPermission) {
+                                onAction(AndroidAutoSettingsAction.RequestAudioPermission)
+                            }
+                        }
+                    },
+                    isEnabled = !model.busy,
+                )
+            }
         }
-        AndroidAutoSection(stringResource(R.string.android_auto_data)) {
-            AndroidAutoSwitchRow(
-                title = stringResource(R.string.android_auto_metered_playback),
-                description = stringResource(R.string.android_auto_metered_playback_desc),
-                checked = configuration.meteredPlayback,
-                enabled = !model.busy,
-                onCheckedChange = remember(onAction) { { onAction(AndroidAutoSettingsAction.SetMeteredPlayback(it)) } },
-            )
-            HorizontalDivider()
-            AndroidAutoSwitchRow(
-                title = stringResource(R.string.android_auto_metered_artwork),
-                description = stringResource(R.string.android_auto_metered_artwork_desc),
-                checked = configuration.meteredArtwork,
-                enabled = !model.busy,
-                onCheckedChange = remember(onAction) { { onAction(AndroidAutoSettingsAction.SetMeteredArtwork(it)) } },
-            )
+
+        PreferenceGroup(title = stringResource(R.string.android_auto_data)) {
+            item {
+                SwitchPreference(
+                    title = { Text(stringResource(R.string.android_auto_metered_playback)) },
+                    description = stringResource(R.string.android_auto_metered_playback_desc),
+                    icon = { Icon(painterResource(R.drawable.android_cell), null) },
+                    checked = configuration.meteredPlayback,
+                    onCheckedChange = remember(onAction) {
+                        { onAction(AndroidAutoSettingsAction.SetMeteredPlayback(it)) }
+                    },
+                    isEnabled = !model.busy,
+                )
+            }
+            item {
+                SwitchPreference(
+                    title = { Text(stringResource(R.string.android_auto_metered_artwork)) },
+                    description = stringResource(R.string.android_auto_metered_artwork_desc),
+                    icon = { Icon(painterResource(R.drawable.image), null) },
+                    checked = configuration.meteredArtwork,
+                    onCheckedChange = remember(onAction) {
+                        { onAction(AndroidAutoSettingsAction.SetMeteredArtwork(it)) }
+                    },
+                    isEnabled = !model.busy,
+                )
+            }
         }
-        AndroidAutoSection(stringResource(R.string.android_auto_controls)) {
-            AndroidAutoValueRow(
-                title = stringResource(R.string.android_auto_primary_action),
-                value = stringResource(configuration.primaryAction.labelResource()),
-                enabled = !model.busy,
-                onClick = remember(onAction) {
-                    { onAction(AndroidAutoSettingsAction.ShowActionPicker(AndroidAutoActionSlot.PRIMARY)) }
-                },
-            )
-            HorizontalDivider()
-            AndroidAutoValueRow(
-                title = stringResource(R.string.android_auto_secondary_action),
-                value = stringResource(configuration.secondaryAction.labelResource()),
-                enabled = !model.busy,
-                onClick = remember(onAction) {
-                    { onAction(AndroidAutoSettingsAction.ShowActionPicker(AndroidAutoActionSlot.SECONDARY)) }
-                },
-            )
+
+        PreferenceGroup(title = stringResource(R.string.android_auto_controls)) {
+            item {
+                ListPreference(
+                    title = { Text(stringResource(R.string.android_auto_primary_action)) },
+                    icon = {
+                        Icon(
+                            painterResource(configuration.primaryAction.iconResource()),
+                            contentDescription = null,
+                        )
+                    },
+                    selectedValue = configuration.primaryAction,
+                    values = primaryAndroidAutoActions,
+                    valueText = { stringResource(it.labelResource()) },
+                    onValueSelected = remember(onAction) {
+                        { action ->
+                            onAction(
+                                AndroidAutoSettingsAction.SetAction(
+                                    slot = AndroidAutoActionSlot.PRIMARY,
+                                    action = action,
+                                ),
+                            )
+                        }
+                    },
+                    isEnabled = !model.busy,
+                )
+            }
+            item {
+                ListPreference(
+                    title = { Text(stringResource(R.string.android_auto_secondary_action)) },
+                    icon = {
+                        Icon(
+                            painterResource(configuration.secondaryAction.iconResource()),
+                            contentDescription = null,
+                        )
+                    },
+                    selectedValue = configuration.secondaryAction,
+                    values = secondaryAndroidAutoActions,
+                    valueText = { stringResource(it.labelResource()) },
+                    onValueSelected = remember(onAction) {
+                        { action ->
+                            onAction(
+                                AndroidAutoSettingsAction.SetAction(
+                                    slot = AndroidAutoActionSlot.SECONDARY,
+                                    action = action,
+                                ),
+                            )
+                        }
+                    },
+                    isEnabled = !model.busy,
+                )
+            }
         }
-    }
-    model.actionDialog?.let { slot ->
-        AndroidAutoActionDialog(
-            slot = slot,
-            selected = if (slot == AndroidAutoActionSlot.PRIMARY) configuration.primaryAction else configuration.secondaryAction,
-            onAction = onAction,
-        )
     }
 }
 
 @Composable
-private fun AndroidAutoConnectionCard(
+private fun AndroidAutoConnectionPreferences(
     snapshot: AndroidAutoSettingsSnapshot,
     onAction: (AndroidAutoSettingsAction) -> Unit,
 ) {
-    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.primaryContainer) {
-        val cardModifier = remember {
-            Modifier.fillMaxWidth().padding(SettingsDimensions.RowHorizontalPadding)
-        }
-        Column(cardModifier) {
-            Text(
-                stringResource(R.string.android_auto_connection),
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.semantics { heading() },
+    PreferenceGroup(title = stringResource(R.string.android_auto_connection)) {
+        item {
+            PreferenceEntry(
+                title = { Text(stringResource(R.string.android_auto)) },
+                description =
+                    stringResource(
+                        when (snapshot.connectionStatus) {
+                            AndroidAutoConnectionStatus.DISCONNECTED -> R.string.android_auto_disconnected
+                            AndroidAutoConnectionStatus.PROJECTION -> R.string.android_auto_projection
+                            AndroidAutoConnectionStatus.NATIVE -> R.string.android_auto_native
+                        },
+                    ),
+                icon = { Icon(painterResource(R.drawable.directions_car), null) },
             )
-            Text(
-                stringResource(
-                    when (snapshot.connectionStatus) {
-                        AndroidAutoConnectionStatus.DISCONNECTED -> R.string.android_auto_disconnected
-                        AndroidAutoConnectionStatus.PROJECTION -> R.string.android_auto_projection
-                        AndroidAutoConnectionStatus.NATIVE -> R.string.android_auto_native
-                    },
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            TextButton(
-                onClick = remember(onAction) { { onAction(AndroidAutoSettingsAction.OpenAppPermissions) } },
-                modifier = Modifier.heightIn(min = 48.dp),
-            ) { Text(stringResource(R.string.android_auto_app_permissions)) }
         }
-    }
-}
-
-@Composable
-private fun AndroidAutoSection(title: String, content: @Composable ColumnScope.() -> Unit) {
-    val arrangement = remember { Arrangement.spacedBy(SettingsDimensions.SectionHeaderBottomPadding) }
-    val titleModifier = remember {
-        Modifier.padding(horizontal = SettingsDimensions.RowHorizontalPadding).semantics { heading() }
-    }
-    Column(verticalArrangement = arrangement) {
-        Text(
-            title,
-            modifier = titleModifier,
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainer) {
-            Column(Modifier.fillMaxWidth(), content = content)
+        item {
+            PreferenceEntry(
+                title = { Text(stringResource(R.string.android_auto_app_permissions)) },
+                icon = { Icon(painterResource(R.drawable.security), null) },
+                onClick = remember(onAction) {
+                    { onAction(AndroidAutoSettingsAction.OpenAppPermissions) }
+                },
+            )
         }
     }
-}
-
-@Composable
-private fun AndroidAutoSwitchRow(
-    title: String,
-    description: String,
-    checked: Boolean,
-    enabled: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    val rowModifier = remember(checked, enabled, onCheckedChange) {
-        Modifier.fillMaxWidth().heightIn(min = 64.dp)
-            .toggleable(
-                value = checked,
-                enabled = enabled,
-                role = Role.Switch,
-                onValueChange = onCheckedChange,
-            )
-            .padding(
-                horizontal = SettingsDimensions.RowHorizontalPadding,
-                vertical = SettingsDimensions.RowVerticalPadding,
-            )
-    }
-    val arrangement = remember { Arrangement.spacedBy(16.dp) }
-    Row(
-        modifier = rowModifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = arrangement,
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyLarge)
-            Text(description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Switch(checked = checked, onCheckedChange = null, enabled = enabled)
-    }
-}
-
-@Composable
-private fun AndroidAutoValueRow(
-    title: String,
-    value: String,
-    enabled: Boolean,
-    onClick: () -> Unit,
-) {
-    val rowModifier = remember(enabled, onClick) {
-        Modifier.fillMaxWidth().heightIn(min = 64.dp)
-            .selectable(selected = false, enabled = enabled, role = Role.Button, onClick = onClick)
-            .padding(
-                horizontal = SettingsDimensions.RowHorizontalPadding,
-                vertical = SettingsDimensions.RowVerticalPadding,
-            )
-    }
-    Row(
-        modifier = rowModifier,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(title, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
-        Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-    }
-}
-
-@Composable
-private fun AndroidAutoActionDialog(
-    slot: AndroidAutoActionSlot,
-    selected: AndroidAutoCustomAction,
-    onAction: (AndroidAutoSettingsAction) -> Unit,
-) {
-    val actions = remember(slot) {
-        AndroidAutoCustomAction.entries.filter { slot == AndroidAutoActionSlot.SECONDARY || it != AndroidAutoCustomAction.NONE }
-    }
-    AlertDialog(
-        onDismissRequest = remember(onAction) { { onAction(AndroidAutoSettingsAction.DismissActionPicker) } },
-        title = {
-            Text(
-                stringResource(
-                    if (slot == AndroidAutoActionSlot.PRIMARY) {
-                        R.string.android_auto_primary_action
-                    } else {
-                        R.string.android_auto_secondary_action
-                    },
-                ),
-            )
-        },
-        text = {
-            Column(Modifier.selectableGroup()) {
-                actions.forEach { action ->
-                    val rowModifier = remember(action, selected, onAction) {
-                        Modifier.fillMaxWidth().heightIn(min = 48.dp).selectable(
-                            selected = selected == action,
-                            role = Role.RadioButton,
-                            onClick = { onAction(AndroidAutoSettingsAction.SelectAction(action)) },
-                        )
-                    }
-                    Row(
-                        rowModifier,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        RadioButton(selected = selected == action, onClick = null)
-                        Text(stringResource(action.labelResource()), Modifier.padding(start = 12.dp))
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = remember(onAction) { { onAction(AndroidAutoSettingsAction.DismissActionPicker) } }) {
-                Text(stringResource(android.R.string.cancel))
-            }
-        },
-    )
 }
 
 @Composable
@@ -446,4 +361,13 @@ private fun AndroidAutoCustomAction.labelResource(): Int = when (this) {
     AndroidAutoCustomAction.SHUFFLE -> R.string.android_auto_action_shuffle
     AndroidAutoCustomAction.REPEAT -> R.string.android_auto_action_repeat
     AndroidAutoCustomAction.NONE -> R.string.android_auto_action_none
+}
+
+@DrawableRes
+private fun AndroidAutoCustomAction.iconResource(): Int = when (this) {
+    AndroidAutoCustomAction.LIKE -> R.drawable.favorite
+    AndroidAutoCustomAction.START_RADIO -> R.drawable.radio
+    AndroidAutoCustomAction.SHUFFLE -> R.drawable.shuffle
+    AndroidAutoCustomAction.REPEAT -> R.drawable.repeat
+    AndroidAutoCustomAction.NONE -> R.drawable.more_horiz
 }
