@@ -904,6 +904,8 @@
     <string name="latest_version_format">Latest: %s</string>
     <string name="updates_status_checking">Checking for the latest release</string>
     <string name="updates_status_current">You are on the latest available release</string>
+    <string name="automatic_update_checks">Automatic Updates Check</string>
+    <string name="automatic_update_checks_desc">Check the selected channel automatically for new releases</string>
     <string name="enable_update_notification">Enable Update Notification</string>
     <string name="enable_update_notification_channel_desc">Get notified when a new release is available on the selected channel</string>
     <string name="update_channel">Update Channel</string>
