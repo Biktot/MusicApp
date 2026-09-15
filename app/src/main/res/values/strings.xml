@@ -5,6 +5,9 @@
     <string name="artists">Artists</string>
     <string name="albums">Albums</string>
     <string name="podcast">Podcast</string>
+    <string name="your_shows">Your shows</string>
+    <string name="browse_empty_description">There’s nothing to show here yet.</string>
+    <string name="browse_load_failed">Couldn’t load this page</string>
     <string name="episodes">Episodes</string>
     <string name="podcast_has_no_episodes">This podcast has no available episodes.</string>
     <plurals name="n_episode">
