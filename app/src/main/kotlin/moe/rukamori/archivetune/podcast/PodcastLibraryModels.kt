@@ -41,3 +41,26 @@ data class PodcastLibraryItemUiModel(
     val isSavedLocally: Boolean,
     val isSavedRemotely: Boolean,
 )
+
+sealed interface PodcastLibraryAction {
+    data object Refresh : PodcastLibraryAction
+
+    data class PlayPodcast(
+        val browseId: String,
+    ) : PodcastLibraryAction
+
+    data class RemovePodcast(
+        val browseId: String,
+    ) : PodcastLibraryAction
+}
+
+sealed interface PodcastLibraryEvent {
+    @Immutable
+    data class Play(
+        val request: PodcastPlaybackRequest,
+    ) : PodcastLibraryEvent
+
+    data class ShowMessage(
+        @StringRes val messageResId: Int,
+    ) : PodcastLibraryEvent
+}
