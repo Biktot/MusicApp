@@ -1388,6 +1388,7 @@ fun BottomSheetPlayer(
                         disableBlur = disableBlur,
                         backdropBlurAmount = backdropBlurAmount,
                         showVolumeBar = showPlayerVolumeBar,
+                        showCodecOnPlayer = showCodecOnPlayer,
                         contentBottomPadding = queueSheetState.collapsedBound,
                         onAction = immersivePlayerViewModel::onAction,
                         modifier =
@@ -1680,6 +1681,7 @@ fun BottomSheetPlayer(
                         disableBlur = disableBlur,
                         backdropBlurAmount = backdropBlurAmount,
                         showVolumeBar = showPlayerVolumeBar,
+                        showCodecOnPlayer = showCodecOnPlayer,
                         contentBottomPadding = queueSheetState.collapsedBound,
                         onAction = immersivePlayerViewModel::onAction,
                         modifier =
