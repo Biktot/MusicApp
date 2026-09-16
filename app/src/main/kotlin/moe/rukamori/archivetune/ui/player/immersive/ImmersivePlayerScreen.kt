@@ -31,7 +31,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -43,11 +42,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -68,7 +71,6 @@ import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.HazePerformanceMode
 import dev.chrisbanes.haze.HazeProgressive
 import dev.chrisbanes.haze.blur.HazeBlurStyle
-import dev.chrisbanes.haze.blur.HazeColorEffect
 import dev.chrisbanes.haze.blur.hazeBlur
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
@@ -327,10 +329,9 @@ private fun ImmersiveBackdrop(
             HazeBlurStyle {
                 blurEnabled(!disableBlur)
                 blurRadius(blurRadius)
-                noiseFactor(0.08f)
-                backgroundColor(Color.Black.copy(alpha = 0.28f))
-                colorEffects(listOf(HazeColorEffect.tint(Color(0xFF6671B8).copy(alpha = 0.16f))))
-                progressive(HazeProgressive.verticalGradient(startIntensity = 0.15f, endIntensity = 1f))
+                noiseFactor(0f)
+                backgroundColor(Color.Transparent)
+                progressive(HazeProgressive.verticalGradient(startIntensity = 0.08f, endIntensity = 1f))
             }
         }
     val lowerScrim =
@@ -348,32 +349,24 @@ private fun ImmersiveBackdrop(
                 1f to Color.Black.copy(alpha = 0.22f),
             )
         }
-    Box(modifier = Modifier.fillMaxSize()) {
-        AsyncImage(
-            model = canvasArtworkRequest ?: artworkRequest,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
+    val stageFadeMask =
+        remember {
+            Brush.verticalGradient(
+                0f to Color.Black,
+                0.78f to Color.Black,
+                1f to Color.Transparent,
+            )
+        }
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val transitionHeight = minOf(artHeight * 0.24f, 160.dp)
+        val blurStart = (artHeight - transitionHeight).coerceAtLeast(0.dp)
+        val blurHeight = (maxHeight - blurStart).coerceAtLeast(1.dp)
+
+        Box(
             modifier =
                 Modifier
                     .fillMaxSize()
                     .hazeSource(hazeState),
-        )
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .hazeBlur(
-                        input = HazeInput.Sources(hazeState),
-                        style = blurStyle,
-                        performanceMode = HazePerformanceMode.Adaptive,
-                        expandLayerBounds = true,
-                    ).background(lowerScrim),
-        )
-        Box(
-            modifier =
-                Modifier
-                    .size(width = artWidth, height = artHeight)
-                    .align(Alignment.TopStart),
         ) {
             AsyncImage(
                 model = canvasArtworkRequest ?: artworkRequest,
@@ -381,6 +374,31 @@ private fun ImmersiveBackdrop(
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
+            AsyncImage(
+                model = canvasArtworkRequest ?: artworkRequest,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier =
+                    Modifier
+                        .size(width = artWidth, height = artHeight)
+                        .align(Alignment.TopStart)
+                        .graphicsLayer {
+                            compositingStrategy = CompositingStrategy.Offscreen
+                        }.drawWithContent {
+                            drawContent()
+                            drawRect(
+                                brush = stageFadeMask,
+                                blendMode = BlendMode.DstIn,
+                            )
+                        },
+            )
+        }
+        Box(
+            modifier =
+                Modifier
+                    .size(width = artWidth, height = artHeight)
+                    .align(Alignment.TopStart),
+        ) {
             CanvasArtworkPlayer(
                 source = canvas?.source,
                 primaryUrl = canvas?.animatedVertical ?: canvas?.animated,
@@ -396,6 +414,35 @@ private fun ImmersiveBackdrop(
                         .background(stageScrim),
             )
         }
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(blurHeight)
+                    .align(Alignment.BottomCenter)
+                    .graphicsLayer {
+                        compositingStrategy = CompositingStrategy.Offscreen
+                    }.drawWithCache {
+                        val transitionMask =
+                            Brush.verticalGradient(
+                                colors = listOf(Color.Transparent, Color.Black),
+                                startY = 0f,
+                                endY = transitionHeight.toPx().coerceAtMost(size.height),
+                            )
+                        onDrawWithContent {
+                            drawContent()
+                            drawRect(
+                                brush = transitionMask,
+                                blendMode = BlendMode.DstIn,
+                            )
+                        }
+                    }.hazeBlur(
+                        input = HazeInput.Sources(hazeState),
+                        style = blurStyle,
+                        performanceMode = HazePerformanceMode.Adaptive,
+                        expandLayerBounds = true,
+                    ).background(lowerScrim),
+        )
     }
 }
 
