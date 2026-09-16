@@ -44,7 +44,7 @@ class ImmersivePlayerViewModel @Inject constructor(
     val events = eventChannel.receiveAsFlow()
 
     private var latestData: ImmersivePlayerData? = null
-    private var latestCanvas: CanvasVideo? = null
+    private var latestCanvas: ResolvedCanvas? = null
 
     init {
         viewModelScope.launch {
@@ -72,7 +72,10 @@ class ImmersivePlayerViewModel @Inject constructor(
                         return@collectLatest
                     }
                     try {
-                        latestCanvas = observePlayer.loadCanvas(observePlayer.requestFor(data), policy)
+                        latestCanvas =
+                            observePlayer
+                                .loadCanvas(observePlayer.requestFor(data), policy)
+                                ?.let { canvas -> ResolvedCanvas(data.metadata.id, canvas) }
                     } catch (error: CancellationException) {
                         throw error
                     } catch (error: Exception) {
@@ -138,7 +141,8 @@ class ImmersivePlayerViewModel @Inject constructor(
 
     private fun publish(data: ImmersivePlayerData) {
         val old = currentModel()
-        val mapped = observePlayer.map(data, latestCanvas)
+        val canvas = latestCanvas?.takeIf { it.mediaId == data.metadata.id }?.video
+        val mapped = observePlayer.map(data, canvas)
         val model =
             if (old?.mediaId == mapped.mediaId) {
                 mapped.copy(
@@ -172,4 +176,9 @@ class ImmersivePlayerViewModel @Inject constructor(
             else -> Unit
         }
     }
+
+    private data class ResolvedCanvas(
+        val mediaId: String,
+        val video: CanvasVideo,
+    )
 }
