@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -224,19 +225,21 @@ private fun ImmersivePortrait(
         ) {
             FormatSeam(if (showCodecOnPlayer) model.formatDetails else "")
             Spacer(modifier = Modifier.height(28.dp))
-            MetadataRow(
-                title = model.title,
-                artists = model.artists,
-                isLiked = model.isLiked,
-                albumId = model.albumId,
-                onAction = onAction,
-            )
-            Spacer(modifier = Modifier.height(20.dp))
-            ProgressSection(
-                model = model,
-                showCodecOnPlayer = showCodecOnPlayer,
-                onAction = onAction,
-            )
+            Column(modifier = Modifier.offset(y = 12.dp)) {
+                MetadataRow(
+                    title = model.title,
+                    artists = model.artists,
+                    isLiked = model.isLiked,
+                    albumId = model.albumId,
+                    onAction = onAction,
+                )
+                Spacer(modifier = Modifier.height(20.dp))
+                ProgressSection(
+                    model = model,
+                    showCodecOnPlayer = showCodecOnPlayer,
+                    onAction = onAction,
+                )
+            }
             Spacer(modifier = Modifier.weight(1f))
             TransportControls(
                 isPlaying = model.isPlaying,
@@ -629,44 +632,44 @@ private fun TransportControls(
         IconButton(
             onClick = { onAction(ImmersivePlayerAction.SkipPrevious) },
             enabled = canSkipPrevious,
-            modifier = Modifier.size(68.dp),
+            modifier = Modifier.size(72.dp),
         ) {
             Icon(
                 painter = painterResource(R.drawable.skip_previous),
                 contentDescription = stringResource(R.string.widget_previous),
                 tint = ImmersiveContentColor.copy(alpha = if (canSkipPrevious) 1f else 0.35f),
-                modifier = Modifier.size(52.dp),
+                modifier = Modifier.size(56.dp),
             )
         }
         IconButton(
             onClick = { onAction(ImmersivePlayerAction.TogglePlayPause) },
-            modifier = Modifier.size(80.dp),
+            modifier = Modifier.size(88.dp),
         ) {
             if (isBuffering) {
                 CircularProgressIndicator(
                     color = ImmersiveContentColor,
                     strokeWidth = 3.dp,
-                    modifier = Modifier.size(48.dp),
+                    modifier = Modifier.size(52.dp),
                 )
             } else {
                 Icon(
                     painter = painterResource(if (isPlaying) R.drawable.pause else R.drawable.play),
                     contentDescription = stringResource(if (isPlaying) R.string.widget_pause else R.string.play),
                     tint = ImmersiveContentColor,
-                    modifier = Modifier.size(60.dp),
+                    modifier = Modifier.size(68.dp),
                 )
             }
         }
         IconButton(
             onClick = { onAction(ImmersivePlayerAction.SkipNext) },
             enabled = canSkipNext,
-            modifier = Modifier.size(68.dp),
+            modifier = Modifier.size(72.dp),
         ) {
             Icon(
                 painter = painterResource(R.drawable.skip_next),
                 contentDescription = stringResource(R.string.next),
                 tint = ImmersiveContentColor.copy(alpha = if (canSkipNext) 1f else 0.35f),
-                modifier = Modifier.size(52.dp),
+                modifier = Modifier.size(56.dp),
             )
         }
     }
