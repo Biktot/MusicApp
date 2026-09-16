@@ -60,6 +60,7 @@ val hasReleaseSigningConfig =
 android {
     namespace = "moe.rukamori.archivetune"
     compileSdk = 37
+    compileSdkMinor = 2
 
     defaultConfig {
     applicationId = "moe.rukamori.archivetune"
