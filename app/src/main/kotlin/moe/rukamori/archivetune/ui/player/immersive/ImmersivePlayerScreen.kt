@@ -38,6 +38,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
@@ -189,17 +190,19 @@ private fun ImmersivePortrait(
                 maxHeight < 900.dp -> 0.44f
                 else -> 0.46f
             }
-        val contentStart = maxHeight * contentStartFraction
+        val contentStart = maxHeight * contentStartFraction + 16.dp
         val stageHeight = maxHeight * 0.64f
-        ImmersiveBackdrop(
-            artworkUrl = model.artworkUrl,
-            canvas = model.canvas,
-            isPlaying = model.isPlaying,
-            artWidth = maxWidth,
-            artHeight = stageHeight,
-            disableBlur = disableBlur,
-            backdropBlurAmount = backdropBlurAmount,
-        )
+        key(model.mediaId) {
+            ImmersiveBackdrop(
+                artworkUrl = model.artworkUrl,
+                canvas = model.canvas,
+                isPlaying = model.isPlaying,
+                artWidth = maxWidth,
+                artHeight = stageHeight,
+                disableBlur = disableBlur,
+                backdropBlurAmount = backdropBlurAmount,
+            )
+        }
         SourceLabel(
             sourceTitle = model.sourceTitle,
             modifier =
@@ -263,15 +266,17 @@ private fun ImmersiveLandscape(
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val artWidth = maxWidth * 0.48f
-        ImmersiveBackdrop(
-            artworkUrl = model.artworkUrl,
-            canvas = model.canvas,
-            isPlaying = model.isPlaying,
-            artWidth = artWidth,
-            artHeight = maxHeight,
-            disableBlur = disableBlur,
-            backdropBlurAmount = backdropBlurAmount,
-        )
+        key(model.mediaId) {
+            ImmersiveBackdrop(
+                artworkUrl = model.artworkUrl,
+                canvas = model.canvas,
+                isPlaying = model.isPlaying,
+                artWidth = artWidth,
+                artHeight = maxHeight,
+                disableBlur = disableBlur,
+                backdropBlurAmount = backdropBlurAmount,
+            )
+        }
         SourceLabel(
             sourceTitle = model.sourceTitle,
             modifier =
@@ -621,44 +626,44 @@ private fun TransportControls(
         IconButton(
             onClick = { onAction(ImmersivePlayerAction.SkipPrevious) },
             enabled = canSkipPrevious,
-            modifier = Modifier.size(64.dp),
+            modifier = Modifier.size(68.dp),
         ) {
             Icon(
                 painter = painterResource(R.drawable.skip_previous),
                 contentDescription = stringResource(R.string.widget_previous),
                 tint = ImmersiveContentColor.copy(alpha = if (canSkipPrevious) 1f else 0.35f),
-                modifier = Modifier.size(48.dp),
+                modifier = Modifier.size(52.dp),
             )
         }
         IconButton(
             onClick = { onAction(ImmersivePlayerAction.TogglePlayPause) },
-            modifier = Modifier.size(72.dp),
+            modifier = Modifier.size(80.dp),
         ) {
             if (isBuffering) {
                 CircularProgressIndicator(
                     color = ImmersiveContentColor,
                     strokeWidth = 3.dp,
-                    modifier = Modifier.size(44.dp),
+                    modifier = Modifier.size(48.dp),
                 )
             } else {
                 Icon(
                     painter = painterResource(if (isPlaying) R.drawable.pause else R.drawable.play),
                     contentDescription = stringResource(if (isPlaying) R.string.widget_pause else R.string.play),
                     tint = ImmersiveContentColor,
-                    modifier = Modifier.size(54.dp),
+                    modifier = Modifier.size(60.dp),
                 )
             }
         }
         IconButton(
             onClick = { onAction(ImmersivePlayerAction.SkipNext) },
             enabled = canSkipNext,
-            modifier = Modifier.size(64.dp),
+            modifier = Modifier.size(68.dp),
         ) {
             Icon(
                 painter = painterResource(R.drawable.skip_next),
                 contentDescription = stringResource(R.string.next),
                 tint = ImmersiveContentColor.copy(alpha = if (canSkipNext) 1f else 0.35f),
-                modifier = Modifier.size(48.dp),
+                modifier = Modifier.size(52.dp),
             )
         }
     }
