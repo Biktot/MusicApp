@@ -69,7 +69,6 @@ import androidx.media3.ui.AspectRatioFrameLayout
 import coil3.compose.AsyncImage
 import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.HazePerformanceMode
-import dev.chrisbanes.haze.HazeProgressive
 import dev.chrisbanes.haze.blur.HazeBlurStyle
 import dev.chrisbanes.haze.blur.hazeBlur
 import dev.chrisbanes.haze.hazeSource
@@ -177,19 +176,20 @@ private fun ImmersivePortrait(
     onAction: (ImmersivePlayerAction) -> Unit,
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val artFraction =
+        val contentStartFraction =
             when {
                 maxHeight < 700.dp -> 0.40f
                 maxHeight < 900.dp -> 0.44f
                 else -> 0.46f
             }
-        val artHeight = maxHeight * artFraction
+        val contentStart = maxHeight * contentStartFraction
+        val stageHeight = maxHeight * 0.64f
         ImmersiveBackdrop(
             artworkUrl = model.artworkUrl,
             canvas = model.canvas,
             isPlaying = model.isPlaying,
             artWidth = maxWidth,
-            artHeight = artHeight,
+            artHeight = stageHeight,
             disableBlur = disableBlur,
             backdropBlurAmount = backdropBlurAmount,
         )
@@ -206,14 +206,14 @@ private fun ImmersivePortrait(
                 Modifier
                     .fillMaxSize()
                     .padding(
-                        top = artHeight - 18.dp,
+                        top = contentStart - 18.dp,
                         start = 28.dp,
                         end = 28.dp,
                         bottom = contentBottomPadding + 10.dp,
                     ),
         ) {
             FormatSeam(model.formatDetails)
-            Spacer(modifier = Modifier.height(42.dp))
+            Spacer(modifier = Modifier.weight(1f))
             MetadataRow(
                 title = model.title,
                 artists = model.artists,
@@ -221,7 +221,7 @@ private fun ImmersivePortrait(
                 albumId = model.albumId,
                 onAction = onAction,
             )
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(20.dp))
             ProgressSection(model = model, onAction = onAction)
             Spacer(modifier = Modifier.height(26.dp))
             TransportControls(
@@ -323,15 +323,14 @@ private fun ImmersiveBackdrop(
     val hazeState = rememberHazeState()
     val artworkRequest = rememberOfflineArtworkImageRequest(artworkUrl)
     val canvasArtworkRequest = rememberOfflineArtworkImageRequest(canvas?.static)
-    val blurRadius = remember(backdropBlurAmount) { (backdropBlurAmount.coerceIn(0, 100) * 0.62f).dp }
+    val blurRadius = remember(backdropBlurAmount) { (backdropBlurAmount.coerceIn(0, 100) * 0.8f).dp }
     val blurStyle =
         remember(disableBlur, blurRadius) {
             HazeBlurStyle {
-                blurEnabled(!disableBlur)
+                blurEnabled(!disableBlur && blurRadius > 0.dp)
                 blurRadius(blurRadius)
                 noiseFactor(0f)
                 backgroundColor(Color.Transparent)
-                progressive(HazeProgressive.verticalGradient(startIntensity = 0.08f, endIntensity = 1f))
             }
         }
     val lowerScrim =
