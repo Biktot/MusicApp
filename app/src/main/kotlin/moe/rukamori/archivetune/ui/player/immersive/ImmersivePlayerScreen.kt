@@ -88,6 +88,7 @@ fun ImmersivePlayerScreen(
     disableBlur: Boolean,
     backdropBlurAmount: Int,
     showVolumeBar: Boolean,
+    showCodecOnPlayer: Boolean,
     contentBottomPadding: Dp,
     onAction: (ImmersivePlayerAction) -> Unit,
     modifier: Modifier = Modifier,
@@ -101,6 +102,7 @@ fun ImmersivePlayerScreen(
                 disableBlur = disableBlur,
                 backdropBlurAmount = backdropBlurAmount,
                 showVolumeBar = showVolumeBar,
+                showCodecOnPlayer = showCodecOnPlayer,
                 contentBottomPadding = contentBottomPadding,
                 onAction = onAction,
                 modifier = modifier,
@@ -113,6 +115,7 @@ fun ImmersivePlayerScreen(
                     disableBlur = disableBlur,
                     backdropBlurAmount = backdropBlurAmount,
                     showVolumeBar = showVolumeBar,
+                    showCodecOnPlayer = showCodecOnPlayer,
                     contentBottomPadding = contentBottomPadding,
                     onAction = onAction,
                     modifier = modifier,
@@ -138,6 +141,7 @@ private fun ImmersivePlayerContent(
     disableBlur: Boolean,
     backdropBlurAmount: Int,
     showVolumeBar: Boolean,
+    showCodecOnPlayer: Boolean,
     contentBottomPadding: Dp,
     onAction: (ImmersivePlayerAction) -> Unit,
     modifier: Modifier = Modifier,
@@ -150,6 +154,7 @@ private fun ImmersivePlayerContent(
                 disableBlur = disableBlur,
                 backdropBlurAmount = backdropBlurAmount,
                 showVolumeBar = showVolumeBar,
+                showCodecOnPlayer = showCodecOnPlayer,
                 contentBottomPadding = contentBottomPadding,
                 onAction = onAction,
             )
@@ -159,6 +164,7 @@ private fun ImmersivePlayerContent(
                 disableBlur = disableBlur,
                 backdropBlurAmount = backdropBlurAmount,
                 showVolumeBar = showVolumeBar,
+                showCodecOnPlayer = showCodecOnPlayer,
                 contentBottomPadding = contentBottomPadding,
                 onAction = onAction,
             )
@@ -172,6 +178,7 @@ private fun ImmersivePortrait(
     disableBlur: Boolean,
     backdropBlurAmount: Int,
     showVolumeBar: Boolean,
+    showCodecOnPlayer: Boolean,
     contentBottomPadding: Dp,
     onAction: (ImmersivePlayerAction) -> Unit,
 ) {
@@ -212,8 +219,8 @@ private fun ImmersivePortrait(
                         bottom = contentBottomPadding + 10.dp,
                     ),
         ) {
-            FormatSeam(model.formatDetails)
-            Spacer(modifier = Modifier.weight(1f))
+            FormatSeam(if (showCodecOnPlayer) model.formatDetails else "")
+            Spacer(modifier = Modifier.height(28.dp))
             MetadataRow(
                 title = model.title,
                 artists = model.artists,
@@ -222,8 +229,12 @@ private fun ImmersivePortrait(
                 onAction = onAction,
             )
             Spacer(modifier = Modifier.height(20.dp))
-            ProgressSection(model = model, onAction = onAction)
-            Spacer(modifier = Modifier.height(26.dp))
+            ProgressSection(
+                model = model,
+                showCodecOnPlayer = showCodecOnPlayer,
+                onAction = onAction,
+            )
+            Spacer(modifier = Modifier.weight(1f))
             TransportControls(
                 isPlaying = model.isPlaying,
                 isBuffering = model.isBuffering,
@@ -246,6 +257,7 @@ private fun ImmersiveLandscape(
     disableBlur: Boolean,
     backdropBlurAmount: Int,
     showVolumeBar: Boolean,
+    showCodecOnPlayer: Boolean,
     contentBottomPadding: Dp,
     onAction: (ImmersivePlayerAction) -> Unit,
 ) {
@@ -283,7 +295,7 @@ private fun ImmersiveLandscape(
                         bottom = contentBottomPadding + 18.dp,
                     ),
         ) {
-            FormatSeam(model.formatDetails)
+            FormatSeam(if (showCodecOnPlayer) model.formatDetails else "")
             Spacer(modifier = Modifier.height(22.dp))
             MetadataRow(
                 title = model.title,
@@ -293,7 +305,11 @@ private fun ImmersiveLandscape(
                 onAction = onAction,
             )
             Spacer(modifier = Modifier.weight(1f))
-            ProgressSection(model = model, onAction = onAction)
+            ProgressSection(
+                model = model,
+                showCodecOnPlayer = showCodecOnPlayer,
+                onAction = onAction,
+            )
             Spacer(modifier = Modifier.height(18.dp))
             TransportControls(
                 isPlaying = model.isPlaying,
@@ -544,6 +560,7 @@ private fun MetadataRow(
 @Composable
 private fun ProgressSection(
     model: ImmersivePlayerUiModel,
+    showCodecOnPlayer: Boolean,
     onAction: (ImmersivePlayerAction) -> Unit,
 ) {
     val displayPosition = model.seekPositionMs ?: model.positionMs
@@ -565,7 +582,7 @@ private fun ProgressSection(
             style = MaterialTheme.typography.bodyMedium,
         )
         Spacer(modifier = Modifier.weight(1f))
-        if (model.formatDetails.isNotBlank()) {
+        if (showCodecOnPlayer && model.formatDetails.isNotBlank()) {
             Icon(
                 imageVector = model.outputDevice.type.imageVector,
                 contentDescription = null,
