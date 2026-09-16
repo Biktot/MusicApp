@@ -245,8 +245,8 @@ private fun ImmersivePortrait(
                 canSkipNext = model.canSkipNext,
                 onAction = onAction,
             )
+            Spacer(modifier = Modifier.weight(1f))
             if (showVolumeBar) {
-                Spacer(modifier = Modifier.height(28.dp))
                 VolumeControls(volume = model.volume, onAction = onAction)
             }
             Spacer(modifier = Modifier.height(8.dp))
@@ -344,7 +344,7 @@ private fun ImmersiveBackdrop(
     val hazeState = rememberHazeState()
     val artworkRequest = rememberOfflineArtworkImageRequest(artworkUrl)
     val canvasArtworkRequest = rememberOfflineArtworkImageRequest(canvas?.static)
-    val blurRadius = remember(backdropBlurAmount) { (backdropBlurAmount.coerceIn(0, 100) * 0.8f).dp }
+    val blurRadius = remember(backdropBlurAmount) { backdropBlurAmount.coerceIn(0, 100).dp }
     val blurStyle =
         remember(disableBlur, blurRadius) {
             HazeBlurStyle {
@@ -378,7 +378,7 @@ private fun ImmersiveBackdrop(
             )
         }
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val transitionHeight = minOf(artHeight * 0.24f, 160.dp)
+        val transitionHeight = minOf(artHeight * 0.32f, 200.dp)
         val blurStart = (artHeight - transitionHeight).coerceAtLeast(0.dp)
         val blurHeight = (maxHeight - blurStart).coerceAtLeast(1.dp)
 
@@ -445,7 +445,10 @@ private fun ImmersiveBackdrop(
                     }.drawWithCache {
                         val transitionMask =
                             Brush.verticalGradient(
-                                colors = listOf(Color.Transparent, Color.Black),
+                                0f to Color.Transparent,
+                                0.12f to Color.Black.copy(alpha = 0.55f),
+                                0.48f to Color.Black.copy(alpha = 0.92f),
+                                1f to Color.Black,
                                 startY = 0f,
                                 endY = transitionHeight.toPx().coerceAtMost(size.height),
                             )
