@@ -26,7 +26,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -224,22 +223,20 @@ private fun ImmersivePortrait(
                     ),
         ) {
             FormatSeam(if (showCodecOnPlayer) model.formatDetails else "")
-            Spacer(modifier = Modifier.height(28.dp))
-            Column(modifier = Modifier.offset(y = 12.dp)) {
-                MetadataRow(
-                    title = model.title,
-                    artists = model.artists,
-                    isLiked = model.isLiked,
-                    albumId = model.albumId,
-                    onAction = onAction,
-                )
-                Spacer(modifier = Modifier.height(20.dp))
-                ProgressSection(
-                    model = model,
-                    showCodecOnPlayer = showCodecOnPlayer,
-                    onAction = onAction,
-                )
-            }
+            Spacer(modifier = Modifier.height(52.dp))
+            MetadataRow(
+                title = model.title,
+                artists = model.artists,
+                isLiked = model.isLiked,
+                albumId = model.albumId,
+                onAction = onAction,
+            )
+            Spacer(modifier = Modifier.height(20.dp))
+            ProgressSection(
+                model = model,
+                showCodecOnPlayer = showCodecOnPlayer,
+                onAction = onAction,
+            )
             Spacer(modifier = Modifier.weight(1f))
             TransportControls(
                 isPlaying = model.isPlaying,
@@ -252,7 +249,7 @@ private fun ImmersivePortrait(
             if (showVolumeBar) {
                 VolumeControls(volume = model.volume, onAction = onAction)
             }
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(32.dp))
         }
     }
 }
@@ -381,7 +378,7 @@ private fun ImmersiveBackdrop(
             )
         }
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val transitionHeight = minOf(artHeight * 0.32f, 200.dp)
+        val transitionHeight = minOf(artHeight * 0.24f, 152.dp)
         val blurStart = (artHeight - transitionHeight).coerceAtLeast(0.dp)
         val blurHeight = (maxHeight - blurStart).coerceAtLeast(1.dp)
 
@@ -449,8 +446,8 @@ private fun ImmersiveBackdrop(
                         val transitionMask =
                             Brush.verticalGradient(
                                 0f to Color.Transparent,
-                                0.12f to Color.Black.copy(alpha = 0.55f),
-                                0.48f to Color.Black.copy(alpha = 0.92f),
+                                0.06f to Color.Black.copy(alpha = 0.55f),
+                                0.30f to Color.Black.copy(alpha = 0.92f),
                                 1f to Color.Black,
                                 startY = 0f,
                                 endY = transitionHeight.toPx().coerceAtMost(size.height),
