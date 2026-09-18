@@ -375,10 +375,10 @@ private fun ImmersiveBackdrop(
             remember {
                 Brush.verticalGradient(
                     0f to Color.Black,
-                    0.70f to Color.Black,
-                    0.80f to Color.Black.copy(alpha = 0.94f),
-                    0.88f to Color.Black.copy(alpha = 0.72f),
-                    0.95f to Color.Black.copy(alpha = 0.30f),
+                    0.44f to Color.Black,
+                    0.58f to Color.Black.copy(alpha = 0.96f),
+                    0.70f to Color.Black.copy(alpha = 0.70f),
+                    0.82f to Color.Black.copy(alpha = 0.28f),
                     1f to Color.Transparent,
                 )
             }
