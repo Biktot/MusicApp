@@ -43,7 +43,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
@@ -358,29 +357,31 @@ private fun ImmersiveBackdrop(
         remember {
             Brush.verticalGradient(
                 0f to Color.Transparent,
-                0.42f to Color.Black.copy(alpha = 0.08f),
-                1f to Color.Black.copy(alpha = 0.42f),
+                0.38f to Color.Black.copy(alpha = 0.03f),
+                0.68f to Color.Black.copy(alpha = 0.14f),
+                1f to Color.Black.copy(alpha = 0.40f),
             )
         }
     val stageScrim =
         remember {
             Brush.verticalGradient(
-                0.62f to Color.Transparent,
-                1f to Color.Black.copy(alpha = 0.22f),
+                0.58f to Color.Transparent,
+                1f to Color.Black.copy(alpha = 0.12f),
             )
         }
-    val stageFadeMask =
-        remember {
-            Brush.verticalGradient(
-                0f to Color.Black,
-                0.78f to Color.Black,
-                1f to Color.Transparent,
-            )
-        }
+
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val transitionHeight = minOf(artHeight * 0.24f, 152.dp)
-        val blurStart = (artHeight - transitionHeight).coerceAtLeast(0.dp)
-        val blurHeight = (maxHeight - blurStart).coerceAtLeast(1.dp)
+        val stageFadeMask =
+            remember {
+                Brush.verticalGradient(
+                    0f to Color.Black,
+                    0.70f to Color.Black,
+                    0.80f to Color.Black.copy(alpha = 0.94f),
+                    0.88f to Color.Black.copy(alpha = 0.72f),
+                    0.95f to Color.Black.copy(alpha = 0.30f),
+                    1f to Color.Transparent,
+                )
+            }
 
         Box(
             modifier =
@@ -401,24 +402,43 @@ private fun ImmersiveBackdrop(
                 modifier =
                     Modifier
                         .size(width = artWidth, height = artHeight)
-                        .align(Alignment.TopStart)
-                        .graphicsLayer {
-                            compositingStrategy = CompositingStrategy.Offscreen
-                        }.drawWithContent {
-                            drawContent()
-                            drawRect(
-                                brush = stageFadeMask,
-                                blendMode = BlendMode.DstIn,
-                            )
-                        },
+                        .align(Alignment.TopStart),
             )
         }
+
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .hazeBlur(
+                        input = HazeInput.Sources(hazeState),
+                        style = blurStyle,
+                        performanceMode = HazePerformanceMode.Adaptive,
+                        expandLayerBounds = true,
+                    ).background(lowerScrim),
+        )
+
         Box(
             modifier =
                 Modifier
                     .size(width = artWidth, height = artHeight)
-                    .align(Alignment.TopStart),
+                    .align(Alignment.TopStart)
+                    .graphicsLayer {
+                        compositingStrategy = CompositingStrategy.Offscreen
+                    }.drawWithContent {
+                        drawContent()
+                        drawRect(
+                            brush = stageFadeMask,
+                            blendMode = BlendMode.DstIn,
+                        )
+                    },
         ) {
+            AsyncImage(
+                model = canvasArtworkRequest ?: artworkRequest,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
             CanvasArtworkPlayer(
                 source = canvas?.source,
                 primaryUrl = canvas?.animatedVertical ?: canvas?.animated,
@@ -434,38 +454,6 @@ private fun ImmersiveBackdrop(
                         .background(stageScrim),
             )
         }
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .height(blurHeight)
-                    .align(Alignment.BottomCenter)
-                    .graphicsLayer {
-                        compositingStrategy = CompositingStrategy.Offscreen
-                    }.drawWithCache {
-                        val transitionMask =
-                            Brush.verticalGradient(
-                                0f to Color.Transparent,
-                                0.06f to Color.Black.copy(alpha = 0.55f),
-                                0.30f to Color.Black.copy(alpha = 0.92f),
-                                1f to Color.Black,
-                                startY = 0f,
-                                endY = transitionHeight.toPx().coerceAtMost(size.height),
-                            )
-                        onDrawWithContent {
-                            drawContent()
-                            drawRect(
-                                brush = transitionMask,
-                                blendMode = BlendMode.DstIn,
-                            )
-                        }
-                    }.hazeBlur(
-                        input = HazeInput.Sources(hazeState),
-                        style = blurStyle,
-                        performanceMode = HazePerformanceMode.Adaptive,
-                        expandLayerBounds = true,
-                    ).background(lowerScrim),
-        )
     }
 }
 
