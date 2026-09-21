@@ -120,6 +120,13 @@ class ImmersivePlayerViewModel @Inject constructor(
 
     fun onAction(action: ImmersivePlayerAction) {
         when (action) {
+            is ImmersivePlayerAction.CanvasFrameCaptured -> updateModel {
+                if (it.mediaId == action.mediaId && it.canvas == action.canvas) {
+                    it.copy(canvasFrame = action.frame)
+                } else {
+                    it
+                }
+            }
             ImmersivePlayerAction.TogglePlayPause -> repository.togglePlayPause()
             ImmersivePlayerAction.SkipPrevious -> repository.skipPrevious()
             ImmersivePlayerAction.SkipNext -> repository.skipNext()
@@ -150,6 +157,7 @@ class ImmersivePlayerViewModel @Inject constructor(
                     durationMs = old.durationMs,
                     volume = old.volume,
                     seekPositionMs = old.seekPositionMs,
+                    canvasFrame = old.canvasFrame.takeIf { old.canvas == mapped.canvas },
                 )
             } else {
                 mapped
