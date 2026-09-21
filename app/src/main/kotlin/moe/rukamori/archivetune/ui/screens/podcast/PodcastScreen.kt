@@ -47,6 +47,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
@@ -236,7 +237,7 @@ private fun PodcastSuccessContent(
                 fallbackIcon = R.drawable.mic,
                 systemBarsTopPadding = systemBarsTopPadding,
                 subtitle = subtitle,
-                metadata = stringResource(R.string.episodes),
+                metadata = pluralStringResource(R.plurals.n_episode, uiState.episodes.size, uiState.episodes.size),
                 description = null,
                 isAdded = uiState.isSaved,
                 addContentDescription = R.string.add_to_library,

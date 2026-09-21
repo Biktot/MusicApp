@@ -9,12 +9,14 @@
 
 package moe.rukamori.archivetune.ui.player
 
+import android.graphics.Bitmap
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -23,6 +25,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -64,7 +67,9 @@ internal fun CanvasArtworkPlayer(
     isPlaying: Boolean,
     modifier: Modifier = Modifier,
     resizeMode: Int = AspectRatioFrameLayout.RESIZE_MODE_FIT,
+    onFrameCaptured: ((Bitmap?) -> Unit)? = null,
 ) {
+    val frameCallback by rememberUpdatedState(onFrameCaptured)
     val provider = source ?: return
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -220,6 +225,7 @@ internal fun CanvasArtworkPlayer(
                     Timber.tag(CanvasPlaybackLogTag).w(error, "Canvas playback failed")
                     hasPlaybackFailed = true
                     isVideoReady = false
+                    frameCallback?.invoke(null)
                     val next =
                         when (currentUrl) {
                             primary -> fallback?.takeIf { it != currentUrl }
@@ -267,6 +273,7 @@ internal fun CanvasArtworkPlayer(
         val normalized = currentUrl.trim()
         isVideoReady = false
         hasPlaybackFailed = false
+        frameCallback?.invoke(null)
         val lowercaseUrl = normalized.lowercase(Locale.ROOT)
         val mimeType =
             when {
@@ -305,7 +312,21 @@ internal fun CanvasArtworkPlayer(
         label = "canvasAlpha",
     )
 
-    ContentFrame(
+    if (onFrameCaptured != null) {
+        key(exoPlayer, currentUrl) {
+            AndroidView(
+                factory = { viewContext ->
+                    CanvasSnapshotView(viewContext).apply {
+                        bind(exoPlayer) { bitmap ->
+                            if (!hasPlaybackFailed) frameCallback?.invoke(bitmap)
+                        }
+                    }
+                },
+                onRelease = { it.release() },
+                modifier = modifier.alpha(alpha),
+            )
+        }
+    } else ContentFrame(
         player = exoPlayer,
         surfaceType = SURFACE_TYPE_TEXTURE_VIEW,
         contentScale = resizeMode.toContentScale(),

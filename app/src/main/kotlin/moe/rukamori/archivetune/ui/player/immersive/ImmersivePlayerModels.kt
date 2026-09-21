@@ -9,6 +9,7 @@ package moe.rukamori.archivetune.ui.player.immersive
 
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Immutable
+import androidx.compose.ui.graphics.ImageBitmap
 import moe.rukamori.archivetune.canvas.CanvasVideo
 import moe.rukamori.archivetune.models.ActiveOutputDevice
 
@@ -39,6 +40,7 @@ data class ImmersivePlayerUiModel(
     val formatDetails: String,
     val outputDevice: ActiveOutputDevice,
     val canvas: CanvasVideo?,
+    val canvasFrame: ImageBitmap? = null,
     val positionMs: Long = 0L,
     val durationMs: Long = 0L,
     val volume: Float = 0f,
@@ -52,6 +54,11 @@ data class ImmersivePlayerArtist(
 )
 
 sealed interface ImmersivePlayerAction {
+    data class CanvasFrameCaptured(
+        val mediaId: String,
+        val canvas: CanvasVideo,
+        val frame: ImageBitmap?,
+    ) : ImmersivePlayerAction
     data object TogglePlayPause : ImmersivePlayerAction
     data object SkipPrevious : ImmersivePlayerAction
     data object SkipNext : ImmersivePlayerAction
