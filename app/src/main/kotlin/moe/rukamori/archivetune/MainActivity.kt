@@ -275,6 +275,7 @@ import moe.rukamori.archivetune.ui.component.rememberBottomSheetState
 import moe.rukamori.archivetune.ui.component.shimmer.ShimmerTheme
 import moe.rukamori.archivetune.ui.menu.YouTubeSongMenu
 import moe.rukamori.archivetune.ui.player.BottomSheetPlayer
+import moe.rukamori.archivetune.ui.screens.library.LibraryHeaderContentPadding
 import moe.rukamori.archivetune.ui.screens.LOGIN_URL_ARGUMENT
 import moe.rukamori.archivetune.ui.screens.LoginScreen
 import moe.rukamori.archivetune.ui.screens.Screens
@@ -1323,6 +1324,13 @@ class MainActivity : ComponentActivity() {
                                     !playerBottomSheetState.isExpandedOrExpanding
                             },
                         )
+                    val libraryScrollBehavior =
+                        appBarScrollBehavior(
+                            canScroll = {
+                                navBackStackEntry?.destination?.route == Screens.Library.route &&
+                                    !playerBottomSheetState.isExpandedOrExpanding
+                            },
+                        )
                     val topAppBarScrollBehavior =
                         appBarScrollBehavior(
                             canScroll = {
@@ -1342,6 +1350,10 @@ class MainActivity : ComponentActivity() {
                                 when (screen) {
                                     Screens.Home -> {
                                         coroutineScope.launch { homeScrollBehavior.state.resetHeightOffset() }
+                                    }
+
+                                    Screens.Library -> {
+                                        coroutineScope.launch { libraryScrollBehavior.state.resetHeightOffset() }
                                     }
 
                                     else -> {}
@@ -1369,6 +1381,10 @@ class MainActivity : ComponentActivity() {
 
                                 Screens.Search.route -> {
                                     searchScrollBehavior.state.resetHeightOffset()
+                                }
+
+                                Screens.Library.route -> {
+                                    libraryScrollBehavior.state.resetHeightOffset()
                                 }
 
                                 else -> {}
@@ -1430,6 +1446,10 @@ class MainActivity : ComponentActivity() {
 
                                 Screens.Search.route -> {
                                     searchScrollBehavior.state.resetHeightOffset()
+                                }
+
+                                Screens.Library.route -> {
+                                    libraryScrollBehavior.state.resetHeightOffset()
                                 }
 
                                 else -> {}
@@ -1760,8 +1780,8 @@ class MainActivity : ComponentActivity() {
 
                                                 Screens.Search.route -> searchScrollBehavior
 
-                                                // Library hits else but is offset 0 (self-contained);
-                                                // sub-screens use the shared shell behavior.
+                                                Screens.Library.route -> libraryScrollBehavior
+
                                                 else -> topAppBarScrollBehavior
                                             }
                                         val isLibraryRoute = navBackStackEntry?.destination?.route == Screens.Library.route
@@ -1780,9 +1800,10 @@ class MainActivity : ComponentActivity() {
                                         // CURRENT route's state via LaunchedEffect so every route gets
                                         // its limit on entry (not just the first-measured one).
                                         var headerHeightPx by remember { mutableStateOf(0) }
-                                        LaunchedEffect(currentScrollBehavior, headerHeightPx) {
-                                            if (headerHeightPx > 0 && !isLibraryRoute) {
-                                                val limit = -headerHeightPx.toFloat()
+                                        val libraryChipHeightPx = with(LocalDensity.current) { LibraryHeaderContentPadding.toPx() }
+                                        LaunchedEffect(currentScrollBehavior, headerHeightPx, libraryChipHeightPx) {
+                                            if (headerHeightPx > 0) {
+                                                val limit = -(headerHeightPx + if (isLibraryRoute) libraryChipHeightPx else 0f)
                                                 val state = currentScrollBehavior.state
                                                 if (state.heightOffsetLimit != limit) {
                                                     state.heightOffsetLimit = limit
@@ -1800,12 +1821,7 @@ class MainActivity : ComponentActivity() {
                                                         IntOffset(
                                                             x = 0,
                                                             y =
-                                                                if (isLibraryRoute) {
-                                                                    0
-                                                                } else {
-                                                                    currentScrollBehavior.state.heightOffset
-                                                                        .roundToInt()
-                                                                },
+                                                                currentScrollBehavior.state.heightOffset.roundToInt(),
                                                         )
                                                     },
                                         ) {
@@ -1822,18 +1838,9 @@ class MainActivity : ComponentActivity() {
                                                     modifier =
                                                         Modifier
                                                             .offset {
-                                                                if (isLibraryRoute) {
-                                                                    // Library owns its scroll; the shell gradient
-                                                                    // stays static (mirrors the header Box above and
-                                                                    // matches upstream, which ships a static Library
-                                                                    // gradient). Keeping it rendered avoids the
-                                                                    // Libraryâ†’Home predictive-back scrim pop.
-                                                                    IntOffset(x = 0, y = 0)
-                                                                } else {
-                                                                    val raw = currentScrollBehavior.state.heightOffset
-                                                                    val clamped = raw.coerceAtLeast(-appBarHeightPx)
-                                                                    IntOffset(x = 0, y = (clamped - raw).roundToInt())
-                                                                }
+                                                                val raw = currentScrollBehavior.state.heightOffset
+                                                                val clamped = raw.coerceAtLeast(-appBarHeightPx)
+                                                                IntOffset(x = 0, y = (clamped - raw).roundToInt())
                                                             }.fillMaxWidth()
                                                             .height(
                                                                 AppBarHeight +
@@ -1960,15 +1967,7 @@ class MainActivity : ComponentActivity() {
                                                     }
                                                 },
                                                 scrollBehavior =
-                                                    if (navBackStackEntry?.destination?.route == Screens.Library.route ||
-                                                        shouldUseFloatingTopBar
-                                                    ) {
-                                                        // Library is fixed, and floating routes
-                                                        // (Home/Search) now slide rigidly via the
-                                                        // outer Box.offset â€” passing a behavior here
-                                                        // would make M3 collapse/co-render and
-                                                        // double-move the header. Only non-floating
-                                                        // sub-screens use M3's collapse behavior.
+                                                    if (shouldUseFloatingTopBar) {
                                                         null
                                                     } else {
                                                         topAppBarScrollBehavior
@@ -2517,15 +2516,6 @@ class MainActivity : ComponentActivity() {
                                                     Modifier
                                                 },
                                             ).nestedScroll(
-                                                // Step 2b: the NavHost-level connection now serves
-                                                // ONLY shell-driven sub-screens (Album/Artist/
-                                                // Playlist/...). Home and Search attach their own
-                                                // per-route connection inside their screen, so a
-                                                // departing screen's fling can no longer reach the
-                                                // incoming route's header state (fling carry-over is
-                                                // severed structurally). Library is self-contained
-                                                // and OnlineSearchResult is gated by canScroll=false,
-                                                // so routing them through this shared arm is harmless.
                                                 topAppBarScrollBehavior.nestedScrollConnection,
                                             ),
                                 ) {
@@ -2538,6 +2528,7 @@ class MainActivity : ComponentActivity() {
                                         onClearUpdateBadge = { latestVersionName = BuildConfig.VERSION_NAME },
                                         homeScrollConnection = homeScrollBehavior.nestedScrollConnection,
                                         searchScrollConnection = searchScrollBehavior.nestedScrollConnection,
+                                        libraryScrollBehavior = libraryScrollBehavior,
                                         onlineSearchSort = onlineSearchSort,
                                     )
                                 }
