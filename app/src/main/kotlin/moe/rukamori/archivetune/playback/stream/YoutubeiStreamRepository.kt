@@ -82,13 +82,13 @@ class YoutubeiStreamRepository
                                 authFingerprint = authState.streamCacheFingerprint,
                                 pinnedItag = request.pinnedFormatId,
                                 requiresSongMetadata = request.requiresSongMetadata,
-                                cookie = authState.cookie,
+                                cookie = authState.cookie.takeIf { authState.hasLoginCookie },
                                 visitorData = authState.visitorData,
-                                dataSyncId = authState.dataSyncId,
-                                sessionPoToken = authState.poTokenGvsSession,
+                                dataSyncId = authState.dataSyncId.takeIf { authState.hasLoginCookie },
+                                sessionPoToken = authState.poTokenGvsSession.takeIf { authState.hasLoginCookie },
                                 videoPoToken =
                                     authState.poTokenGvs?.takeIf {
-                                        authState.poTokenGvsVideoId == request.mediaId
+                                        authState.hasLoginCookie && authState.poTokenGvsVideoId == request.mediaId
                                     },
                                 language = locale.hl,
                                 location = locale.gl,
@@ -123,6 +123,13 @@ class YoutubeiStreamRepository
                         failure.kind == YoutubeiFailureKind.HTTP && failure.httpStatus == 401
                     ) {
                         if (!failure.requiresContentConfirmation()) {
+                            if (!authState.hasLoginCookie) {
+                                throw YTPlayerUtils.BadStreamPlayerResponseException(
+                                    videoId = request.mediaId,
+                                    failedClients = setOf("VISIONOS"),
+                                    cause = failure,
+                                )
+                            }
                             throw YTPlayerUtils.InvalidPlaybackLoginContextException(
                                 videoId = request.mediaId,
                                 targetUrl = request.mediaUrl,
@@ -209,6 +216,9 @@ class YoutubeiStreamRepository
                     "CONTENT_CHECK_REQUIRED",
                     "inappropriate for some users",
                     "mature audiences",
+                    "private video",
+                    "members-only",
+                    "members only",
                 )
         }
     }
