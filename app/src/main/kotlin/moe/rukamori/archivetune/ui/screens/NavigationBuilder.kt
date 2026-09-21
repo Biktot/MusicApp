@@ -93,6 +93,7 @@ fun NavGraphBuilder.navigationBuilder(
     homeScrollConnection: NestedScrollConnection? = null,
     searchScrollConnection: NestedScrollConnection? = null,
     onlineSearchSort: OnlineSearchSort = OnlineSearchSort.DEFAULT,
+    libraryScrollBehavior: TopAppBarScrollBehavior,
 ) {
     composable(Screens.Home.route) {
         HomeScreen(
@@ -104,7 +105,7 @@ fun NavGraphBuilder.navigationBuilder(
     composable(
         Screens.Library.route,
     ) {
-        LibraryScreen(navController)
+        LibraryScreen(navController = navController, scrollBehavior = libraryScrollBehavior)
     }
     composable(Screens.Search.route) {
         SearchScreen(
