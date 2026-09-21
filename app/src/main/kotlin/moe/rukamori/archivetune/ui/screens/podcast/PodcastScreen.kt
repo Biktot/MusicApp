@@ -7,6 +7,7 @@
 
 package moe.rukamori.archivetune.ui.screens.podcast
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,6 +24,8 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -34,6 +37,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -44,12 +49,16 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -61,6 +70,7 @@ import kotlinx.coroutines.flow.filter
 import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
 import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.R
+import moe.rukamori.archivetune.constants.AppBarHeight
 import moe.rukamori.archivetune.extensions.toMediaItem
 import moe.rukamori.archivetune.playback.queues.ListQueue
 import moe.rukamori.archivetune.podcast.PodcastAction
@@ -95,6 +105,7 @@ fun PodcastScreen(
     val onToggleEpisodeLibrary =
         remember(viewModel) { { id: String -> viewModel.onAction(PodcastAction.ToggleEpisodeLibrary(id)) } }
     val onBack: () -> Unit = remember(navController) { { navController.navigateUp() } }
+    val onSearchAction = remember(viewModel) { viewModel::onAction }
 
     LaunchedEffect(viewModel, playerConnection, unknownErrorMessage, loginRequiredMessage, syncDisabledMessage) {
         viewModel.events.collect { event ->
@@ -127,6 +138,7 @@ fun PodcastScreen(
         state = state,
         snackbarHostState = snackbarHostState,
         onBack = onBack,
+        onSearchAction = onSearchAction,
         onRetry = onRetry,
         onLoadMore = onLoadMore,
         onPlayAll = onPlayAll,
@@ -141,6 +153,7 @@ private fun PodcastScreenContent(
     state: PodcastScreenState,
     snackbarHostState: SnackbarHostState,
     onBack: () -> Unit,
+    onSearchAction: (PodcastAction) -> Unit,
     onRetry: () -> Unit,
     onLoadMore: () -> Unit,
     onPlayAll: () -> Unit,
@@ -148,6 +161,16 @@ private fun PodcastScreenContent(
     onTogglePodcastSave: () -> Unit,
     onToggleEpisodeLibrary: (String) -> Unit,
 ) {
+    val uiState = (state as? PodcastScreenState.Success)?.uiState
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val onCloseSearch = remember(onSearchAction, keyboardController) {
+        {
+            keyboardController?.hide()
+            onSearchAction(PodcastAction.CloseSearch)
+        }
+    }
+    BackHandler(enabled = uiState?.isSearchActive == true, onBack = onCloseSearch)
+
     Box(modifier = Modifier.fillMaxSize()) {
         when (state) {
             PodcastScreenState.Loading -> {
@@ -187,8 +210,12 @@ private fun PodcastScreenContent(
         }
 
         PodcastTopAppBar(
-            title = (state as? PodcastScreenState.Success)?.uiState?.title.orEmpty(),
-            onBack = onBack,
+            title = uiState?.title.orEmpty(),
+            isSearchAvailable = uiState != null,
+            isSearchActive = uiState?.isSearchActive == true,
+            searchQuery = uiState?.searchQuery.orEmpty(),
+            onSearchAction = onSearchAction,
+            onBack = if (uiState?.isSearchActive == true) onCloseSearch else onBack,
             modifier = Modifier.align(Alignment.TopCenter),
         )
         SnackbarHost(
@@ -210,12 +237,26 @@ private fun PodcastSuccessContent(
     onTogglePodcastSave: () -> Unit,
     onToggleEpisodeLibrary: (String) -> Unit,
 ) {
-    val listState = rememberLazyListState()
+    val browseListState = rememberLazyListState()
+    val searchListState = rememberLazyListState()
+    val listState = if (uiState.isSearchActive) searchListState else browseListState
     val systemBarsTopPadding = WindowInsets.systemBars.asPaddingValues().calculateTopPadding()
     val bottomPadding = LocalPlayerAwareWindowInsets.current.asPaddingValues().calculateBottomPadding()
     val subtitle = remember(uiState.author) { uiState.author?.let(::AnnotatedString) }
 
-    LaunchedEffect(listState, uiState.canLoadMore, uiState.isLoadingMore, uiState.episodes.size) {
+    LaunchedEffect(uiState.isSearchActive, uiState.searchQuery) {
+        if (uiState.isSearchActive) searchListState.scrollToItem(0)
+    }
+
+    LaunchedEffect(
+        listState,
+        uiState.canLoadMore,
+        uiState.isLoadingMore,
+        uiState.episodes.size,
+        uiState.isSearchActive,
+        uiState.paginationErrorResId,
+    ) {
+        if (uiState.isSearchActive || uiState.paginationErrorResId != null) return@LaunchedEffect
         snapshotFlow {
             val layoutInfo = listState.layoutInfo
             val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
@@ -227,44 +268,49 @@ private fun PodcastSuccessContent(
 
     LazyColumn(
         state = listState,
-        contentPadding = PaddingValues(bottom = bottomPadding + 16.dp),
+        contentPadding = PaddingValues(
+            top = if (uiState.isSearchActive) systemBarsTopPadding + AppBarHeight else 0.dp,
+            bottom = bottomPadding + 16.dp,
+        ),
         modifier = Modifier.fillMaxSize(),
     ) {
-        item(key = "podcast_header", contentType = "podcast_header") {
-            MediaDetailHero(
-                title = uiState.title,
-                thumbnailUrl = uiState.thumbnailUrl,
-                fallbackIcon = R.drawable.mic,
-                systemBarsTopPadding = systemBarsTopPadding,
-                subtitle = subtitle,
-                metadata = pluralStringResource(R.plurals.n_episode, uiState.episodes.size, uiState.episodes.size),
-                description = null,
-                isAdded = uiState.isSaved,
-                addContentDescription = R.string.add_to_library,
-                removeContentDescription = R.string.remove_from_library,
-                onShuffle = null,
-                onPlay = onPlayAll,
-                onToggleAdd = onTogglePodcastSave,
-                isToggleAddEnabled = !uiState.isSavePending,
-            )
-        }
-
-        uiState.description?.takeIf(String::isNotBlank)?.let { description ->
-            item(key = "podcast_description", contentType = "podcast_description") {
-                Text(
-                    text = description,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 24.dp, vertical = 16.dp),
+        if (!uiState.isSearchActive) {
+            item(key = "podcast_header", contentType = "podcast_header") {
+                MediaDetailHero(
+                    title = uiState.title,
+                    thumbnailUrl = uiState.thumbnailUrl,
+                    fallbackIcon = R.drawable.mic,
+                    systemBarsTopPadding = systemBarsTopPadding,
+                    subtitle = subtitle,
+                    metadata = pluralStringResource(R.plurals.n_episode, uiState.episodes.size, uiState.episodes.size),
+                    description = null,
+                    isAdded = uiState.isSaved,
+                    addContentDescription = R.string.add_to_library,
+                    removeContentDescription = R.string.remove_from_library,
+                    onShuffle = null,
+                    onPlay = onPlayAll,
+                    onToggleAdd = onTogglePodcastSave,
+                    isToggleAddEnabled = !uiState.isSavePending,
                 )
+            }
+
+            uiState.description?.takeIf(String::isNotBlank)?.let { description ->
+                item(key = "podcast_description", contentType = "podcast_description") {
+                    Text(
+                        text = description,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp, vertical = 16.dp),
+                    )
+                }
             }
         }
 
         items(
-            items = uiState.episodes,
+            items = uiState.visibleEpisodes,
             key = PodcastEpisodeUiModel::id,
             contentType = { "podcast_episode" },
         ) { episode ->
@@ -279,7 +325,34 @@ private fun PodcastSuccessContent(
             HorizontalDivider(modifier = Modifier.padding(start = 120.dp))
         }
 
-        if (uiState.isLoadingMore) {
+        if (
+            uiState.isSearchActive && uiState.visibleEpisodes.isEmpty() &&
+            !uiState.isFiltering && !uiState.isLoadingMore &&
+            !uiState.canLoadMore && uiState.paginationErrorResId == null
+        ) {
+            item(key = "podcast_search_empty", contentType = "podcast_search_empty") {
+                Text(
+                    text = stringResource(R.string.no_results_found),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(24.dp),
+                )
+            }
+        }
+
+        uiState.paginationErrorResId?.let { messageResId ->
+            item(key = "podcast_page_error", contentType = "podcast_page_error") {
+                MediaDetailStatePanel(
+                    title = stringResource(R.string.episodes),
+                    description = stringResource(messageResId),
+                    iconRes = R.drawable.error,
+                    actionLabel = if (uiState.canLoadMore) stringResource(R.string.retry) else null,
+                    onAction = if (uiState.canLoadMore) onLoadMore else null,
+                    modifier = Modifier.padding(vertical = 24.dp),
+                )
+            }
+        }
+
+        if (uiState.isLoadingMore || uiState.isFiltering) {
             item(key = "podcast_loading_more", contentType = "podcast_loading_more") {
                 Box(
                     contentAlignment = Alignment.Center,
@@ -399,16 +472,54 @@ private fun PodcastEpisodeRow(
 @Composable
 private fun PodcastTopAppBar(
     title: String,
+    isSearchAvailable: Boolean,
+    isSearchActive: Boolean,
+    searchQuery: String,
+    onSearchAction: (PodcastAction) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val focusRequester = remember { FocusRequester() }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val onQueryChange = remember(onSearchAction) {
+        { query: String -> onSearchAction(PodcastAction.SearchQueryChanged(query)) }
+    }
+    val onOpenSearch = remember(onSearchAction) { { onSearchAction(PodcastAction.OpenSearch) } }
+    val onClearSearch = remember(onSearchAction) { { onSearchAction(PodcastAction.SearchQueryChanged("")) } }
+    val keyboardOptions = remember { KeyboardOptions(imeAction = ImeAction.Search) }
+    val keyboardActions = remember(keyboardController) { KeyboardActions(onSearch = { keyboardController?.hide() }) }
+    val searchModifier = remember(focusRequester) { Modifier.fillMaxWidth().focusRequester(focusRequester) }
+
+    LaunchedEffect(isSearchActive) {
+        if (isSearchActive) focusRequester.requestFocus()
+    }
+
     TopAppBar(
         title = {
-            Text(
-                text = title,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            if (isSearchActive) {
+                TextField(
+                    value = searchQuery,
+                    onValueChange = onQueryChange,
+                    placeholder = { Text(stringResource(R.string.search_episodes)) },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.titleLarge,
+                    keyboardOptions = keyboardOptions,
+                    keyboardActions = keyboardActions,
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                    ),
+                    modifier = searchModifier,
+                )
+            } else {
+                Text(
+                    text = title,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         },
         navigationIcon = {
             IconButton(onClick = onBack) {
@@ -418,9 +529,20 @@ private fun PodcastTopAppBar(
                 )
             }
         },
+        actions = {
+            if (isSearchActive && searchQuery.isNotEmpty()) {
+                IconButton(onClick = onClearSearch) {
+                    Icon(painterResource(R.drawable.close), contentDescription = stringResource(R.string.clear))
+                }
+            } else if (isSearchAvailable && !isSearchActive) {
+                IconButton(onClick = onOpenSearch) {
+                    Icon(painterResource(R.drawable.search), contentDescription = stringResource(R.string.search))
+                }
+            }
+        },
         colors =
             TopAppBarDefaults.topAppBarColors(
-                containerColor = Color.Transparent,
+                containerColor = if (isSearchActive) MaterialTheme.colorScheme.surface else Color.Transparent,
                 scrolledContainerColor = MaterialTheme.colorScheme.surface,
             ),
         modifier = modifier,
