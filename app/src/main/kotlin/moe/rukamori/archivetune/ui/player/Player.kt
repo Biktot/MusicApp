@@ -158,7 +158,6 @@ import moe.rukamori.archivetune.constants.BlurRadiusKey
 import moe.rukamori.archivetune.constants.DarkModeKey
 import moe.rukamori.archivetune.constants.DisableBlurKey
 import moe.rukamori.archivetune.constants.EnableHapticFeedbackKey
-import moe.rukamori.archivetune.constants.InnerTubeCookieKey
 import moe.rukamori.archivetune.constants.PlayerBackgroundStyle
 import moe.rukamori.archivetune.constants.PlayerBackgroundStyleKey
 import moe.rukamori.archivetune.constants.PlayerButtonsStyle
@@ -176,7 +175,6 @@ import moe.rukamori.archivetune.constants.SliderStyleKey
 import moe.rukamori.archivetune.constants.ThumbnailCornerRadiusKey
 import moe.rukamori.archivetune.extensions.metadata
 import moe.rukamori.archivetune.extensions.togglePlayPause
-import moe.rukamori.archivetune.innertube.utils.hasYouTubeLoginCookie
 import moe.rukamori.archivetune.models.MediaMetadata
 import moe.rukamori.archivetune.ui.component.BottomSheet
 import moe.rukamori.archivetune.ui.component.BottomSheetState
@@ -313,11 +311,6 @@ fun BottomSheetPlayer(
         onDispose { immersivePlayerViewModel.unbind(playerConnection) }
     }
     val playbackError by playerConnection.error.collectAsStateWithLifecycle()
-    val (innerTubeCookie) = rememberPreference(InnerTubeCookieKey, defaultValue = "")
-    val isYouTubeLoggedIn =
-        remember(innerTubeCookie) {
-            hasYouTubeLoginCookie(innerTubeCookie)
-        }
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val retryPlayback =
@@ -1973,7 +1966,7 @@ fun BottomSheetPlayer(
 
         PlaybackErrorDialog(
             error = activePlaybackError,
-            showLoginAction = !isYouTubeLoggedIn,
+            showLoginAction = errorInfo.loginRecoveryUrl != null,
             onRetry = retryPlayback,
             onClose = dismissPlaybackError,
             onLogin = loginClick,
