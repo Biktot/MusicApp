@@ -76,6 +76,7 @@ import moe.rukamori.archivetune.utils.SyncUtils
 import moe.rukamori.archivetune.utils.dataStore
 import moe.rukamori.archivetune.utils.get
 import moe.rukamori.archivetune.utils.parseSpeedDialPins
+import moe.rukamori.archivetune.utils.serializeSpeedDialPins
 import moe.rukamori.archivetune.utils.reportException
 import moe.rukamori.archivetune.utils.toPlaybackAuthState
 import timber.log.Timber
@@ -573,9 +574,28 @@ class HomeViewModel
             val playlistIds = pins.filter { it.type == SpeedDialPinType.PLAYLIST }.map { it.id }
 
             val songsById = database.getSongsByIds(songIds).associateBy { it.id }
-            val albumsById = albumIds.mapNotNull { id -> database.album(id).first() }.associateBy { it.id }
-            val artistsById = artistIds.mapNotNull { id -> database.artist(id).first() }.associateBy { it.id }
+            val albumsById = albumIds.associateWith { id -> database.album(id).first() }
+            val artistsById = artistIds.associateWith { id -> database.artist(id).first() }
             val playlistsById = playlistIds.mapNotNull { id -> database.getPlaylistById(id) }.associateBy { it.id }
+
+            if (albumsById.any { (id, album) -> album != null && id != album.id } ||
+                artistsById.any { (id, artist) -> artist != null && id != artist.id }
+            ) {
+                context.dataStore.edit { preferences ->
+                    val currentPins = parseSpeedDialPins(preferences[SpeedDialSongIdsKey].orEmpty())
+                    val resolvedPins = currentPins.map { pin ->
+                        val canonicalId = when (pin.type) {
+                            SpeedDialPinType.ALBUM -> albumsById[pin.id]?.id
+                            SpeedDialPinType.ARTIST -> artistsById[pin.id]?.id
+                            else -> null
+                        }
+                        canonicalId?.let { pin.copy(id = it) } ?: pin
+                    }.distinct()
+                    if (resolvedPins != currentPins) {
+                        preferences[SpeedDialSongIdsKey] = serializeSpeedDialPins(resolvedPins)
+                    }
+                }
+            }
 
             speedDialItems.value =
                 pins
