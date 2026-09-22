@@ -45,6 +45,7 @@ data class ImmersivePlayerUiModel(
     val durationMs: Long = 0L,
     val volume: Float = 0f,
     val seekPositionMs: Long? = null,
+    val showArtistDialog: Boolean = false,
 )
 
 @Immutable
@@ -67,6 +68,8 @@ sealed interface ImmersivePlayerAction {
     data class ChangeVolume(val fraction: Float) : ImmersivePlayerAction
     data object ToggleLike : ImmersivePlayerAction
     data object OpenAlbum : ImmersivePlayerAction
+    data object OpenArtists : ImmersivePlayerAction
+    data object DismissArtistDialog : ImmersivePlayerAction
     data class OpenArtist(val id: String) : ImmersivePlayerAction
     data object OpenMenu : ImmersivePlayerAction
 }
