@@ -167,7 +167,7 @@ fun ArtistScreen(
     val playerConnection = LocalPlayerConnection.current ?: return
     val isPlaying by playerConnection.isPlaying.collectAsStateWithLifecycle()
     val mediaMetadata by playerConnection.mediaMetadata.collectAsStateWithLifecycle()
-    val loadedArtistPage by viewModel.artistPage.collectAsStateWithLifecycle()
+    val loadedArtistPage = viewModel.artistPage.collectAsStateWithLifecycle().value
     val libraryArtist by viewModel.libraryArtist.collectAsStateWithLifecycle()
     val loadedLibrarySongs by viewModel.librarySongs.collectAsStateWithLifecycle()
     val loadedLibraryAlbums by viewModel.libraryAlbums.collectAsStateWithLifecycle()
