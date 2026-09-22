@@ -376,6 +376,7 @@ private fun ImmersiveBackdrop(
 ) {
     val hazeState = rememberHazeState()
     val artworkRequest = rememberOfflineArtworkImageRequest(artworkUrl)
+    val artworkPlaceholder = painterResource(R.drawable.immersive_artwork_placeholder)
     val canvasArtworkRequest = rememberOfflineArtworkImageRequest(canvas?.static)
     val blurRadius = remember(backdropBlurAmount) { backdropBlurAmount.coerceIn(0, 100).dp }
     val blurStyle =
@@ -433,12 +434,18 @@ private fun ImmersiveBackdrop(
             } else {
                 AsyncImage(
                     model = artworkRequest,
+                    placeholder = artworkPlaceholder,
+                    error = artworkPlaceholder,
+                    fallback = artworkPlaceholder,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.fillMaxSize(),
                 )
                 AsyncImage(
                     model = artworkRequest,
+                    placeholder = artworkPlaceholder,
+                    error = artworkPlaceholder,
+                    fallback = artworkPlaceholder,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier =
@@ -478,6 +485,9 @@ private fun ImmersiveBackdrop(
         ) {
             AsyncImage(
                 model = canvasArtworkRequest ?: artworkRequest,
+                placeholder = artworkPlaceholder,
+                error = artworkPlaceholder,
+                fallback = artworkPlaceholder,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),

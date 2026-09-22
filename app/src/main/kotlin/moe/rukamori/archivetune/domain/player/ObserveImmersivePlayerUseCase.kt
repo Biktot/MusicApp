@@ -49,7 +49,8 @@ class ObserveImmersivePlayerUseCase @Inject constructor(
             artists = metadata.artists.map { ImmersivePlayerArtist(it.id, it.name) },
             albumId = metadata.album?.id,
             sourceTitle = metadata.album?.title?.takeIf(String::isNotBlank) ?: data.queueTitle.orEmpty(),
-            artworkUrl = metadata.thumbnailUrl,
+            artworkUrl = metadata.thumbnailUrl?.takeIf(String::isNotBlank)
+                ?: data.song?.takeIf { it.id == metadata.id }?.thumbnailUrl?.takeIf(String::isNotBlank),
             isPlaying = data.isPlaying,
             isBuffering = data.playbackState == Player.STATE_BUFFERING,
             canSkipPrevious = data.canSkipPrevious,
