@@ -124,7 +124,7 @@
     <string name="retry">Retry</string>
     <string name="cast">Cast</string>
     <string name="cast_devices">Cast devices</string>
-    <string name="cast_sheet_subtitle">Choose where ArchiveTune plays</string>
+    <string name="cast_sheet_subtitle">Choose where Tunes plays</string>
     <string name="cast_available_devices">Available devices</string>
     <string name="cast_searching_devices">Searching for devices</string>
     <string name="cast_no_devices">No Cast devices found</string>
@@ -333,7 +333,7 @@
     <string name="app_icon_available">Available icons</string>
     <string name="app_icon_builtin">Built in</string>
     <string name="app_icon_community">Community icon</string>
-    <string name="app_icon_builtin_description">Original ArchiveTune icon</string>
+    <string name="app_icon_builtin_description">Original Tunes icon</string>
     <string name="app_icon_identifier">ID %1$s</string>
     <string name="app_icon_community_notice">Community icons are created by users and may change over time.</string>
     <plurals name="app_icon_count">
@@ -449,14 +449,14 @@
     <string name="custom_background_adjustments_description">Adjust image in both previews.</string>
     <string name="custom_background_blur_value">%1$d dp</string>
     <string name="custom_background_scale_value">%1$d%%</string>
-    <string name="custom_background_permission_error">ArchiveTune could not keep access to this image.</string>
+    <string name="custom_background_permission_error">Tunes could not keep access to this image.</string>
     <string name="custom_background_permission_cleanup_error">The previous image access could not be released.</string>
     <string name="add_image">Add image</string>
     <string name="blur">Blur</string>
     <string name="contrast">Contrast</string>
     <string name="brightness">Brightness</string>
     <string name="custom_value">Custom value</string>
-    <string name="archivetune_canvas">ArchiveTune Canvas</string>
+    <string name="archivetune_canvas">Tunes Canvas</string>
     <string name="archivetune_canvas_desc">Animate album artwork while playing</string>
     <string name="player_background_style_v8_v9_desc">Unavailable with V8, V9, and V10 player styles</string>
     <string name="show_button1_description">Toggle visibility of button 1 in Discord Rich Presence</string>
@@ -499,9 +499,9 @@
     <string name="login">Login</string>
     <string name="not_logged_in">Not logged in</string>
     <string name="playback_confirmation_required" translatable="false">Playback confirmation required</string>
-    <string name="playback_requires_youtube_music_confirmation" translatable="false">Confirm playback in YouTube Music, then return to ArchiveTune.</string>
+    <string name="playback_requires_youtube_music_confirmation" translatable="false">Confirm playback in YouTube Music, then return to Tunes.</string>
     <string name="playback_login_refresh_required" translatable="false">Refresh YouTube Music login</string>
-    <string name="playback_requires_youtube_music_login_refresh" translatable="false">Refresh your YouTube Music login, then return to ArchiveTune.</string>
+    <string name="playback_requires_youtube_music_login_refresh" translatable="false">Refresh your YouTube Music login, then return to Tunes.</string>
     <string name="playback_error_unknown" translatable="false">Unknown error</string>
     <string name="playback_error_no_internet" translatable="false">No network connection</string>
     <string name="playback_error_details" translatable="false">Details</string>
@@ -725,7 +725,7 @@
     <string name="restore_failed">Failed to restore backup</string>
     <string name="discord_integration">Discord Integration</string>
     <string name="account_integrations_summary">Discord, Last.fm, Libre.fm, ListenBrainz</string>
-    <string name="discord_login_description">Connect your Discord account with OAuth so ArchiveTune can publish Rich Presence.</string>
+    <string name="discord_login_description">Connect your Discord account with OAuth so Tunes can publish Rich Presence.</string>
     <string name="discord_open_authorization">Open Discord authorization</string>
     <string name="discord_waiting_for_authorization">Waiting for Discord authorization...</string>
     <string name="discord_authorization_success">Discord account connected</string>
@@ -931,7 +931,7 @@
     <string name="update_notification_channel_name">App Updates</string>
     <string name="update_notification_channel_desc">Notifications for new app updates</string>
     <string name="update_notification_title">Update Available</string>
-    <string name="update_notification_text">ArchiveTune %s is now available</string>
+    <string name="update_notification_text">Tunes %s is now available</string>
     <string name="download">Download</string>
     <string name="download_complete">Download complete</string>
     <string name="downloads">Downloads</string>
@@ -961,7 +961,7 @@
     <string name="onboarding_login_title">Sync your listening</string>
     <string name="onboarding_login_subtitle">Log in to sync your library and history across devices and get more reliable playback.</string>
     <string name="onboarding_login_optional">Optional. You can log in later from Settings.</string>
-    <string name="onboarding_login_benefits_title">Your account helps ArchiveTune</string>
+    <string name="onboarding_login_benefits_title">Your account helps Tunes</string>
     <string name="onboarding_login_library_title">Sync your library</string>
     <string name="onboarding_login_library_desc">Keep your saved music and playlists available wherever you listen.</string>
     <string name="onboarding_login_history_title">Keep your history</string>
@@ -976,14 +976,14 @@
     <string name="onboarding_foss_variant">FOSS edition</string>
     <string name="onboarding_version_label">Version %1$s</string>
     <string name="onboarding_empty_title">Setup unavailable</string>
-    <string name="onboarding_empty_subtitle">Continue to ArchiveTune.</string>
+    <string name="onboarding_empty_subtitle">Continue to Tunes.</string>
     <string name="onboarding_error_generic">Couldn\'t load setup</string>
     <string name="onboarding_permission_allowed_by_install">Allowed by install</string>
     <string name="onboarding_permission_unavailable">Unavailable</string>
     <string name="onboarding_permission_notifications_title">Notifications</string>
     <string name="onboarding_permission_notifications_desc">Show playback controls and music activity in the notification shade.</string>
     <string name="onboarding_permission_device_audio_capture_title">On-device audio recognition</string>
-    <string name="onboarding_permission_device_audio_capture_desc">Recognize music playing in other apps without using the microphone. Android asks for screen and audio capture approval each time, ArchiveTune processes audio only.</string>
+    <string name="onboarding_permission_device_audio_capture_desc">Recognize music playing in other apps without using the microphone. Android asks for screen and audio capture approval each time, Tunes processes audio only.</string>
     <string name="onboarding_permission_bluetooth_connect_title">Bluetooth audio connection</string>
     <string name="onboarding_permission_bluetooth_connect_desc">Connect to nearby Bluetooth audio devices for playback.</string>
     <string name="onboarding_permission_network_title">Network access</string>
@@ -1007,7 +1007,7 @@
     <string name="playlist_suggestion_source_title">Playlist title</string>
     <string name="playlist_suggestion_source_content">Playlist content</string>
     <string name="playlist_suggestion_source_both">Playlist title and content</string>
-    <string name="music_together">ArchiveTune Music Together</string>
+    <string name="music_together">Tunes Music Together</string>
     <string name="together_display_name">Display name</string>
     <string name="together_display_name_placeholder">Your name</string>
     <string name="together_port">Session port</string>
@@ -1078,10 +1078,10 @@
     <string name="together_activity_error">Error: %1$s</string>
     <string name="got_it">Got it</string>
     <string name="together_dont_show_again">Don\'t show this again</string>
-    <string name="together_welcome_title">Welcome to ArchiveTune Music Together</string>
+    <string name="together_welcome_title">Welcome to Tunes Music Together</string>
     <string name="together_welcome_body">Music Together lets multiple devices share a live session with a synced queue and playback.</string>
     <string name="together_welcome_host_title">Host a session</string>
-    <string name="together_welcome_host_body">Tap Start session, then share the session link. Keep ArchiveTune open in the background while hosting.</string>
+    <string name="together_welcome_host_body">Tap Start session, then share the session link. Keep Tunes open in the background while hosting.</string>
     <string name="together_welcome_join_title">Join from another device</string>
     <string name="together_welcome_join_body">Open the shared link, or enter code and tap Join. Your queue and playback will follow the host.</string>
     <string name="together_welcome_permissions_title">Permissions and safety</string>
@@ -1106,7 +1106,7 @@
     <string name="scheduled_backup_enabled_description">Backups run automatically using the schedule below.</string>
     <string name="scheduled_backup_disabled_description">Automatic backups are paused.</string>
     <string name="scheduled_backup_frequency">Backup schedule</string>
-    <string name="scheduled_backup_frequency_description">Choose how often ArchiveTune creates a backup.</string>
+    <string name="scheduled_backup_frequency_description">Choose how often Tunes creates a backup.</string>
     <string name="scheduled_backup_daily">Daily</string>
     <string name="scheduled_backup_weekly">Weekly</string>
     <string name="scheduled_backup_monthly">Monthly</string>
