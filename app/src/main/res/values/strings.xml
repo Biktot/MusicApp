@@ -911,7 +911,7 @@
     <string name="channel_artifact">Artifact</string>
     <string name="recent_commits">Recent Commits</string>
     <string name="updates_artifact_hosting_description">Artifact builds are fetched directly from GitHub Actions workflow runs.</string>
-    <string name="updates_channel_warning_intro">ArchiveTune provides two download channels for builds:</string>
+    <string name="updates_channel_warning_intro">Tunes provides two download channels for builds:</string>
     <string name="updates_channel_warning_stable_title">Stable builds</string>
     <string name="updates_channel_warning_stable_source">Distributed via official GitHub Releases.</string>
     <string name="updates_channel_warning_stable_desc">These versions are tested and recommended for most users.</string>
@@ -993,7 +993,7 @@
     <string name="onboarding_permission_audio_settings_title">Audio settings and vibration</string>
     <string name="onboarding_permission_audio_settings_desc">Adjust playback audio behavior and provide light touch feedback.</string>
     <string name="onboarding_permission_app_installation_title">App installation</string>
-    <string name="onboarding_permission_app_installation_desc">Install downloaded APK updates from ArchiveTune.</string>
+    <string name="onboarding_permission_app_installation_desc">Install downloaded APK updates from Tunes.</string>
     <string name="onboarding_permission_bluetooth_scan_title">Bluetooth scan</string>
     <string name="onboarding_permission_bluetooth_scan_desc">Discover Cast and nearby playback devices.</string>
     <string name="onboarding_community_github_desc">Star the repository and follow releases.</string>
