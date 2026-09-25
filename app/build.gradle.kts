@@ -480,13 +480,18 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
 }
 
 configurations.configureEach {
+    resolutionStrategy.eachDependency {
+        when (requested.group) {
+            "androidx.compose.runtime",
+            "androidx.compose.foundation",
+            "androidx.compose.ui",
+            "androidx.compose.animation" -> {
+                useVersion(libs.versions.compose.get())
+                because("Keep Compose aligned with the RectList alignment-placement fix")
+            }
+        }
+    }
     resolutionStrategy.force(
-        "androidx.compose.runtime:runtime:${libs.versions.compose.get()}",
-        "androidx.compose.foundation:foundation:${libs.versions.compose.get()}",
-        "androidx.compose.ui:ui:${libs.versions.compose.get()}",
-        "androidx.compose.ui:ui-util:${libs.versions.compose.get()}",
-        "androidx.compose.ui:ui-tooling:${libs.versions.compose.get()}",
-        "androidx.compose.animation:animation-graphics:${libs.versions.compose.get()}",
         "org.jetbrains.kotlin:kotlin-metadata-jvm:${libs.versions.kotlinMetadata.get()}",
     )
 }
