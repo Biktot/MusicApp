@@ -62,7 +62,7 @@
     <string name="library_top_mixes_refresh">Refresh mixes</string>
     <string name="library_top_mixes_configure_ai">Configure AI</string>
     <string name="library_top_mixes_ai_not_configured_title">Configure AI to build mixes</string>
-    <string name="library_top_mixes_ai_not_configured_desc">AI integration is required before ArchiveTune can build personal top mixes.</string>
+    <string name="library_top_mixes_ai_not_configured_desc">AI integration is required before Tunes can build personal top mixes.</string>
     <string name="library_top_mixes_no_recent_history_title">No recent listening mix yet</string>
     <string name="library_top_mixes_no_recent_history">Listen to more songs, then refresh to build AI mixes from your recent history.</string>
     <string name="library_top_mixes_no_valid_mixes">AI did not return any playable mixes from your recent history.</string>
@@ -144,7 +144,7 @@
     <string name="play">Play</string>
     <string name="widget_pause">Pause</string>
     <string name="widget_previous">Previous</string>
-    <string name="widget_tap_to_open">Tap to open ArchiveTune</string>
+    <string name="widget_tap_to_open">Tap to open Tunes</string>
     <string name="widget_insights_title">Listening Insights</string>
     <string name="widget_recommendations">Recommendations</string>
     <string name="widget_listening_time_empty">No listening time yet</string>
@@ -609,7 +609,7 @@
     <string name="eq_screen_subtitle">Shape playback for your ears and equipment</string>
     <string name="eq_sound_shaping_on">Sound shaping is on</string>
     <string name="eq_sound_shaping_off">Sound shaping is off</string>
-    <string name="eq_enable_description">Applies these controls to ArchiveTune playback</string>
+    <string name="eq_enable_description">Applies these controls to Tunes playback</string>
     <string name="eq_control_mode">Control mode</string>
     <string name="eq_basic">Basic</string>
     <string name="eq_advanced">Advanced</string>
@@ -730,7 +730,7 @@
     <string name="discord_waiting_for_authorization">Waiting for Discord authorization...</string>
     <string name="discord_authorization_success">Discord account connected</string>
     <string name="discord_authorization_failed">Discord authorization failed</string>
-    <string name="discord_account_ready">ArchiveTune is ready to publish Rich Presence for your listening session.</string>
+    <string name="discord_account_ready">Tunes is ready to publish Rich Presence for your listening session.</string>
     <string name="discord_reauthorize_required_title">Discord session expired</string>
     <string name="discord_reauthorize_required_description">Rich Presence cannot be shown until you authorize Discord again.</string>
     <string name="discord_reauthorize_action">Reauthorize</string>
@@ -947,14 +947,14 @@
     <string name="download_failed_state">Download failed</string>
     <string name="search_downloads">Search downloads</string>
     <string name="no_matching_downloads">No matching downloads</string>
-    <string name="permissions_title">Allow ArchiveTune to work best</string>
+    <string name="permissions_title">Allow Tunes to work best</string>
     <string name="permissions_subtitle">We use a few permissions to play and manage your music reliably. You can change these anytime in system settings.</string>
     <string name="permission_storage_title">Storage access</string>
     <string name="permission_storage_desc">Required to read your downloaded and local audio files for playback.</string>
     <string name="permission_status_allowed">Allowed</string>
     <string name="next">Next</string>
     <string name="allow">Allow</string>
-    <string name="onboarding_welcome_title">Welcome to ArchiveTune</string>
+    <string name="onboarding_welcome_title">Welcome to Tunes</string>
     <string name="onboarding_welcome_subtitle">Set up playback, local music, and update permissions before you start listening.</string>
     <string name="onboarding_permissions_title">Review permissions</string>
     <string name="onboarding_permissions_subtitle">Grant only what you want now. You can continue and allow permissions later.</string>
@@ -989,7 +989,7 @@
     <string name="onboarding_permission_network_title">Network access</string>
     <string name="onboarding_permission_network_desc">Stream music, load artwork, and check online app content.</string>
     <string name="onboarding_permission_playback_service_title">Background playback</string>
-    <string name="onboarding_permission_playback_service_desc">Keep music playing reliably when ArchiveTune is in the background.</string>
+    <string name="onboarding_permission_playback_service_desc">Keep music playing reliably when Tunes is in the background.</string>
     <string name="onboarding_permission_audio_settings_title">Audio settings and vibration</string>
     <string name="onboarding_permission_audio_settings_desc">Adjust playback audio behavior and provide light touch feedback.</string>
     <string name="onboarding_permission_app_installation_title">App installation</string>
