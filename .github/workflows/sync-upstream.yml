@@ -1,0 +1,22 @@
+name: Sync from upstream
+on:
+  schedule:
+    - cron: '0 3 * * *'  
+  workflow_dispatch:     
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Add upstream and merge
+        run: |
+          git remote add upstream https://github.com/rukamori/ArchiveTune.git
+          git fetch upstream
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git merge upstream/main --no-edit || echo "CONFLICTS=true" >> $GITHUB_ENV
+      - name: Push changes
+        run: git push origin main
