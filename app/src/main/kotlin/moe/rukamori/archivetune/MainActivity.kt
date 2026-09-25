@@ -159,6 +159,9 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.datastore.preferences.core.edit
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.MediaItem
@@ -990,7 +993,8 @@ class MainActivity : ComponentActivity() {
                     val allLocalItems by homeViewModel.allLocalItems.collectAsState()
                     val allYtItems by homeViewModel.allYtItems.collectAsState()
                     val networkBannerState by networkBannerViewModel.bannerState.collectAsStateWithLifecycle()
-                    val hasUnreadNews by newsViewModel.hasUnreadNews.collectAsStateWithLifecycle()
+                    val latestUnreadNewsTimestamp by newsViewModel.latestUnreadNewsTimestamp.collectAsStateWithLifecycle()
+                    val hasUnreadNews = latestUnreadNewsTimestamp != null
                     val navBackStackEntry by navController.currentBackStackEntryAsState()
                     val (previousTab) = rememberSaveable { mutableStateOf("home") }
                     val currentRoute = navBackStackEntry?.destination?.route
@@ -1900,6 +1904,24 @@ class MainActivity : ComponentActivity() {
                                                             contentDescription = stringResource(R.string.history),
                                                         )
                                                     }
+                                                    val newsTooltipState = rememberTooltipState()
+                                                    val newsLifecycleOwner = LocalLifecycleOwner.current
+                                                    LaunchedEffect(latestUnreadNewsTimestamp, newsLifecycleOwner, newsTooltipState) {
+                                                        val timestamp = latestUnreadNewsTimestamp
+                                                        if (timestamp == null) {
+                                                            newsTooltipState.dismiss()
+                                                            return@LaunchedEffect
+                                                        }
+                                                        newsLifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                                                            if (newsViewModel.claimUnreadNewsTooltip(timestamp)) {
+                                                                try {
+                                                                    newsTooltipState.show()
+                                                                } finally {
+                                                                    newsTooltipState.dismiss()
+                                                                }
+                                                            }
+                                                        }
+                                                    }
                                                     TooltipBox(
                                                         positionProvider =
                                                             if (hasUnreadNews) {
@@ -1920,10 +1942,13 @@ class MainActivity : ComponentActivity() {
                                                                 }
                                                             }
                                                         },
-                                                        state = rememberTooltipState(),
+                                                        state = newsTooltipState,
                                                     ) {
                                                         TranslucentTopAppBarIconButton(
-                                                            onClick = { navController.navigate("news") },
+                                                            onClick = {
+                                                                newsTooltipState.dismiss()
+                                                                navController.navigate("news")
+                                                            },
                                                         ) {
                                                             BadgedBox(badge = {
                                                                 if (hasUnreadNews) {
