@@ -452,7 +452,7 @@ class AboutViewModel
                 leadDeveloper =
                     TeamMember(
                         avatarUrl = "https://avatars.githubusercontent.com/u/107134739?v=4",
-                        name = "morie",
+                        name = "morieattonkatsu",
                         positionResId = R.string.about_position_lead_dev,
                         profileUrl = "https://github.com/rukamori",
                         links =
