@@ -167,6 +167,8 @@ jobs:
           TOGETHER_BEARER_TOKEN: ${{ secrets.TOGETHER_BEARER_TOKEN }}
           CANVAS_BEARER_TOKEN: ${{ secrets.CANVAS_BEARER_TOKEN }}
           EXTRACTOR_BEARER: ${{ secrets.EXTRACTOR_BEARER }}
+          GITHUB_OWNER: ${{ secrets.MY_GITHUB_OWNER }}
+          GITHUB_REPO: ${{ secrets.MY_GITHUB_REPO }}
           NIGHTLY_BUILD_HASH: ${{ steps.build_hash.outputs.value }}
 
       - name: Resolve release output directory
