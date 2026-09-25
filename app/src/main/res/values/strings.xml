@@ -66,7 +66,7 @@
     <string name="library_top_mixes_refresh">Refresh mixes</string>
     <string name="library_top_mixes_configure_ai">Configure AI</string>
     <string name="library_top_mixes_ai_not_configured_title">Configure AI to build mixes</string>
-    <string name="library_top_mixes_ai_not_configured_desc">AI integration is required before ArchiveTune can build personal top mixes.</string>
+    <string name="library_top_mixes_ai_not_configured_desc">AI integration is required before Tunes can build personal top mixes.</string>
     <string name="library_top_mixes_no_recent_history_title">No recent listening mix yet</string>
     <string name="library_top_mixes_no_recent_history">Listen to more songs, then refresh to build AI mixes from your recent history.</string>
     <string name="library_top_mixes_no_valid_mixes">AI did not return any playable mixes from your recent history.</string>
@@ -128,7 +128,7 @@
     <string name="retry">Retry</string>
     <string name="cast">Cast</string>
     <string name="cast_devices">Cast devices</string>
-    <string name="cast_sheet_subtitle">Choose where ArchiveTune plays</string>
+    <string name="cast_sheet_subtitle">Choose where Tunes plays</string>
     <string name="cast_available_devices">Available devices</string>
     <string name="cast_searching_devices">Searching for devices</string>
     <string name="cast_no_devices">No Cast devices found</string>
