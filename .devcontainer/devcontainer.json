@@ -1,8 +1,5 @@
 {
   "name": "Android Dev",
   "image": "mcr.microsoft.com/devcontainers/java:17",
-  "features": {
-    "ghcr.io/devcontainers/features/android-sdk:1": {}
-  },
-  "postCreateCommand": "echo \"sdk.dir=$ANDROID_HOME\" > local.properties"
+  "postCreateCommand": "bash .devcontainer/setup-android-sdk.sh"
 }
