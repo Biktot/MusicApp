@@ -637,30 +637,6 @@ fun NavGraphBuilder.navigationBuilder(
         LibreFmLoginScreen(navController)
     }
     composable(
-        route = "settings/telegram?scrollTo={scrollTo}",
-        arguments = listOf(navArgument("scrollTo") { type = NavType.StringType; nullable = true; defaultValue = null }),
-    ) {
-        TelegramSettings(navController, scrollTo = it.savedStateHandle["scrollTo"])
-    }
-    composable(TELEGRAM_LOGIN_ROUTE) {
-        TelegramLoginScreen(navController)
-    }
-    composable(TELEGRAM_BROWSE_ROUTE) {
-        TelegramBrowseScreen(navController)
-    }
-    composable(TELEGRAM_BOTS_ROUTE) {
-        TelegramBotsScreen(navController)
-    }
-    composable(
-        route = "$TELEGRAM_BOT_CHAT_ROUTE_BASE/{botId}",
-        arguments = listOf(navArgument("botId") { type = NavType.StringType }),
-    ) { entry ->
-        TelegramBotChatScreen(
-            botId = entry.arguments?.getString("botId").orEmpty(),
-            navController = navController,
-        )
-    }
-    composable(
         route = "settings/ai_integration?scrollTo={scrollTo}",
         arguments = listOf(navArgument("scrollTo") { type = NavType.StringType; nullable = true; defaultValue = null }),
     ) {
