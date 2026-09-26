@@ -33,6 +33,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
@@ -46,13 +47,14 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.ProvidableCompositionLocal
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -62,14 +64,29 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.delay
 import moe.rukamori.archivetune.R
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+
+val LocalUnglassColorScheme: ProvidableCompositionLocal<ColorScheme?> =
+    compositionLocalOf { null }
+
+@Composable
+fun UnglassedDialogTheme(content: @Composable () -> Unit) {
+    val unglassed = LocalUnglassColorScheme.current
+    MaterialTheme(
+        colorScheme = unglassed ?: MaterialTheme.colorScheme,
+        content = content,
+    )
+}
 
 @Composable
 fun DefaultDialog(
@@ -83,82 +100,97 @@ fun DefaultDialog(
     constrainContentHeight: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+
+    val dialogShowingState = LocalSettingsDialogShowing.current
+    DisposableEffect(Unit) {
+        dialogShowingState.value = true
+        onDispose { dialogShowingState.value = false }
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
-        BoxWithConstraints(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(24.dp)
-                    .imePadding()
-                    .navigationBarsPadding(),
-            contentAlignment = Alignment.Center,
-        ) {
-            Surface(
-                modifier = Modifier.heightIn(max = maxHeight),
-                shape = AlertDialogDefaults.shape,
-                color = AlertDialogDefaults.containerColor,
-                tonalElevation = AlertDialogDefaults.TonalElevation,
-            ) {
-                Column(
-                    modifier = modifier.padding(24.dp),
-                ) {
-                    val bodyModifier =
-                        when {
-                            contentScrollable ->
-                                Modifier
-                                    .weight(1f, fill = false)
-                                    .verticalScroll(rememberScrollState())
-                            constrainContentHeight -> Modifier.weight(1f, fill = false)
-                            else -> Modifier
-                        }
 
+        UnglassedDialogTheme {
+
+            KeepStatusBarHiddenInDialog()
+
+            BoxWithConstraints(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(24.dp)
+                        .imePadding()
+                        .navigationBarsPadding(),
+                contentAlignment = Alignment.Center,
+            ) {
+                Surface(
+                    modifier = Modifier.heightIn(max = maxHeight),
+
+                    shape = AlertDialogDefaults.shape,
+                    color = AlertDialogDefaults.containerColor,
+                    tonalElevation = AlertDialogDefaults.TonalElevation,
+                    shadowElevation = 6.dp,
+                ) {
                     Column(
-                        horizontalAlignment = horizontalAlignment,
-                        modifier = bodyModifier,
+                        modifier = modifier.padding(24.dp),
                     ) {
-                        if (icon != null) {
-                            CompositionLocalProvider(LocalContentColor provides AlertDialogDefaults.iconContentColor) {
-                                Box(
-                                    Modifier.align(Alignment.CenterHorizontally),
-                                ) {
-                                    icon()
-                                }
+                        val bodyModifier =
+                            when {
+                                contentScrollable ->
+                                    Modifier
+                                        .weight(1f, fill = false)
+                                        .verticalScroll(rememberScrollState())
+                                constrainContentHeight -> Modifier.weight(1f, fill = false)
+                                else -> Modifier
                             }
 
-                            Spacer(Modifier.height(16.dp))
-                        }
-                        if (title != null) {
-                            CompositionLocalProvider(LocalContentColor provides AlertDialogDefaults.titleContentColor) {
-                                ProvideTextStyle(MaterialTheme.typography.headlineSmall) {
+                        Column(
+                            horizontalAlignment = horizontalAlignment,
+                            modifier = bodyModifier,
+                        ) {
+                            if (icon != null) {
+                                CompositionLocalProvider(LocalContentColor provides AlertDialogDefaults.iconContentColor) {
                                     Box(
-                                        Modifier.align(if (icon == null) Alignment.Start else Alignment.CenterHorizontally),
+                                        Modifier.align(Alignment.CenterHorizontally),
                                     ) {
-                                        title()
+                                        icon()
                                     }
                                 }
+
+                                Spacer(Modifier.height(16.dp))
+                            }
+                            if (title != null) {
+                                CompositionLocalProvider(LocalContentColor provides AlertDialogDefaults.titleContentColor) {
+                                    ProvideTextStyle(MaterialTheme.typography.headlineSmall) {
+                                        Box(
+                                            Modifier.align(if (icon == null) Alignment.Start else Alignment.CenterHorizontally),
+                                        ) {
+                                            title()
+                                        }
+                                    }
+                                }
+
+                                Spacer(Modifier.height(16.dp))
                             }
 
-                            Spacer(Modifier.height(16.dp))
+                            content()
                         }
 
-                        content()
-                    }
+                        if (buttons != null) {
+                            Spacer(Modifier.height(24.dp))
 
-                    if (buttons != null) {
-                        Spacer(Modifier.height(24.dp))
-
-                        FlowRow(
-                            horizontalArrangement = Arrangement.End,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) flowRowScope@{
-                            CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.primary) {
-                                ProvideTextStyle(
-                                    value = MaterialTheme.typography.labelLarge,
-                                ) {
-                                    this@flowRowScope.buttons()
+                            FlowRow(
+                                horizontalArrangement = Arrangement.End,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) flowRowScope@{
+                                CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.primary) {
+                                    ProvideTextStyle(
+                                        value = MaterialTheme.typography.labelLarge,
+                                    ) {
+                                        this@flowRowScope.buttons()
+                                    }
                                 }
                             }
                         }
@@ -180,76 +212,91 @@ fun ActionPromptDialog(
     onCancel: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit = {},
 ) {
+
+    val dialogShowingState = LocalSettingsDialogShowing.current
+    DisposableEffect(Unit) {
+        dialogShowingState.value = true
+        onDispose { dialogShowingState.value = false }
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
-        BoxWithConstraints(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(24.dp)
-                    .imePadding()
-                    .navigationBarsPadding(),
-            contentAlignment = Alignment.Center,
-        ) {
-            Surface(
-                modifier = Modifier.heightIn(max = maxHeight),
-                shape = AlertDialogDefaults.shape,
-                color = AlertDialogDefaults.containerColor,
-                tonalElevation = AlertDialogDefaults.TonalElevation,
+
+        UnglassedDialogTheme {
+
+            KeepStatusBarHiddenInDialog()
+
+            BoxWithConstraints(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(24.dp)
+                        .imePadding()
+                        .navigationBarsPadding(),
+                contentAlignment = Alignment.Center,
             ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
+                Surface(
+                    modifier = Modifier.heightIn(max = maxHeight),
+
+                    shape = AlertDialogDefaults.shape,
+                    color = AlertDialogDefaults.containerColor,
+                    tonalElevation = AlertDialogDefaults.TonalElevation,
+                    shadowElevation = 6.dp,
                 ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        // title
-                        if (titleBar != null) {
-                            Row {
-                                titleBar()
+                    Column(
+                        modifier = Modifier.padding(24.dp),
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+
+                            if (titleBar != null) {
+                                Row {
+                                    titleBar()
+                                }
+                            } else if (title != null) {
+                                Text(
+                                    text = title,
+                                    overflow = TextOverflow.Ellipsis,
+                                    maxLines = 1,
+                                    style = MaterialTheme.typography.headlineSmall,
+                                )
+                                Spacer(Modifier.height(16.dp))
                             }
-                        } else if (title != null) {
-                            Text(
-                                text = title,
-                                overflow = TextOverflow.Ellipsis,
-                                maxLines = 1,
-                                style = MaterialTheme.typography.headlineSmall,
-                            )
-                            Spacer(Modifier.height(16.dp))
+
+                            content()
                         }
 
-                        content() // body
-                    }
-
-                    Row(
-                        horizontalArrangement = Arrangement.End,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        if (onReset != null) {
-                            Row(modifier = Modifier.weight(1f)) {
-                                TextButton(
-                                    onClick = { onReset() },
-                                    shapes = ButtonDefaults.shapes(),
-                                ) {
-                                    Text(stringResource(R.string.reset))
+                        Row(
+                            horizontalArrangement = Arrangement.End,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            if (onReset != null) {
+                                Row(modifier = Modifier.weight(1f)) {
+                                    TextButton(
+                                        onClick = { onReset() },
+                                        shapes = ButtonDefaults.shapes(),
+                                    ) {
+                                        Text(stringResource(R.string.reset))
+                                    }
                                 }
                             }
-                        }
 
-                        if (onCancel != null) {
+                            if (onCancel != null) {
+                                TextButton(
+                                    onClick = { onCancel() },
+                                    shapes = ButtonDefaults.shapes(),
+                                ) {
+                                    Text(stringResource(android.R.string.cancel))
+                                }
+                            }
+
                             TextButton(
-                                onClick = { onCancel() },
+                                onClick = { onConfirm() },
                                 shapes = ButtonDefaults.shapes(),
                             ) {
-                                Text(stringResource(android.R.string.cancel))
+                                Text(stringResource(android.R.string.ok))
                             }
-                        }
-
-                        TextButton(
-                            onClick = { onConfirm() },
-                            shapes = ButtonDefaults.shapes(),
-                        ) {
-                            Text(stringResource(android.R.string.ok))
                         }
                     }
                 }
@@ -264,30 +311,45 @@ fun ListDialog(
     modifier: Modifier = Modifier,
     content: LazyListScope.() -> Unit,
 ) {
+
+    val dialogShowingState = LocalSettingsDialogShowing.current
+    DisposableEffect(Unit) {
+        dialogShowingState.value = true
+        onDispose { dialogShowingState.value = false }
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
-        BoxWithConstraints(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(24.dp)
-                    .imePadding()
-                    .navigationBarsPadding(),
-            contentAlignment = Alignment.Center,
-        ) {
-            Surface(
-                modifier = Modifier.heightIn(max = maxHeight),
-                shape = AlertDialogDefaults.shape,
-                color = AlertDialogDefaults.containerColor,
-                tonalElevation = AlertDialogDefaults.TonalElevation,
+
+        UnglassedDialogTheme {
+
+            KeepStatusBarHiddenInDialog()
+
+            BoxWithConstraints(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(24.dp)
+                        .imePadding()
+                        .navigationBarsPadding(),
+                contentAlignment = Alignment.Center,
             ) {
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = modifier.padding(vertical = 24.dp),
+                Surface(
+                    modifier = Modifier.heightIn(max = maxHeight),
+
+                    shape = AlertDialogDefaults.shape,
+                    color = AlertDialogDefaults.containerColor,
+                    tonalElevation = AlertDialogDefaults.TonalElevation,
+                    shadowElevation = 6.dp,
                 ) {
-                    LazyColumn(content = content)
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = modifier.padding(vertical = 24.dp),
+                    ) {
+                        LazyColumn(content = content)
+                    }
                 }
             }
         }
@@ -318,7 +380,7 @@ fun TextFieldDialog(
     modifier: Modifier = Modifier,
     icon: (@Composable () -> Unit)? = null,
     title: (@Composable () -> Unit)? = null,
-    initialTextFieldValue: TextFieldValue = TextFieldValue(), // legacy
+    initialTextFieldValue: TextFieldValue = TextFieldValue(),
     textFieldValue: String? = null,
     onTextFieldValueChange: ((String) -> Unit)? = null,
     placeholder: @Composable (() -> Unit)? = null,
@@ -328,10 +390,11 @@ fun TextFieldDialog(
     dismissOnDone: Boolean = true,
     maxLines: Int = if (singleLine) 1 else 10,
     keyboardOptions: KeyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-    visualTransformation: VisualTransformation = VisualTransformation.None,
     isInputValid: (String) -> Boolean = { it.isNotEmpty() },
+
+    masked: Boolean = false,
     onDone: (String) -> Unit = {},
-    // new multi-field support
+
     textFields: List<Pair<String, TextFieldValue>>? = null,
     onTextFieldsChange: ((Int, TextFieldValue) -> Unit)? = null,
     onDoneMultiple: ((List<String>) -> Unit)? = null,
@@ -395,7 +458,6 @@ fun TextFieldDialog(
                         maxLines = maxLines,
                         colors = OutlinedTextFieldDefaults.colors(),
                         keyboardOptions = keyboardOptions,
-                        visualTransformation = visualTransformation,
                         keyboardActions =
                             KeyboardActions(
                                 onDone = {
@@ -429,9 +491,10 @@ fun TextFieldDialog(
                     enabled = enabled,
                     singleLine = singleLine,
                     maxLines = maxLines,
+                    visualTransformation =
+                        if (masked) PasswordVisualTransformation() else VisualTransformation.None,
                     colors = OutlinedTextFieldDefaults.colors(),
                     keyboardOptions = keyboardOptions,
-                    visualTransformation = visualTransformation,
                     keyboardActions =
                         KeyboardActions(
                             onDone = {

@@ -10,10 +10,8 @@ package moe.rukamori.archivetune.ui.player
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import coil3.imageLoader
 import coil3.request.CachePolicy
@@ -26,6 +24,8 @@ import kotlinx.coroutines.withContext
 import moe.rukamori.archivetune.ui.utils.YTThumbQuality
 import moe.rukamori.archivetune.ui.utils.buildYTThumbnailUrl
 import timber.log.Timber
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @Immutable
 data class ThumbnailSwapState(
@@ -44,9 +44,13 @@ fun rememberThumbnailSwapState(
     val context = LocalContext.current
     val shouldAttemptYT = videoId != null && !lowDataMode && isMusicVideo
 
-    var displayUrl by remember { mutableStateOf(ytmUrl) }
-    var isYTReady by remember { mutableStateOf(false) }
-    var ytUrl by remember { mutableStateOf<String?>(null) }
+    // Keyed on the incoming URL: without the key the remembered value kept
+    // the PREVIOUS song's URL for the first frame of a track change (the
+    // LaunchedEffect below only runs after that recomposition), flashing a
+    // stale artwork through the mini player.
+    var displayUrl by remember(videoId, ytmUrl) { mutableStateOf(ytmUrl) }
+    var isYTReady by remember(videoId, ytmUrl) { mutableStateOf(false) }
+    var ytUrl by remember(videoId, ytmUrl) { mutableStateOf<String?>(null) }
 
     LaunchedEffect(videoId, ytmUrl, shouldAttemptYT) {
         displayUrl = ytmUrl

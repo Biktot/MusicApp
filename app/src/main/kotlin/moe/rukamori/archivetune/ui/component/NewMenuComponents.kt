@@ -10,6 +10,7 @@
 package moe.rukamori.archivetune.ui.component
 
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,18 +22,20 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -41,6 +44,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+
+val LocalGlassMenuContent = staticCompositionLocalOf { false }
 
 @Composable
 fun NewActionButton(
@@ -52,17 +57,41 @@ fun NewActionButton(
     backgroundColor: Color = Color.Unspecified,
     contentColor: Color = Color.Unspecified,
 ) {
-    val containerColor = if (backgroundColor.isSpecified) backgroundColor else MaterialTheme.colorScheme.surfaceContainerHigh
+    val onGlassPopup = LocalGlassMenuContent.current
+
+    // Glass mode: the translucent "ghost" tile over the blur — unchanged.
+    // Solid mode (liquid glass off / no backdrop): outlined tile — transparent
+    // fill with a hairline border so the single elevated sheet surface shows
+    // through and the grid reads as one deliberate flat design instead of
+    // tonal cards stacking greys on the sheet.
+    val containerColor =
+        when {
+            backgroundColor.isSpecified -> backgroundColor
+            onGlassPopup -> MaterialTheme.colorScheme.surfaceContainerHigh
+            else -> Color.Transparent
+        }
     val actionContentColor = if (contentColor.isSpecified) contentColor else MaterialTheme.colorScheme.onSurfaceVariant
+    val tileShape = if (onGlassPopup) ButtonDefaults.squareShape else RoundedCornerShape(16.dp)
 
     FilledTonalButton(
         onClick = onClick,
         modifier =
             modifier
                 .fillMaxWidth()
-                .heightIn(min = 96.dp),
+                .heightIn(min = 96.dp)
+                .then(
+                    if (onGlassPopup) {
+                        Modifier
+                    } else {
+                        Modifier.border(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.8f),
+                            tileShape,
+                        )
+                    },
+                ),
         enabled = enabled,
-        shape = ButtonDefaults.squareShape,
+        shape = tileShape,
         colors =
             ButtonDefaults.filledTonalButtonColors(
                 containerColor = containerColor,
@@ -135,20 +164,6 @@ fun NewMenuItem(
 }
 
 @Composable
-fun NewMenuSectionHeader(
-    text: String,
-    modifier: Modifier = Modifier,
-) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.primary,
-        modifier = modifier.padding(horizontal = 20.dp, vertical = 12.dp),
-    )
-}
-
-@Composable
 fun NewActionGrid(
     actions: List<NewAction>,
     modifier: Modifier = Modifier,
@@ -213,39 +228,13 @@ fun NewMenuContent(
 
         if (actionGrid != null && menuItems != null) {
             HorizontalDivider(
-                modifier = Modifier.padding(vertical = 16.dp),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
                 color = MaterialTheme.colorScheme.outlineVariant,
+                thickness = 0.5.dp,
             )
         }
 
         menuItems?.invoke()
-    }
-}
-
-@Composable
-fun NewIconButton(
-    icon: @Composable () -> Unit,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-    backgroundColor: Color = Color.Unspecified,
-    contentColor: Color = Color.Unspecified,
-) {
-    val containerColor = if (backgroundColor.isSpecified) backgroundColor else MaterialTheme.colorScheme.surfaceContainerHigh
-    val iconContentColor = if (contentColor.isSpecified) contentColor else MaterialTheme.colorScheme.onSurfaceVariant
-
-    FilledTonalIconButton(
-        onClick = onClick,
-        modifier = modifier,
-        enabled = enabled,
-        shapes = IconButtonDefaults.shapes(),
-        colors =
-            IconButtonDefaults.filledTonalIconButtonColors(
-                containerColor = containerColor,
-                contentColor = iconContentColor,
-            ),
-    ) {
-        icon()
     }
 }
 
@@ -258,6 +247,7 @@ fun NewMenuContainer(
         modifier =
             modifier
                 .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
                 .padding(bottom = 32.dp),
     ) {
@@ -270,11 +260,27 @@ fun MenuSurfaceSection(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    // Sections are flat in both modes now. On glass they were already
+    // transparent (the blur shows through); in solid mode the old
+    // 0.92-alpha grey card stacked a second neutral on the elevated sheet
+    // and banding-diffed against it — grouping now comes from the hairline
+    // dividers between the flat list items instead of a nested card.
     Surface(
-        shape = MaterialTheme.shapes.extraLarge,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = RoundedCornerShape(16.dp),
+        color = Color.Transparent,
         modifier = modifier.fillMaxWidth(),
     ) {
         Column(content = content)
     }
+}
+
+@Composable
+fun MenuSectionDivider(
+    modifier: Modifier = Modifier,
+) {
+    HorizontalDivider(
+        modifier = modifier.padding(horizontal = 16.dp),
+        color = MaterialTheme.colorScheme.outlineVariant,
+        thickness = 0.5.dp,
+    )
 }

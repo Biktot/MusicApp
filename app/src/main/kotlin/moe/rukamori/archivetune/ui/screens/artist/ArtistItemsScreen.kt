@@ -10,7 +10,12 @@ package moe.rukamori.archivetune.ui.screens.artist
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -26,7 +31,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
@@ -38,6 +42,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
+import moe.rukamori.archivetune.LocalStableSystemBarsTopPadding
 import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.R
 import moe.rukamori.archivetune.constants.CONTENT_TYPE_ALBUM
@@ -50,7 +55,9 @@ import moe.rukamori.archivetune.extensions.toMediaItem
 import moe.rukamori.archivetune.extensions.togglePlayPause
 import moe.rukamori.archivetune.innertube.models.AlbumItem
 import moe.rukamori.archivetune.innertube.models.ArtistItem
+import moe.rukamori.archivetune.innertube.models.EpisodeItem
 import moe.rukamori.archivetune.innertube.models.PlaylistItem
+import moe.rukamori.archivetune.innertube.models.PodcastItem
 import moe.rukamori.archivetune.innertube.models.SongItem
 import moe.rukamori.archivetune.innertube.models.WatchEndpoint
 import moe.rukamori.archivetune.innertube.models.YTItem
@@ -71,6 +78,7 @@ import moe.rukamori.archivetune.ui.menu.YouTubePlaylistMenu
 import moe.rukamori.archivetune.ui.menu.YouTubeSongMenu
 import moe.rukamori.archivetune.ui.utils.backToMain
 import moe.rukamori.archivetune.viewmodels.ArtistItemsViewModel
+import androidx.compose.runtime.getValue
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -174,7 +182,7 @@ fun ArtistItemsScreen(
                                             )
                                         }
 
-                                        else -> Unit
+                                        is PodcastItem, is EpisodeItem -> Unit
                                     }
                                 }
                             },
@@ -221,7 +229,18 @@ fun ArtistItemsScreen(
                                         navController.navigate("online_playlist/${item.id}")
                                     }
 
-                                    else -> Unit
+                                    is PodcastItem -> {
+                                        navController.navigate("podcast/${android.net.Uri.encode(item.browseId)}")
+                                    }
+
+                                    is EpisodeItem -> {
+                                        playerConnection.playQueue(
+                                            YouTubeQueue(
+                                                item.endpoint,
+                                                item.toMediaMetadata(),
+                                            ),
+                                        )
+                                    }
                                 }
                             },
                 )
@@ -285,7 +304,18 @@ fun ArtistItemsScreen(
                                             navController.navigate("online_playlist/${item.id}")
                                         }
 
-                                        else -> Unit
+                                        is PodcastItem -> {
+                                            navController.navigate("podcast/${android.net.Uri.encode(item.browseId)}")
+                                        }
+
+                                        is EpisodeItem -> {
+                                            playerConnection.playQueue(
+                                                YouTubeQueue(
+                                                    item.endpoint,
+                                                    item.toMediaMetadata(),
+                                                ),
+                                            )
+                                        }
                                     }
                                 },
                                 onLongClick = {
@@ -323,7 +353,7 @@ fun ArtistItemsScreen(
                                                 )
                                             }
 
-                                            else -> Unit
+                                            is PodcastItem, is EpisodeItem -> Unit
                                         }
                                     }
                                 },
@@ -342,6 +372,9 @@ fun ArtistItemsScreen(
     }
 
     TopAppBar(
+        windowInsets =
+            WindowInsets(top = LocalStableSystemBarsTopPadding.current)
+                .union(WindowInsets.systemBars.only(WindowInsetsSides.Horizontal)),
         title = { Text(title) },
         navigationIcon = {
             IconButton(

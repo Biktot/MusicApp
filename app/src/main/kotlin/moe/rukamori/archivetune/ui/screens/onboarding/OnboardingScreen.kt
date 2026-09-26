@@ -57,7 +57,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -82,7 +81,10 @@ import moe.rukamori.archivetune.onboarding.OnboardingPermissionStatus
 import moe.rukamori.archivetune.onboarding.OnboardingPermissionUiModel
 import moe.rukamori.archivetune.onboarding.OnboardingScreenState
 import moe.rukamori.archivetune.onboarding.OnboardingUiState
+import moe.rukamori.archivetune.ui.component.glassAwareCardBorder
+import moe.rukamori.archivetune.ui.component.glassAwareCardColor
 import moe.rukamori.archivetune.onboarding.OnboardingViewModel
+import androidx.compose.runtime.getValue
 
 @Composable
 fun OnboardingRoute(
@@ -350,9 +352,10 @@ private fun LoginPage(
                 modifier =
                     Modifier
                         .widthIn(max = OnboardingContentMaxWidth)
-                        .fillMaxWidth(),
+                        .fillMaxWidth()
+                        .glassAwareCardBorder(MaterialTheme.shapes.extraLarge),
                 shape = MaterialTheme.shapes.extraLarge,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                color = glassAwareCardColor(),
                 contentColor = MaterialTheme.colorScheme.onSurface,
                 tonalElevation = 1.dp,
             ) {
@@ -435,7 +438,7 @@ private fun LoginBenefitRow(
                 .widthIn(max = OnboardingContentMaxWidth)
                 .fillMaxWidth()
                 .heightIn(min = 88.dp),
-        colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        colors = ListItemDefaults.segmentedColors(containerColor = glassAwareCardColor()),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
         leadingContent = {
             Surface(
@@ -774,9 +777,10 @@ private fun CommunitySpotlight(actions: ImmutableList<OnboardingCommunityActionU
             Modifier
                 .widthIn(max = OnboardingContentMaxWidth)
                 .fillMaxWidth()
-                .padding(bottom = 14.dp),
+                .padding(bottom = 14.dp)
+                .glassAwareCardBorder(MaterialTheme.shapes.extraLarge),
         shape = MaterialTheme.shapes.extraLarge,
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        color = glassAwareCardColor(),
         contentColor = MaterialTheme.colorScheme.onSurface,
         tonalElevation = 1.dp,
     ) {
@@ -887,7 +891,7 @@ private fun PermissionRow(
                 .widthIn(max = OnboardingContentMaxWidth)
                 .fillMaxWidth()
                 .heightIn(min = 88.dp),
-        colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        colors = ListItemDefaults.segmentedColors(containerColor = glassAwareCardColor()),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
         leadingContent = {
             PermissionIcon(permission = permission)
@@ -993,7 +997,7 @@ private fun CommunityRow(
                 .widthIn(max = OnboardingContentMaxWidth)
                 .fillMaxWidth()
                 .heightIn(min = 88.dp),
-        colors = ListItemDefaults.segmentedColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+        colors = ListItemDefaults.segmentedColors(containerColor = glassAwareCardColor()),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
         leadingContent = {
             Surface(

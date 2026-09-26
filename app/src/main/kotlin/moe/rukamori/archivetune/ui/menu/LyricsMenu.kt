@@ -12,7 +12,15 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.widget.Toast
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -21,22 +29,21 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -50,6 +57,7 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
@@ -58,39 +66,59 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.State
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.colorControls
+import com.kyant.backdrop.effects.lens
+import com.kyant.backdrop.drawBackdrop
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import me.bush.translator.Language
+import me.bush.translator.Translator
 import moe.rukamori.archivetune.R
+import moe.rukamori.archivetune.ai.AiLyricsDocumentParser
+import moe.rukamori.archivetune.ai.AiLyricsSegment
 import moe.rukamori.archivetune.constants.AiApiKeyKey
 import moe.rukamori.archivetune.constants.AiApiValidationStatus
 import moe.rukamori.archivetune.constants.AiApiValidationStatusKey
@@ -99,12 +127,13 @@ import moe.rukamori.archivetune.constants.AiProvider
 import moe.rukamori.archivetune.constants.AiProviderKey
 import moe.rukamori.archivetune.constants.TranslatorTargetLangKey
 import moe.rukamori.archivetune.db.entities.LyricsEntity
+import moe.rukamori.archivetune.lyrics.AiLyricsRomanization
 import moe.rukamori.archivetune.models.MediaMetadata
 import moe.rukamori.archivetune.ui.component.DefaultDialog
 import moe.rukamori.archivetune.ui.component.MenuSurfaceSection
 import moe.rukamori.archivetune.ui.component.NewAction
 import moe.rukamori.archivetune.ui.component.NewActionGrid
-import moe.rukamori.archivetune.ui.component.NewMenuItem
+import moe.rukamori.archivetune.ui.component.PlatformBackdrop
 import moe.rukamori.archivetune.ui.component.TextFieldDialog
 import moe.rukamori.archivetune.utils.TranslatorLang
 import moe.rukamori.archivetune.utils.TranslatorLanguages
@@ -113,10 +142,12 @@ import moe.rukamori.archivetune.utils.rememberPreference
 import moe.rukamori.archivetune.viewmodels.LyricsMenuViewModel
 import moe.rukamori.archivetune.viewmodels.LyricsSearchResultUiModel
 import moe.rukamori.archivetune.viewmodels.LyricsSearchScreenState
-import moe.rukamori.archivetune.viewmodels.LyricsTranslationError
-import moe.rukamori.archivetune.viewmodels.LyricsTranslationScreenState
 import java.util.Locale
+import java.util.UUID
 import kotlin.math.roundToInt
+import moe.rukamori.archivetune.ui.component.KeepStatusBarHiddenInDialog
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 private enum class LyricsTranslationSource {
     AI_TRANSLATION,
@@ -130,13 +161,12 @@ fun LyricsMenu(
     mediaMetadataProvider: () -> MediaMetadata,
     lyricsSyncOffset: Int,
     onLyricsSyncOffsetChange: (Int) -> Unit,
-    showPlayerControlsState: State<Boolean>,
-    onShowPlayerControlsChange: (Boolean) -> Unit,
     onDismiss: () -> Unit,
     viewModel: LyricsMenuViewModel = hiltViewModel(),
+
+    transparentSurface: Boolean = false,
 ) {
     val context = LocalContext.current
-    val showPlayerControls by showPlayerControlsState
 
     var showEditDialog by rememberSaveable {
         mutableStateOf(false)
@@ -145,6 +175,7 @@ fun LyricsMenu(
     var showTranslateDialog by rememberSaveable { mutableStateOf(false) }
     var showLyricsSyncOffsetDialog by rememberSaveable { mutableStateOf(false) }
     val isRefetching by viewModel.isRefetching.collectAsStateWithLifecycle()
+    val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(viewModel) {
         viewModel.refetchCompletionEvents.collect {
@@ -195,8 +226,8 @@ fun LyricsMenu(
 
     val isNetworkAvailable by viewModel.isNetworkAvailable.collectAsStateWithLifecycle()
     val lyricsSearchState by viewModel.lyricsSearchState.collectAsStateWithLifecycle()
-    val lyricsTranslationState by viewModel.lyricsTranslationState.collectAsStateWithLifecycle()
     val isAiTranslating by viewModel.isAiTranslating.collectAsStateWithLifecycle()
+    val translationUndo by viewModel.translationUndo.collectAsStateWithLifecycle()
     val (aiProvider) = rememberEnumPreference(AiProviderKey, AiProvider.NONE)
     val (aiApiKey) = rememberPreference(AiApiKeyKey, "")
     val (aiCustomEndpoint) = rememberPreference(AiCustomEndpointKey, "")
@@ -206,6 +237,7 @@ fun LyricsMenu(
     val isTranslateEnabled =
         currentLyrics.isNotBlank() &&
             currentLyrics != LyricsEntity.LYRICS_NOT_FOUND
+    val canUndoTranslation = translationUndo?.mediaId == mediaMetadataProvider().id
     val isAiProviderConfigured = aiProvider != AiProvider.NONE
     val isAiTranslationEnabled =
         currentLyrics.isNotBlank() &&
@@ -215,8 +247,17 @@ fun LyricsMenu(
             (aiProvider != AiProvider.CUSTOM || aiCustomEndpoint.isNotBlank()) &&
             aiValidationStatus != AiApiValidationStatus.FAILED
 
-    val isStandardTranslating = lyricsTranslationState is LyricsTranslationScreenState.Loading
+    var translationJob by remember { mutableStateOf<Job?>(null) }
+    var isStandardTranslating by remember { mutableStateOf(false) }
     var isDialogAiTranslationRunning by rememberSaveable { mutableStateOf(false) }
+
+    val aiRomanizationSettings = AiLyricsRomanization.rememberSettings()
+    val isAiRomanizing by AiLyricsRomanization.running.collectAsStateWithLifecycle()
+    val isAiRomanizationEnabled =
+        aiRomanizationSettings.active &&
+            currentLyrics.isNotBlank() &&
+            currentLyrics != LyricsEntity.LYRICS_NOT_FOUND &&
+            !isAiRomanizing
 
     LaunchedEffect(Unit) {
         viewModel.aiTranslationEvents.collect { message ->
@@ -224,27 +265,13 @@ fun LyricsMenu(
         }
     }
 
-    LaunchedEffect(lyricsTranslationState) {
-        when (val state = lyricsTranslationState) {
-            LyricsTranslationScreenState.Success -> {
-                showTranslateDialog = false
-                viewModel.clearLyricsTranslationResult()
+    LaunchedEffect(Unit) {
+        AiLyricsRomanization.requestOutcomes.collect { status ->
+            if (status == AiLyricsRomanization.RequestStatus.EMPTY_RESULT) {
+                Toast
+                    .makeText(context, context.getString(R.string.ai_romanize_empty_result), Toast.LENGTH_LONG)
+                    .show()
             }
-
-            is LyricsTranslationScreenState.Error -> {
-                val message =
-                    when (val error = state.error) {
-                        LyricsTranslationError.Failed -> context.getString(R.string.translation_failed)
-                        is LyricsTranslationError.UnsupportedLanguage ->
-                            context.getString(R.string.unsupported_language, error.languageName)
-                    }
-                Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
-                viewModel.clearLyricsTranslationResult()
-            }
-
-            LyricsTranslationScreenState.Empty,
-            LyricsTranslationScreenState.Loading,
-            -> Unit
         }
     }
 
@@ -322,6 +349,7 @@ fun LyricsMenu(
                     mediaMetadata = searchMediaMetadata,
                     lyrics = result.lyrics,
                     source = LyricsEntity.Source.USER_SELECTION,
+                    providerName = result.providerName,
                 )
             },
             onDismiss = {
@@ -394,7 +422,7 @@ fun LyricsMenu(
         }
     }
 
-    Spacer(modifier = Modifier.height(12.dp))
+    Spacer(modifier = Modifier.height(4.dp))
 
     val configuration = LocalConfiguration.current
     val isPortrait = configuration.orientation == Configuration.ORIENTATION_PORTRAIT
@@ -611,7 +639,9 @@ fun LyricsMenu(
                     ) {
                         TextButton(
                             onClick = {
-                                viewModel.cancelLyricsTranslation()
+                                translationJob?.cancel()
+                                translationJob = null
+                                isStandardTranslating = false
                                 if (isAiTranslating) {
                                     viewModel.cancelAiTranslation()
                                 }
@@ -642,12 +672,53 @@ fun LyricsMenu(
                                     }
 
                                     LyricsTranslationSource.TRANSLATION -> {
-                                        viewModel.translateLyrics(
-                                            mediaMetadata = mediaMetadataProvider(),
-                                            lyrics = inputText,
-                                            targetLanguage = languageCode,
-                                            targetLanguageName = languageName,
-                                        )
+                                        isStandardTranslating = true
+                                        translationJob =
+                                            coroutineScope.launch {
+                                                try {
+                                                    val lang =
+                                                        try {
+                                                            Language(languageCode)
+                                                        } catch (e: Exception) {
+                                                            try {
+                                                                Language(languageName)
+                                                            } catch (_: Exception) {
+                                                                null
+                                                            }
+                                                        }
+
+                                                    if (lang == null) {
+                                                        Toast
+                                                            .makeText(
+                                                                context,
+                                                                context.getString(R.string.unsupported_language, languageName),
+                                                                Toast.LENGTH_SHORT,
+                                                            ).show()
+                                                        return@launch
+                                                    }
+
+                                                    val translatedLyrics = translateLyricsWithTranslator(inputText, lang)
+                                                    viewModel.updateLyrics(
+                                                        mediaMetadata = mediaMetadataProvider(),
+                                                        lyrics = translatedLyrics,
+                                                        source = LyricsEntity.Source.AI_TRANSLATION,
+                                                    )
+                                                    showTranslateDialog = false
+                                                } catch (e: CancellationException) {
+                                                    throw e
+                                                } catch (e: Exception) {
+                                                    Toast
+                                                        .makeText(
+                                                            context,
+                                                            context.getString(R.string.translation_failed) + ": " +
+                                                                (e.localizedMessage ?: e.toString()),
+                                                            Toast.LENGTH_SHORT,
+                                                        ).show()
+                                                } finally {
+                                                    isStandardTranslating = false
+                                                    translationJob = null
+                                                }
+                                            }
                                     }
                                 }
                             },
@@ -672,100 +743,140 @@ fun LyricsMenu(
                 start = 0.dp,
                 top = 0.dp,
                 end = 0.dp,
-                bottom = 8.dp + WindowInsets.systemBars.asPaddingValues().calculateBottomPadding(),
+                bottom = 12.dp,
             ),
     ) {
         item {
-            MenuSurfaceSection(modifier = Modifier.padding(vertical = 6.dp)) {
-                NewActionGrid(
-                    actions =
-                        listOf(
-                            NewAction(
-                                icon = {
-                                    Icon(
-                                        painter = painterResource(R.drawable.edit),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(28.dp),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                },
-                                text = stringResource(R.string.edit),
-                                onClick = { showEditDialog = true },
-                            ),
-                            NewAction(
-                                icon = {
-                                    Icon(
-                                        painter = painterResource(R.drawable.cached),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(28.dp),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                },
-                                text = stringResource(R.string.refetch),
-                                onClick = {
-                                    viewModel.refetchLyrics(mediaMetadataProvider())
-                                },
-                            ),
-                            NewAction(
-                                icon = {
-                                    Icon(
-                                        painter = painterResource(R.drawable.translate),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(28.dp),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                },
-                                text = stringResource(R.string.translate),
-                                onClick = { showTranslateDialog = true },
-                                enabled = isTranslateEnabled,
-                            ),
-                            NewAction(
-                                icon = {
-                                    Icon(
-                                        painter = painterResource(R.drawable.speed),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(28.dp),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                },
-                                text = stringResource(R.string.lyrics_sync_offset),
-                                onClick = { showLyricsSyncOffsetDialog = true },
-                            ),
-                            NewAction(
-                                icon = {
-                                    Icon(
-                                        painter = painterResource(R.drawable.search),
-                                        contentDescription = null,
-                                        modifier = Modifier.size(28.dp),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                },
-                                text = stringResource(R.string.search),
-                                onClick = { showSearchDialog = true },
-                            ),
-                        ),
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+
+            val lyricsText = lyricsProvider()?.lyrics.orEmpty()
+            val menuItems: List<AppleMusicLyricsMenuItem> =
+                listOf(
+                    AppleMusicLyricsMenuItem(
+                        label = stringResource(R.string.edit),
+                        iconRes = R.drawable.edit,
+                        isDestructive = false,
+                        enabled = true,
+                        onClick = { showEditDialog = true },
+                    ),
+                    AppleMusicLyricsMenuItem(
+                        label = stringResource(R.string.refetch),
+                        iconRes = R.drawable.cached,
+                        isDestructive = false,
+                        enabled = true,
+                        onClick = {
+                            viewModel.refetchLyrics(mediaMetadataProvider())
+                        },
+                    ),
+                    AppleMusicLyricsMenuItem(
+                        label = stringResource(R.string.translate),
+                        iconRes = R.drawable.translate,
+                        isDestructive = false,
+                        enabled = isTranslateEnabled,
+                        onClick = { showTranslateDialog = true },
+                    ),
+                    AppleMusicLyricsMenuItem(
+                        label = stringResource(R.string.lyrics_sync_offset),
+                        iconRes = R.drawable.speed,
+                        isDestructive = false,
+                        enabled = true,
+                        onClick = { showLyricsSyncOffsetDialog = true },
+                    ),
+                    AppleMusicLyricsMenuItem(
+                        label = stringResource(R.string.ai_romanize_now),
+                        iconRes = R.drawable.language,
+                        isDestructive = false,
+                        enabled = isAiRomanizationEnabled,
+                        onClick = {
+
+                            val status = AiLyricsRomanization.request(
+                                sessionKey =
+                                    AiLyricsRomanization.sessionKey(
+                                        mediaId = mediaMetadataProvider().id,
+                                        lyrics = lyricsText,
+                                    ),
+                                lines = AiLyricsRomanization.linesOf(lyricsText, mediaMetadataProvider().duration),
+                                settings = aiRomanizationSettings,
+
+                                force = true,
+                            )
+                            val toastResId = when (status) {
+                                AiLyricsRomanization.RequestStatus.STARTED -> R.string.ai_romanize_started
+                                AiLyricsRomanization.RequestStatus.ALREADY_CACHED -> R.string.ai_romanize_already_cached
+                                AiLyricsRomanization.RequestStatus.IN_FLIGHT -> R.string.ai_romanize_in_flight
+                                AiLyricsRomanization.RequestStatus.SETTINGS_DISABLED -> R.string.ai_romanize_settings_disabled
+                                AiLyricsRomanization.RequestStatus.NO_LYRICS -> R.string.ai_romanize_no_lyrics
+                                AiLyricsRomanization.RequestStatus.EXCLUDED_LANGUAGE -> R.string.ai_romanize_excluded_language
+                                AiLyricsRomanization.RequestStatus.NO_ROMANIZABLE_SCRIPT -> R.string.ai_romanize_no_romanizable_script
+                                AiLyricsRomanization.RequestStatus.EMPTY_RESULT -> R.string.ai_romanize_empty_result
+                            }
+                            Toast
+                                .makeText(context, context.getString(toastResId), Toast.LENGTH_SHORT)
+                                .show()
+                        },
+                    ),
+                    AppleMusicLyricsMenuItem(
+                        label = stringResource(R.string.undo_translation),
+                        iconRes = R.drawable.restore,
+
+                        isDestructive = true,
+                        enabled = canUndoTranslation,
+                        onClick = { viewModel.undoTranslation(mediaMetadataProvider().id) },
+                    ),
+
+                    AppleMusicLyricsMenuItem(
+                        label = stringResource(R.string.search),
+                        iconRes = R.drawable.search,
+                        isDestructive = false,
+                        enabled = true,
+                        onClick = { showSearchDialog = true },
+                    ),
                 )
-                NewMenuItem(
-                    headlineContent = {
-                        Text(stringResource(R.string.show_lyrics_player_controls))
-                    },
-                    trailingContent = {
-                        Switch(
-                            checked = showPlayerControls,
-                            onCheckedChange = onShowPlayerControlsChange,
-                        )
-                    },
-                    onClick = {
-                        onShowPlayerControlsChange(!showPlayerControls)
-                    },
-                    modifier =
-                        Modifier.padding(
-                            start = 8.dp,
-                            end = 8.dp,
-                            bottom = 8.dp,
-                        ),
-                )
+
+            if (transparentSurface) {
+                Surface(
+                    shape = MaterialTheme.shapes.extraLarge,
+                    color = Color.Transparent,
+                    modifier = Modifier.padding(vertical = 4.dp).fillMaxWidth(),
+                ) {
+                    Column(modifier = Modifier.padding(vertical = 0.dp)) {
+                        menuItems.forEachIndexed { index, item ->
+                            AppleMusicLyricsMenuRow(
+                                item = item,
+                            )
+
+                            if (index < menuItems.size - 1) {
+                                HorizontalDivider(
+                                    color = Color.White.copy(alpha = 0.12f),
+                                    thickness = 0.5.dp,
+                                    modifier = Modifier.padding(horizontal = 16.dp),
+                                )
+                            }
+                        }
+
+                    }
+                }
+            } else {
+                MenuSurfaceSection {
+                    NewActionGrid(
+                        actions =
+                            menuItems.map { item ->
+                                NewAction(
+                                    icon = {
+                                        Icon(
+                                            painter = painterResource(item.iconRes),
+                                            contentDescription = null,
+                                            modifier = Modifier.size(28.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    },
+                                    text = item.label,
+                                    onClick = item.onClick,
+                                    enabled = item.enabled,
+                                )
+                            },
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+                    )
+                }
             }
         }
     }
@@ -785,6 +896,7 @@ private fun LyricsSearchResultDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
+        KeepStatusBarHiddenInDialog()
         BoxWithConstraints(
             modifier =
                 Modifier
@@ -1311,6 +1423,67 @@ private fun LyricsSearchMessageContent(
 
 private fun formatLyricsSyncOffset(offsetMs: Int): String = if (offsetMs > 0) "+$offsetMs ms" else "$offsetMs ms"
 
+private suspend fun translateLyricsWithTranslator(
+    lyrics: String,
+    language: Language,
+): String =
+    withContext(Dispatchers.IO) {
+        val document = AiLyricsDocumentParser.parse(lyrics)
+        if (document.segments.isEmpty()) return@withContext lyrics
+
+        val translator = Translator()
+        val translatedSegments = mutableMapOf<Int, String>()
+        document.segments.chunkedForTranslator().forEach { batch ->
+            val separator = uniqueTranslationSeparator(batch)
+            val joined = batch.joinToString(separator = separator) { segment -> segment.text }
+            val translatedJoined = translator.translateBlocking(joined, language).translatedText
+            val parts = translatedJoined.split(separator)
+
+            if (parts.size == batch.size) {
+                batch.forEachIndexed { index, segment ->
+                    translatedSegments[segment.id] = parts[index]
+                }
+            } else {
+                batch.forEach { segment ->
+                    translatedSegments[segment.id] = translator.translateBlocking(segment.text, language).translatedText
+                }
+            }
+        }
+
+        document.rebuild(translatedSegments)
+    }
+
+private fun List<AiLyricsSegment>.chunkedForTranslator(): List<List<AiLyricsSegment>> {
+    val chunks = ArrayList<List<AiLyricsSegment>>()
+    val current = ArrayList<AiLyricsSegment>()
+    var currentChars = 0
+
+    forEach { segment ->
+        val nextSize = currentChars + segment.text.length
+        if (current.isNotEmpty() && (current.size >= MaxTranslatorItemsPerBatch || nextSize > MaxTranslatorCharsPerBatch)) {
+            chunks.add(current.toList())
+            current.clear()
+            currentChars = 0
+        }
+        current.add(segment)
+        currentChars += segment.text.length
+    }
+
+    if (current.isNotEmpty()) chunks.add(current.toList())
+    return chunks
+}
+
+private fun uniqueTranslationSeparator(segments: List<AiLyricsSegment>): String {
+    var separator = "<<<SEP-${UUID.randomUUID()}>>>"
+    while (segments.any { segment -> segment.text.contains(separator) }) {
+        separator = "<<<SEP-${UUID.randomUUID()}>>>"
+    }
+    return separator
+}
+
+private const val MaxTranslatorItemsPerBatch = 50
+private const val MaxTranslatorCharsPerBatch = 4000
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SearchLyricsInputDialog(
@@ -1525,3 +1698,267 @@ private fun LyricsSearchInputActions(
         }
     }
 }
+
+@Immutable
+private data class AppleMusicLyricsMenuItem(
+    val label: String,
+    val iconRes: Int,
+    val isDestructive: Boolean = false,
+    val enabled: Boolean = true,
+    val onClick: () -> Unit,
+)
+
+@Composable
+private fun AppleMusicLyricsMenuRow(
+    item: AppleMusicLyricsMenuItem,
+    modifier: Modifier = Modifier,
+) {
+
+    val headlineColor =
+        if (item.isDestructive) {
+            Color(0xFFFF453A)
+        } else {
+            Color.White
+        }
+    val iconColor =
+        if (item.isDestructive) {
+            Color(0xFFFF453A)
+        } else {
+            Color.White
+        }
+    val headlineWeight = if (item.isDestructive) FontWeight.SemiBold else FontWeight.Medium
+
+    val interactionSource = remember { MutableInteractionSource() }
+    Row(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .heightIn(min = 44.dp)
+                .clickable(
+                    interactionSource = interactionSource,
+                    indication = ripple(),
+                    enabled = item.enabled,
+                    onClick = item.onClick,
+                )
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = item.label,
+            color = headlineColor,
+            fontWeight = headlineWeight,
+            fontSize = 16.sp,
+        )
+        Icon(
+            painter = painterResource(item.iconRes),
+            contentDescription = null,
+            modifier = Modifier.size(20.dp),
+            tint = iconColor,
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+fun AnchoredLyricsOverflowMenu(
+    iconBoundsInRoot: Rect,
+    lyricsProvider: () -> LyricsEntity?,
+    mediaMetadataProvider: () -> MediaMetadata,
+    lyricsSyncOffset: Int,
+    onLyricsSyncOffsetChange: (Int) -> Unit,
+    onDismiss: () -> Unit,
+    viewModel: LyricsMenuViewModel = hiltViewModel(),
+    backdrop: PlatformBackdrop? = null,
+
+    scrimColor: Color = Color.Black.copy(alpha = 0.45f),
+) {
+    var dismissed by remember { mutableStateOf(false) }
+
+    val density = LocalDensity.current
+    val scope = rememberCoroutineScope()
+
+    val scaleAnim = remember { Animatable(0.3f) }
+    val alphaAnim = remember { Animatable(0f) }
+
+    LaunchedEffect(Unit) {
+
+        if (dismissed) return@LaunchedEffect
+
+        val scaleJob = scope.launch {
+            scaleAnim.animateTo(
+                targetValue = 1f,
+                animationSpec =
+                    spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMediumLow,
+                    ),
+            )
+        }
+        val alphaJob = scope.launch {
+            alphaAnim.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(180),
+            )
+        }
+        scaleJob.join()
+        alphaJob.join()
+    }
+
+    LaunchedEffect(dismissed) {
+        if (!dismissed) return@LaunchedEffect
+        val scaleJob = scope.launch {
+            scaleAnim.animateTo(
+                targetValue = 0.3f,
+                animationSpec =
+                    spring(
+                        dampingRatio = Spring.DampingRatioNoBouncy,
+                        stiffness = Spring.StiffnessMedium,
+                    ),
+            )
+        }
+        val alphaJob = scope.launch {
+            alphaAnim.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(180),
+            )
+        }
+        scaleJob.join()
+        alphaJob.join()
+
+        onDismiss()
+    }
+
+    val scale = scaleAnim.value
+    val alpha = alphaAnim.value
+
+    var anchorSpaceHeightPx by remember { mutableIntStateOf(0) }
+    var popupHeightPx by remember { mutableIntStateOf(0) }
+    val verticalOffsetPx = with(density) { 4.dp.toPx() }.toInt()
+
+    fun opensAboveAnchor(): Boolean {
+        val neededHeightPx =
+            if (popupHeightPx > 0) popupHeightPx else with(density) { 360.dp.toPx() }.toInt()
+        return anchorSpaceHeightPx > 0 &&
+            iconBoundsInRoot.bottom + verticalOffsetPx + neededHeightPx > anchorSpaceHeightPx
+    }
+
+    val frostedBlurModifier = remember(backdrop) {
+        if (backdrop != null) {
+            Modifier.drawBackdrop(
+                backdrop = backdrop,
+                effects = {
+                    // SpatialFlow-style vivid bleed + liquid edge refraction;
+                    // 32dp -> 20dp blur pays for the lens pass (net GPU savings).
+                    colorControls(saturation = 1.7f)
+
+                    blur(20f.dp.toPx())
+
+                    lens(
+                        refractionHeight = 16f.dp.toPx(),
+                        refractionAmount = 40f.dp.toPx(),
+                    )
+                },
+                onDrawBackdrop = { drawBackdrop ->
+                    drawBackdrop()
+                },
+                shape = { RoundedCornerShape(16.dp) },
+            )
+        } else {
+            null
+        }
+    }
+
+    Box(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .onSizeChanged { anchorSpaceHeightPx = it.height }
+                .background(scrimColor.copy(alpha = scrimColor.alpha * alpha))
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null,
+                ) {
+                    if (!dismissed) dismissed = true
+                },
+    ) {
+
+        Box(
+            modifier =
+                Modifier
+                    .offset {
+                        val popupWidthPx = with(density) { 220.dp.toPx() }.toInt()
+                        val horizontalMarginPx = with(density) { 16.dp.toPx() }.toInt()
+                        val iconRight = iconBoundsInRoot.right.toInt()
+                        val iconBottom = iconBoundsInRoot.bottom.toInt()
+                        val x =
+                            (iconRight - popupWidthPx)
+                                .coerceAtLeast(horizontalMarginPx)
+                        val y =
+                            if (opensAboveAnchor()) {
+
+                                (iconBoundsInRoot.top - verticalOffsetPx -
+                                    (if (popupHeightPx > 0) popupHeightPx else with(density) { 360.dp.toPx() }.toInt()))
+                                    .coerceAtLeast(0f)
+                                    .toInt()
+                            } else {
+                                iconBottom + verticalOffsetPx
+                            }
+                        IntOffset(x = x, y = y)
+                    }
+                    .widthIn(max = 220.dp)
+                    .heightIn(max = 520.dp)
+                    .onSizeChanged { popupHeightPx = it.height }
+                    .graphicsLayer {
+                        this.alpha = alpha
+                        this.scaleX = scale
+                        this.scaleY = scale
+
+                        val popupWidthPx = 220.dp.toPx()
+                        val horizontalMarginPx = 16.dp.toPx()
+                        val popupLeftPx =
+                            (iconBoundsInRoot.right - popupWidthPx)
+                                .coerceAtLeast(horizontalMarginPx)
+                        val iconCenterX = (iconBoundsInRoot.left + iconBoundsInRoot.right) / 2f
+                        val pivotX =
+                            ((iconCenterX - popupLeftPx) / popupWidthPx.coerceAtLeast(1f))
+                                .coerceIn(0.02f, 0.98f)
+                        this.transformOrigin =
+                            TransformOrigin(pivotX, if (opensAboveAnchor()) 1f else 0f)
+
+                        this.shadowElevation = 16.dp.toPx()
+                        this.shape = RoundedCornerShape(16.dp)
+                        this.clip = false
+                    }
+
+                    .then(
+                        frostedBlurModifier
+                            ?: Modifier.background(Color.Black.copy(alpha = 0.65f * alpha)),
+                    )
+
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .clip(RoundedCornerShape(16.dp))
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                    ) {
+
+                    },
+        ) {
+
+            LyricsMenu(
+                lyricsProvider = lyricsProvider,
+                mediaMetadataProvider = mediaMetadataProvider,
+                lyricsSyncOffset = lyricsSyncOffset,
+                onLyricsSyncOffsetChange = onLyricsSyncOffsetChange,
+                onDismiss = {
+
+                    if (!dismissed) dismissed = true
+                },
+                viewModel = viewModel,
+                transparentSurface = true,
+            )
+        }
+    }
+}
+

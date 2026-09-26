@@ -29,7 +29,7 @@ sealed class Screens(
     object Search : Screens(
         titleId = R.string.search,
         iconIdInactive = R.drawable.search,
-        iconIdActive = R.drawable.search,
+        iconIdActive = R.drawable.solar_magnifer_bold,
         route = "search",
     )
 

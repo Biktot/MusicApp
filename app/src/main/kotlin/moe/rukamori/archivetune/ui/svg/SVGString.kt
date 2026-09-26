@@ -14,16 +14,19 @@ import moe.rukamori.archivetune.ui.theme.palette.TonalPalettes
 
 object SVGString
 
+private val SVG_FILL_ATTR_REGEX = Regex("fill=\"(.+?)\"")
+private val SVG_SCHEME_TONE_SPLIT_REGEX = Regex("(?<=\\d)(?=\\D)|(?=\\d)(?<=\\D)")
+
 fun String.parseDynamicColor(
     tonalPalettes: TonalPalettes,
     isDarkTheme: Boolean,
 ): String =
-    replace("fill=\"(.+?)\"".toRegex()) {
+    replace(SVG_FILL_ATTR_REGEX) {
         val value = it.groupValues[1]
         Log.i("RLog", "parseDynamicColor: $value")
         if (value.startsWith("#")) return@replace it.value
         try {
-            val (scheme, tone) = value.split("(?<=\\d)(?=\\D)|(?=\\d)(?<=\\D)".toRegex())
+            val (scheme, tone) = value.split(SVG_SCHEME_TONE_SPLIT_REGEX)
             val argb =
                 when (scheme) {
                     "p" -> tonalPalettes.primary[tone.toInt().autoToDarkTone(isDarkTheme)]

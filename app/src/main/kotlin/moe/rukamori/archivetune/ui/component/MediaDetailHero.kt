@@ -42,12 +42,14 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layoutId
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
@@ -58,7 +60,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
+import moe.rukamori.archivetune.utils.rememberPreference
+import moe.rukamori.archivetune.constants.AppleMusicExperienceKey
 import moe.rukamori.archivetune.R
 import moe.rukamori.archivetune.constants.AppBarHeight
 import moe.rukamori.archivetune.ui.utils.YtimgResizePolicy
@@ -82,8 +87,32 @@ public fun MediaDetailHero(
     metadata: String? = null,
     description: String? = null,
     additionalPrimaryActions: (@Composable RowScope.(Color) -> Unit)? = null,
-    isToggleAddEnabled: Boolean = true,
+    canvasPrimaryUrl: String? = null,
+    canvasFallbackUrl: String? = null,
+    canvasIsPlaying: Boolean = false,
+
+    canvasVisible: Boolean = true,
+    useBlurredPlayButton: Boolean = false,
 ) {
+    if (rememberAppleMusicExperience()) {
+        AppleMusicPlaylistHero(
+            sectionLabel = null,
+            title = title,
+            subtitle = metadata ?: subtitle?.text,
+            onPlay = onPlay,
+            onShuffle = onShuffle,
+            onPrimaryTrailing = onToggleAdd,
+            primaryTrailingIcon = if (isAdded) R.drawable.done else R.drawable.add,
+            primaryTrailingDescription = if (isAdded) removeContentDescription else addContentDescription,
+            additionalActions =
+                additionalPrimaryActions?.let { actions ->
+                    { Row(verticalAlignment = Alignment.CenterVertically) { actions(heroActionAccent()) } }
+                },
+            modifier = modifier.padding(top = systemBarsTopPadding),
+        )
+        return
+    }
+
     val surfaceColor = MaterialTheme.colorScheme.surface
     val menuState = LocalMenuState.current
     val heroContentColor =
@@ -98,7 +127,8 @@ public fun MediaDetailHero(
             modifier
                 .fillMaxWidth()
                 .heightIn(min = MediaDetailHeroMinHeight)
-                .background(surfaceColor),
+                .background(surfaceColor)
+                .clipToBounds(),
     ) {
         if (thumbnailUrl != null) {
             AsyncImage(
@@ -130,6 +160,17 @@ public fun MediaDetailHero(
             }
         }
 
+        if (!canvasPrimaryUrl.isNullOrBlank() || !canvasFallbackUrl.isNullOrBlank()) {
+            moe.rukamori.archivetune.ui.player.CanvasArtworkPlayer(
+                primaryUrl = canvasPrimaryUrl,
+                fallbackUrl = canvasFallbackUrl,
+                isPlaying = canvasIsPlaying,
+                visible = canvasVisible,
+                resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM,
+                modifier = Modifier.matchParentSize(),
+            )
+        }
+
         Box(
             modifier =
                 Modifier
@@ -159,9 +200,10 @@ public fun MediaDetailHero(
                     ),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+
             Text(
                 text = title,
-                style = MaterialTheme.typography.headlineLarge,
+                style = MaterialTheme.typography.headlineLarge.copy(lineHeight = 36.sp),
                 color = heroContentColor,
                 fontWeight = FontWeight.Bold,
                 textAlign = TextAlign.Center,
@@ -172,19 +214,19 @@ public fun MediaDetailHero(
             subtitle?.let {
                 Text(
                     text = it,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleMedium.copy(lineHeight = 22.sp),
                     color = heroContentColor.copy(alpha = 0.82f),
                     textAlign = TextAlign.Center,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(top = 6.dp),
+                    modifier = Modifier.padding(top = 8.dp),
                 )
             }
 
             description?.takeIf(String::isNotBlank)?.let {
                 Text(
                     text = it,
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyMedium.copy(lineHeight = 20.sp),
                     color = heroContentColor.copy(alpha = 0.76f),
                     textAlign = TextAlign.Center,
                     maxLines = 3,
@@ -205,7 +247,7 @@ public fun MediaDetailHero(
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .padding(top = 16.dp),
+                            .padding(top = 12.dp),
                 )
             }
 
@@ -240,8 +282,9 @@ public fun MediaDetailHero(
                         }
                     },
                 additionalActions = additionalPrimaryActions,
-                isToggleAddEnabled = isToggleAddEnabled,
                 modifier = Modifier.padding(top = 12.dp),
+                thumbnailUrl = thumbnailUrl,
+                useBlurredPlayButton = useBlurredPlayButton,
             )
         }
     }
@@ -297,7 +340,9 @@ public fun MediaDetailPrimaryActions(
     onToggleAdd: (() -> Unit)?,
     modifier: Modifier = Modifier,
     additionalActions: (@Composable RowScope.(Color) -> Unit)? = null,
-    isToggleAddEnabled: Boolean = true,
+
+    thumbnailUrl: String? = null,
+    useBlurredPlayButton: Boolean = false,
 ) {
     val secondaryButtonColors =
         IconButtonDefaults.filledTonalIconButtonColors(
@@ -308,6 +353,7 @@ public fun MediaDetailPrimaryActions(
         )
     val actionScrollState = rememberScrollState()
     val actionScrollMaxValue = actionScrollState.maxValue
+    val density = LocalDensity.current
 
     LaunchedEffect(actionScrollMaxValue) {
         if (
@@ -315,7 +361,14 @@ public fun MediaDetailPrimaryActions(
             actionScrollMaxValue != Int.MAX_VALUE &&
             actionScrollState.value == 0
         ) {
-            actionScrollState.scrollTo(actionScrollMaxValue / 2)
+            val overflowDp = with(density) { actionScrollMaxValue.toDp() }
+            val target =
+                if (overflowDp < 80.dp) {
+                    actionScrollMaxValue
+                } else {
+                    actionScrollMaxValue / 2
+                }
+            actionScrollState.scrollTo(target)
         }
     }
 
@@ -332,7 +385,8 @@ public fun MediaDetailPrimaryActions(
                 Modifier
                     .fillMaxWidth()
                     .fadingEdge(horizontal = MediaDetailActionEdgeFade)
-                    .horizontalScroll(actionScrollState),
+                    .horizontalScroll(actionScrollState)
+                    .padding(horizontal = MediaDetailActionHorizontalPadding),
         ) {
             MediaDetailBalancedActionLayout(
                 actionRowScope = this,
@@ -357,16 +411,23 @@ public fun MediaDetailPrimaryActions(
                 }
 
                 onPlay?.let { play ->
+
                     val playButtonHeight = ButtonDefaults.MediumContainerHeight
+                    val playShape = RoundedCornerShape(percent = 50)
+                    val playPadding =
+                        ButtonDefaults.contentPaddingFor(playButtonHeight, hasStartIcon = true)
+                    val playIconSize = ButtonDefaults.iconSizeFor(playButtonHeight)
+                    val playIconSpacing = ButtonDefaults.iconSpacingFor(playButtonHeight)
+                    val playTextStyle = ButtonDefaults.textStyleFor(playButtonHeight)
                     Button(
                         onClick = play,
-                        shape = RoundedCornerShape(percent = 50),
+                        shape = playShape,
                         colors =
                             ButtonDefaults.buttonColors(
                                 containerColor = contentColor,
                                 contentColor = contrastingColor,
                             ),
-                        contentPadding = ButtonDefaults.contentPaddingFor(playButtonHeight, hasStartIcon = true),
+                        contentPadding = playPadding,
                         modifier =
                             Modifier
                                 .layoutId(MediaDetailActionLayoutId.Play)
@@ -375,12 +436,12 @@ public fun MediaDetailPrimaryActions(
                         Icon(
                             painter = painterResource(R.drawable.play),
                             contentDescription = null,
-                            modifier = Modifier.size(ButtonDefaults.iconSizeFor(playButtonHeight)),
+                            modifier = Modifier.size(playIconSize),
                         )
-                        Spacer(modifier = Modifier.width(ButtonDefaults.iconSpacingFor(playButtonHeight)))
+                        Spacer(modifier = Modifier.width(playIconSpacing))
                         Text(
                             text = stringResource(R.string.play),
-                            style = ButtonDefaults.textStyleFor(playButtonHeight),
+                            style = playTextStyle,
                             fontWeight = FontWeight.Bold,
                         )
                     }
@@ -389,7 +450,6 @@ public fun MediaDetailPrimaryActions(
                 onToggleAdd?.let { toggleAdd ->
                     FilledTonalIconButton(
                         onClick = toggleAdd,
-                        enabled = isToggleAddEnabled,
                         shape = CircleShape,
                         colors = secondaryButtonColors,
                         modifier =
@@ -599,7 +659,10 @@ private val MediaDetailHeroMinHeight = 560.dp
 private val MediaDetailHorizontalPadding = 24.dp
 private val MediaDetailContentMaxWidth = 720.dp
 private val MediaDetailActionSpacing = 12.dp
-private val MediaDetailActionEdgeFade = 20.dp
+
+private val MediaDetailActionEdgeFade = 8.dp
+
+private val MediaDetailActionHorizontalPadding = 12.dp
 private val MediaDetailSecondaryActionSize = 52.dp
 private val MediaDetailActionSize = 48.dp
 
@@ -608,3 +671,12 @@ private enum class MediaDetailActionLayoutId {
     Play,
     ToggleAdd,
 }
+
+@Composable
+fun rememberAppleMusicExperience(): Boolean {
+    val (enabled) = rememberPreference(AppleMusicExperienceKey, defaultValue = false)
+    return enabled
+}
+
+@Composable
+private fun heroActionAccent(): Color = AppleMusicStyleAccentColor

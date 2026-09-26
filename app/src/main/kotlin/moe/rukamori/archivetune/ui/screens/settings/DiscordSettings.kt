@@ -9,6 +9,7 @@
 
 package moe.rukamori.archivetune.ui.screens.settings
 
+import androidx.compose.foundation.layout.WindowInsets
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
@@ -17,9 +18,10 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -28,7 +30,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -54,6 +55,7 @@ import moe.rukamori.archivetune.discord.DiscordAuthCoordinator
 import moe.rukamori.archivetune.discord.DiscordOAuthRepository
 import moe.rukamori.archivetune.ui.component.EditTextPreference
 import moe.rukamori.archivetune.ui.component.EnumListPreference
+import moe.rukamori.archivetune.ui.component.FrostedHeaderPill
 import moe.rukamori.archivetune.ui.component.IconButton
 import moe.rukamori.archivetune.ui.component.ListPreference
 import moe.rukamori.archivetune.ui.component.PreferenceEntry
@@ -61,7 +63,10 @@ import moe.rukamori.archivetune.ui.component.PreferenceGroup
 import moe.rukamori.archivetune.ui.component.SwitchPreference
 import moe.rukamori.archivetune.ui.theme.PlayerColorExtractor
 import moe.rukamori.archivetune.ui.theme.extractThemeColor
-import moe.rukamori.archivetune.ui.utils.appBarScrollBehavior
+import moe.rukamori.archivetune.ui.screens.ScreenHeaderHaze
+import moe.rukamori.archivetune.ui.screens.rememberScreenHeaderHaze
+import moe.rukamori.archivetune.LocalStableSystemBarsTopPadding
+import dev.chrisbanes.haze.hazeSource
 import moe.rukamori.archivetune.ui.utils.backToMain
 import moe.rukamori.archivetune.utils.ArtworkStorage
 import moe.rukamori.archivetune.utils.discordAlbumMusicUrl
@@ -69,6 +74,9 @@ import moe.rukamori.archivetune.utils.makeTimeString
 import moe.rukamori.archivetune.utils.rememberEnumPreference
 import moe.rukamori.archivetune.utils.rememberPreference
 import timber.log.Timber
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.WindowInsetsSides
+import moe.rukamori.archivetune.ui.component.KeepStatusBarHiddenInDialog
 
 enum class ActivitySource { ARTIST, ALBUM, SONG, APP }
 
@@ -77,15 +85,17 @@ private enum class DiscordAuthorizationUiMode { Idle, Waiting, Success, Failure 
 private val DiscordImageOptions = listOf("thumbnail", "artist", "appicon", "custom")
 private val DiscordSmallImageOptions = listOf("thumbnail", "artist", "appicon", "custom", "dontshow")
 private val DiscordActivityStatusOptions = listOf("online", "dnd", "idle", "streaming")
-
+private val DiscordPlatformOptions = listOf("desktop", "xbox", "samsung", "ios", "android", "embedded", "ps4", "ps5")
 private val DiscordActivityTypeOptions = listOf("PLAYING", "STREAMING", "LISTENING", "WATCHING", "COMPETING")
 private val DiscordLargeTextOptions = listOf("song", "artist", "album", "app", "custom", "dontshow")
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DiscordSettings(navController: NavController) {
+fun DiscordSettings(navController: NavController, scrollTo: String? = null) {
     val playerConnection = LocalPlayerConnection.current ?: return
-    val scrollBehavior = appBarScrollBehavior()
+
+    val headerHaze = rememberScreenHeaderHaze()
+    val systemBarsTopPadding = LocalStableSystemBarsTopPadding.current
     val song by playerConnection.currentSong.collectAsStateWithLifecycle(initialValue = null)
     val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -286,6 +296,12 @@ fun DiscordSettings(navController: NavController) {
             defaultValue = "online",
         )
 
+    val (platformSelection, onPlatformSelectionChange) =
+        rememberPreference(
+            key = DiscordActivityPlatformKey,
+            defaultValue = "android",
+        )
+
     val (nameSource, onNameSourceChange) =
         rememberEnumPreference(
             key = DiscordActivityNameKey,
@@ -369,29 +385,29 @@ fun DiscordSettings(navController: NavController) {
     }
 
     Scaffold(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .nestedScroll(scrollBehavior.nestedScrollConnection),
         containerColor = MaterialTheme.colorScheme.surface,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            LargeFlexibleTopAppBar(
-                title = {
-                    Text(
-                        text = stringResource(R.string.discord_integration),
-                        fontWeight = FontWeight.Bold,
-                    )
-                },
+            TopAppBar(
+                title = {},
                 navigationIcon = {
-                    IconButton(
-                        onClick = navController::navigateUp,
-                        onLongClick = navController::backToMain,
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.arrow_back),
-                            contentDescription = null,
+                    FrostedHeaderPill(plain = true) {
+                        IconButton(
+                            onClick = navController::navigateUp,
+                            onLongClick = navController::backToMain,
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.arrow_back),
+                                contentDescription = null,
+                            )
+                        }
+                        Text(
+                            text = stringResource(R.string.discord_integration),
+                            color = MaterialTheme.colorScheme.onBackground,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            modifier = Modifier.padding(end = 4.dp),
                         )
                     }
                 },
@@ -425,261 +441,297 @@ fun DiscordSettings(navController: NavController) {
                     }
                 },
                 colors =
-                    TopAppBarDefaults.largeTopAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        scrolledContainerColor = Color.Transparent,
                     ),
-                scrollBehavior = scrollBehavior,
             )
         },
     ) { innerPadding ->
-        LazyColumn(
+        val playerAwareBottomPadding =
+            LocalPlayerAwareWindowInsets.current
+                .only(WindowInsetsSides.Bottom)
+                .asPaddingValues()
+                .calculateBottomPadding()
+        val scrollState = rememberScrollState()
+        val positions = rememberPreferencePositions()
+
+        LaunchedEffect(scrollTo) { positions.scrollToKey(scrollTo, scrollState) }
+
+        Box(modifier = Modifier.fillMaxSize()) {
+        Column(
             modifier =
                 Modifier
                     .fillMaxSize()
                     .windowInsetsPadding(
                         LocalPlayerAwareWindowInsets.current.only(
-                            WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom,
+                            WindowInsetsSides.Horizontal,
                         ),
+                    )
+
+                    .then(positions.containerModifier())
+                    .verticalScroll(scrollState)
+                    .hazeSource(headerHaze)
+                    .padding(
+                        top = innerPadding.calculateTopPadding() + 16.dp,
+                        bottom = 32.dp,
                     ),
-            contentPadding =
-                PaddingValues(
-                    top = innerPadding.calculateTopPadding() + 16.dp,
-                    bottom = 32.dp,
-                ),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            item {
-                PreferenceGroup(title = stringResource(R.string.account)) {
-                    item {
-                        DiscordAccountGroupCard(
-                            displayName = accountDisplayName,
-                            username = activeDiscordUsername,
-                            avatarUrl = activeDiscordAvatarUrl.takeIf { it.isNotBlank() },
-                            isLoggedIn = isLoggedIn,
-                            authorizationUiMode = authorizationUiMode,
-                            authorizationMessage = authorizationMessage,
-                            isAccessTokenExpired = isAccessTokenExpired,
-                            discordRpcEnabled = discordRPC,
-                            onDiscordRpcEnabledChange = onDiscordRPCChange,
-                            onReauthorize = launchAuthorization,
-                            onPrimaryAction = {
-                                if (isLoggedIn) {
-                                    showLogoutConfirm = true
-                                } else {
-                                    launchAuthorization()
+            PreferenceGroup(
+                modifier = positions.modifierFor("discord_account"),
+                title = stringResource(R.string.account),
+            ) {
+                item {
+                    DiscordAccountGroupCard(
+                        displayName = accountDisplayName,
+                        username = activeDiscordUsername,
+                        avatarUrl = activeDiscordAvatarUrl.takeIf { it.isNotBlank() },
+                        isLoggedIn = isLoggedIn,
+                        authorizationUiMode = authorizationUiMode,
+                        authorizationMessage = authorizationMessage,
+                        isAccessTokenExpired = isAccessTokenExpired,
+                        discordRpcEnabled = discordRPC,
+                        onDiscordRpcEnabledChange = onDiscordRPCChange,
+                        onReauthorize = launchAuthorization,
+                        onPrimaryAction = {
+                            if (isLoggedIn) {
+                                showLogoutConfirm = true
+                            } else {
+                                launchAuthorization()
+                            }
+                        },
+                        primaryActionEnabled = authorizationUiMode != DiscordAuthorizationUiMode.Waiting,
+                    )
+                }
+            }
+
+            PreferenceGroup(
+                modifier = positions.modifierFor("discord_options"),
+                title = stringResource(R.string.options),
+            ) {
+                item {
+                    PreferenceEntry(
+                        title = { Text(stringResource(R.string.refresh)) },
+                        description = stringResource(R.string.description_refresh),
+                        icon = { Icon(painterResource(R.drawable.update), null) },
+                        isEnabled = discordRPC && isLoggedIn,
+                        trailingContent = {
+                            if (isRefreshing) {
+                                CircularWavyProgressIndicator(
+                                    modifier = Modifier.size(28.dp),
+                                )
+                            } else {
+                                OutlinedButton(
+                                    enabled = discordRPC && isLoggedIn,
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            isRefreshing = true
+                                            val success =
+                                                playerConnection.service.refreshDiscordNow()
+                                            isRefreshing = false
+                                            snackbarHostState.showSnackbar(
+                                                message =
+                                                    if (success) {
+                                                        context.getString(R.string.discord_refresh_success)
+                                                    } else {
+                                                        context.getString(R.string.discord_refresh_failed)
+                                                    },
+                                            )
+                                        }
+                                    },
+                                    shapes = ButtonDefaults.shapes(),
+                                ) {
+                                    Text(stringResource(R.string.refresh))
                                 }
-                            },
-                            primaryActionEnabled = authorizationUiMode != DiscordAuthorizationUiMode.Waiting,
-                        )
-                    }
+                            }
+                        },
+                    )
                 }
             }
 
-            item {
-                PreferenceGroup(title = stringResource(R.string.options)) {
-                    item {
-                        PreferenceEntry(
-                            title = { Text(stringResource(R.string.refresh)) },
-                            description = stringResource(R.string.description_refresh),
-                            icon = { Icon(painterResource(R.drawable.update), null) },
-                            isEnabled = discordRPC && isLoggedIn,
-                            trailingContent = {
-                                if (isRefreshing) {
-                                    CircularWavyProgressIndicator(
-                                        modifier = Modifier.size(28.dp),
-                                    )
-                                } else {
-                                    OutlinedButton(
-                                        enabled = discordRPC && isLoggedIn,
-                                        onClick = {
-                                            coroutineScope.launch {
-                                                isRefreshing = true
-                                                val success =
-                                                    playerConnection.service.refreshDiscordNow()
-                                                isRefreshing = false
-                                                snackbarHostState.showSnackbar(
-                                                    message =
-                                                        if (success) {
-                                                            context.getString(R.string.discord_refresh_success)
-                                                        } else {
-                                                            context.getString(R.string.discord_refresh_failed)
-                                                        },
-                                                )
-                                            }
-                                        },
-                                        shapes = ButtonDefaults.shapes(),
-                                    ) {
-                                        Text(stringResource(R.string.refresh))
-                                    }
-                                }
-                            },
-                        )
-                    }
+            PreferenceGroup(
+                modifier = positions.modifierFor("discord_connection"),
+                title = stringResource(R.string.discord_connection_settings),
+            ) {
+                item {
+                    ListPreference(
+                        modifier = positions.modifierFor("activity_status"),
+                        title = { Text(stringResource(R.string.activity_status)) },
+                        icon = { Icon(painterResource(R.drawable.status), null) },
+                        selectedValue = activityStatusSelection,
+                        values = DiscordActivityStatusOptions,
+                        valueText = { discordPresenceStatusLabel(it) },
+                        onValueSelected = onActivityStatusSelectionChange,
+                    )
+                }
+
+                item {
+                    ListPreference(
+                        modifier = positions.modifierFor("platform_status"),
+                        title = { Text(stringResource(R.string.platform_status)) },
+                        icon = { Icon(painterResource(R.drawable.desktop_windows), null) },
+                        selectedValue = platformSelection,
+                        values = DiscordPlatformOptions,
+                        valueText = { discordPlatformLabel(it) },
+                        onValueSelected = onPlatformSelectionChange,
+                    )
                 }
             }
 
-            item {
-                PreferenceGroup(title = stringResource(R.string.discord_connection_settings)) {
-                    item {
-                        ListPreference(
-                            title = { Text(stringResource(R.string.activity_status)) },
-                            icon = { Icon(painterResource(R.drawable.status), null) },
-                            selectedValue = activityStatusSelection,
-                            values = DiscordActivityStatusOptions,
-                            valueText = { discordPresenceStatusLabel(it) },
-                            onValueSelected = onActivityStatusSelectionChange,
-                        )
-                    }
+            PreferenceGroup(
+                modifier = positions.modifierFor("discord_activity"),
+                title = stringResource(R.string.discord_activity_content),
+            ) {
+                item {
+                    EnumListPreference(
+                        modifier = positions.modifierFor("discord_activity_name"),
+                        title = { Text(stringResource(R.string.discord_activity_name)) },
+                        selectedValue = nameSource,
+                        onValueSelected = onNameSourceChange,
+                        valueText = { activitySourceLabel(it) },
+                        icon = { Icon(painterResource(R.drawable.text_fields), null) },
+                    )
+                }
+                item {
+                    EnumListPreference(
+                        modifier = positions.modifierFor("discord_activity_details"),
+                        title = { Text(stringResource(R.string.discord_activity_details)) },
+                        selectedValue = detailsSource,
+                        onValueSelected = onDetailsSourceChange,
+                        valueText = { activitySourceLabel(it) },
+                        icon = { Icon(painterResource(R.drawable.text_fields), null) },
+                    )
+                }
+                item {
+                    EnumListPreference(
+                        modifier = positions.modifierFor("discord_activity_state"),
+                        title = { Text(stringResource(R.string.discord_activity_state)) },
+                        selectedValue = stateSource,
+                        onValueSelected = onStateSourceChange,
+                        valueText = { activitySourceLabel(it) },
+                        icon = { Icon(painterResource(R.drawable.text_fields), null) },
+                    )
+                }
 
+                item {
+                    SwitchPreference(
+                        modifier = positions.modifierFor("discord_show_when_paused"),
+                        title = { Text(stringResource(R.string.discord_show_when_paused)) },
+                        description = stringResource(R.string.discord_show_when_paused_desc),
+                        icon = { Icon(painterResource(R.drawable.ic_pause_white), null) },
+                        checked = showWhenPaused,
+                        onCheckedChange = { showWhenPaused = it },
+                    )
+                }
+
+                item {
+                    ListPreference(
+                        modifier = positions.modifierFor("discord_activity_type"),
+                        title = { Text(stringResource(R.string.discord_activity_type)) },
+                        icon = { Icon(painterResource(R.drawable.discord), null) },
+                        selectedValue = activityType,
+                        values = DiscordActivityTypeOptions,
+                        valueText = { discordActivityTypeLabel(it) },
+                        onValueSelected = onActivityTypeChange,
+                    )
                 }
             }
 
-            item {
-                PreferenceGroup(title = stringResource(R.string.discord_activity_content)) {
-                    item {
-                        EnumListPreference(
-                            title = { Text(stringResource(R.string.discord_activity_name)) },
-                            selectedValue = nameSource,
-                            onValueSelected = onNameSourceChange,
-                            valueText = { activitySourceLabel(it) },
-                            icon = { Icon(painterResource(R.drawable.text_fields), null) },
-                        )
-                    }
-                    item {
-                        EnumListPreference(
-                            title = { Text(stringResource(R.string.discord_activity_details)) },
-                            selectedValue = detailsSource,
-                            onValueSelected = onDetailsSourceChange,
-                            valueText = { activitySourceLabel(it) },
-                            icon = { Icon(painterResource(R.drawable.text_fields), null) },
-                        )
-                    }
-                    item {
-                        EnumListPreference(
-                            title = { Text(stringResource(R.string.discord_activity_state)) },
-                            selectedValue = stateSource,
-                            onValueSelected = onStateSourceChange,
-                            valueText = { activitySourceLabel(it) },
-                            icon = { Icon(painterResource(R.drawable.text_fields), null) },
-                        )
-                    }
+            PreferenceGroup(
+                modifier = positions.modifierFor("discord_images"),
+                title = stringResource(R.string.discord_image_options),
+            ) {
+                item {
+                    ListPreference(
+                        modifier = positions.modifierFor("large_image"),
+                        title = { Text(stringResource(R.string.large_image)) },
+                        icon = { Icon(painterResource(R.drawable.image), null) },
+                        selectedValue = largeImageType,
+                        values = DiscordImageOptions,
+                        valueText = { discordImageTypeLabel(it) },
+                        onValueSelected = onLargeImageTypeChange,
+                    )
+                }
 
-                    item {
-                        SwitchPreference(
-                            title = { Text(stringResource(R.string.discord_show_when_paused)) },
-                            description = stringResource(R.string.discord_show_when_paused_desc),
-                            icon = { Icon(painterResource(R.drawable.ic_pause_white), null) },
-                            checked = showWhenPaused,
-                            onCheckedChange = { showWhenPaused = it },
-                        )
-                    }
+                item(visible = largeImageType == "custom") {
+                    EditTextPreference(
+                        title = { Text(stringResource(R.string.large_image_custom_url)) },
+                        icon = { Icon(painterResource(R.drawable.link), null) },
+                        value = largeImageCustomUrl,
+                        onValueChange = onLargeImageCustomUrlChange,
+                        isInputValid = { true },
+                    )
+                }
 
-                    item {
-                        ListPreference(
-                            title = { Text(stringResource(R.string.discord_activity_type)) },
-                            icon = { Icon(painterResource(R.drawable.discord), null) },
-                            selectedValue = activityType,
-                            values = DiscordActivityTypeOptions,
-                            valueText = { discordActivityTypeLabel(it) },
-                            onValueSelected = onActivityTypeChange,
-                        )
-                    }
+                item {
+                    ListPreference(
+                        modifier = positions.modifierFor("large_text"),
+                        title = { Text(stringResource(R.string.large_text)) },
+                        icon = { Icon(painterResource(R.drawable.text_fields), null) },
+                        selectedValue = largeTextSource,
+                        values = DiscordLargeTextOptions,
+                        valueText = { discordLargeTextSourceLabel(it) },
+                        onValueSelected = onLargeTextSourceChange,
+                    )
+                }
+
+                item(visible = largeTextSource == "custom") {
+                    EditTextPreference(
+                        title = { Text(stringResource(R.string.custom_large_text)) },
+                        icon = { Icon(painterResource(R.drawable.text_fields), null) },
+                        value = largeTextCustom,
+                        onValueChange = onLargeTextCustomChange,
+                        isInputValid = { true },
+                    )
+                }
+
+                item {
+                    ListPreference(
+                        modifier = positions.modifierFor("small_image"),
+                        title = { Text(stringResource(R.string.small_image)) },
+                        icon = { Icon(painterResource(R.drawable.image), null) },
+                        selectedValue = smallImageType,
+                        values = DiscordSmallImageOptions,
+                        valueText = { discordImageTypeLabel(it) },
+                        onValueSelected = onSmallImageTypeChange,
+                    )
+                }
+
+                item(visible = smallImageType == "custom") {
+                    EditTextPreference(
+                        title = { Text(stringResource(R.string.small_image_custom_url)) },
+                        icon = { Icon(painterResource(R.drawable.link), null) },
+                        value = smallImageCustomUrl,
+                        onValueChange = onSmallImageCustomUrlChange,
+                        isInputValid = { true },
+                    )
                 }
             }
 
-            item {
-                PreferenceGroup(title = stringResource(R.string.discord_image_options)) {
-                    item {
-                        ListPreference(
-                            title = { Text(stringResource(R.string.large_image)) },
-                            icon = { Icon(painterResource(R.drawable.image), null) },
-                            selectedValue = largeImageType,
-                            values = DiscordImageOptions,
-                            valueText = { discordImageTypeLabel(it) },
-                            onValueSelected = onLargeImageTypeChange,
-                        )
-                    }
-
-                    item(visible = largeImageType == "custom") {
-                        EditTextPreference(
-                            title = { Text(stringResource(R.string.large_image_custom_url)) },
-                            icon = { Icon(painterResource(R.drawable.link), null) },
-                            value = largeImageCustomUrl,
-                            onValueChange = onLargeImageCustomUrlChange,
-                            isInputValid = { true },
-                        )
-                    }
-
-                    item {
-                        ListPreference(
-                            title = { Text(stringResource(R.string.large_text)) },
-                            icon = { Icon(painterResource(R.drawable.text_fields), null) },
-                            selectedValue = largeTextSource,
-                            values = DiscordLargeTextOptions,
-                            valueText = { discordLargeTextSourceLabel(it) },
-                            onValueSelected = onLargeTextSourceChange,
-                        )
-                    }
-
-                    item(visible = largeTextSource == "custom") {
-                        EditTextPreference(
-                            title = { Text(stringResource(R.string.custom_large_text)) },
-                            icon = { Icon(painterResource(R.drawable.text_fields), null) },
-                            value = largeTextCustom,
-                            onValueChange = onLargeTextCustomChange,
-                            isInputValid = { true },
-                        )
-                    }
-
-                    item {
-                        ListPreference(
-                            title = { Text(stringResource(R.string.small_image)) },
-                            icon = { Icon(painterResource(R.drawable.image), null) },
-                            selectedValue = smallImageType,
-                            values = DiscordSmallImageOptions,
-                            valueText = { discordImageTypeLabel(it) },
-                            onValueSelected = onSmallImageTypeChange,
-                        )
-                    }
-
-                    item(visible = smallImageType == "custom") {
-                        EditTextPreference(
-                            title = { Text(stringResource(R.string.small_image_custom_url)) },
-                            icon = { Icon(painterResource(R.drawable.link), null) },
-                            value = smallImageCustomUrl,
-                            onValueChange = onSmallImageCustomUrlChange,
-                            isInputValid = { true },
-                        )
-                    }
-                }
-            }
-
-            item {
-                RichPresence(
-                    song = song,
-                    currentPlaybackTimeMillis = playerConnection.player.currentPosition,
-                    nameSource = nameSource,
-                    detailsSource = detailsSource,
-                    stateSource = stateSource,
-                    activityType = activityType,
-                    largeImageType = largeImageType,
-                    largeImageCustomUrl = largeImageCustomUrl,
-                    largeTextSource = largeTextSource,
-                    largeTextCustom = largeTextCustom,
-                    smallImageType = smallImageType,
-                    smallImageCustomUrl = smallImageCustomUrl,
-                    button1Label = button1Label,
-                    button1Enabled = button1Enabled,
-                    button1UrlSource = button1UrlSource,
-                    button1CustomUrl = button1CustomUrl,
-                    button2Label = button2Label,
-                    button2Enabled = button2Enabled,
-                    button2UrlSource = button2UrlSource,
-                    button2CustomUrl = button2CustomUrl,
-                    isPlaying = playerConnection.player.isPlaying,
-                )
-            }
+            RichPresence(
+                song = song,
+                currentPlaybackTimeMillis = playerConnection.player.currentPosition,
+                nameSource = nameSource,
+                detailsSource = detailsSource,
+                stateSource = stateSource,
+                activityType = activityType,
+                largeImageType = largeImageType,
+                largeImageCustomUrl = largeImageCustomUrl,
+                largeTextSource = largeTextSource,
+                largeTextCustom = largeTextCustom,
+                smallImageType = smallImageType,
+                smallImageCustomUrl = smallImageCustomUrl,
+                button1Label = button1Label,
+                button1Enabled = button1Enabled,
+                button1UrlSource = button1UrlSource,
+                button1CustomUrl = button1CustomUrl,
+                button2Label = button2Label,
+                button2Enabled = button2Enabled,
+                button2UrlSource = button2UrlSource,
+                button2CustomUrl = button2CustomUrl,
+                isPlaying = playerConnection.player.isPlaying,
+            )
         }
 
         if (showLogoutConfirm) {
@@ -688,6 +740,7 @@ fun DiscordSettings(navController: NavController) {
                 title = { Text(stringResource(R.string.logout_confirm_title)) },
                 text = { Text(stringResource(R.string.logout_confirm_message)) },
                 confirmButton = {
+                    KeepStatusBarHiddenInDialog()
                     TextButton(
                         onClick = {
                             coroutineScope.launch {
@@ -716,6 +769,12 @@ fun DiscordSettings(navController: NavController) {
                     }
                 },
             )
+        }
+
+        ScreenHeaderHaze(
+            hazeState = headerHaze,
+            systemBarsTopPadding = systemBarsTopPadding,
+        )
         }
     }
 }
@@ -1102,6 +1161,20 @@ private fun discordPresenceStatusLabel(value: String): String =
     }
 
 @Composable
+private fun discordPlatformLabel(value: String): String =
+    when (value) {
+        "desktop" -> stringResource(R.string.discord_platform_desktop)
+        "xbox" -> stringResource(R.string.discord_platform_xbox)
+        "samsung" -> stringResource(R.string.discord_platform_samsung)
+        "ios" -> stringResource(R.string.discord_platform_ios)
+        "android" -> stringResource(R.string.discord_platform_android)
+        "embedded" -> stringResource(R.string.discord_platform_embedded)
+        "ps4" -> stringResource(R.string.discord_platform_ps4)
+        "ps5" -> stringResource(R.string.discord_platform_ps5)
+        else -> stringResource(R.string.discord_platform_android)
+    }
+
+@Composable
 private fun discordActivityTypeLabel(value: String): String =
     when (value) {
         "PLAYING" -> stringResource(R.string.discord_activity_type_playing_label)
@@ -1158,6 +1231,7 @@ fun EditablePreference(
         AlertDialog(
             onDismissRequest = { showDialog = false },
             confirmButton = {
+                KeepStatusBarHiddenInDialog()
                 TextButton(onClick = {
                     onValueChange(if (text.isBlank()) "" else text)
                     showDialog = false

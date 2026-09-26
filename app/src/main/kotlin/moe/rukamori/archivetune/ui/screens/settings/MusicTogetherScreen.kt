@@ -73,7 +73,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -89,6 +88,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -96,6 +96,7 @@ import androidx.window.core.layout.WindowSizeClass
 import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
 import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.R
+import moe.rukamori.archivetune.ui.component.FrostedHeaderPill
 import moe.rukamori.archivetune.ui.component.TextFieldDialog
 import moe.rukamori.archivetune.ui.utils.appBarScrollBehavior
 import moe.rukamori.archivetune.ui.utils.backToMain
@@ -114,6 +115,13 @@ import moe.rukamori.archivetune.viewmodels.MusicTogetherStatusUiModel
 import moe.rukamori.archivetune.viewmodels.MusicTogetherUiModel
 import moe.rukamori.archivetune.viewmodels.MusicTogetherViewModel
 import moe.rukamori.archivetune.ui.component.IconButton as AtIconButton
+import androidx.compose.foundation.layout.asPaddingValues
+import moe.rukamori.archivetune.ui.component.KeepStatusBarHiddenInDialog
+import moe.rukamori.archivetune.LocalStableSystemBarsTopPadding
+import moe.rukamori.archivetune.ui.screens.rememberGlassScreenHeader
+import moe.rukamori.archivetune.ui.screens.GlassScreenHeaderOverlay
+import moe.rukamori.archivetune.ui.screens.glassHeaderSource
+import androidx.compose.runtime.getValue
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -163,36 +171,50 @@ fun MusicTogetherScreen(
         MusicTogetherDialogs(model = model, viewModel = viewModel)
     }
 
+    val glassHeader = rememberGlassScreenHeader()
+    val systemBarsTopPadding = LocalStableSystemBarsTopPadding.current
+
     Scaffold(
         topBar = {
+            if (!glassHeader.liquidGlassActive) {
             LargeFlexibleTopAppBar(
-                title = { Text(stringResource(R.string.music_together)) },
+                title = {},
                 navigationIcon = {
-                    AtIconButton(
-                        onClick = navController::navigateUp,
-                        onLongClick = navController::backToMain,
-                        modifier =
-                            Modifier
-                                .padding(horizontal = 4.dp)
-                                .size(40.dp),
-                        colors =
-                            IconButtonDefaults.iconButtonColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            ),
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.arrow_back),
-                            contentDescription = null,
+                    FrostedHeaderPill(plain = true) {
+                        AtIconButton(
+                            onClick = navController::navigateUp,
+                            onLongClick = navController::backToMain,
+                            modifier =
+                                Modifier
+                                    .padding(horizontal = 4.dp)
+                                    .size(40.dp),
+                            colors =
+                                IconButtonDefaults.iconButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                ),
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.arrow_back),
+                                contentDescription = null,
+                            )
+                        }
+                        Text(
+                            text = stringResource(R.string.music_together),
+                            color = MaterialTheme.colorScheme.onBackground,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            modifier = Modifier.padding(end = 4.dp),
                         )
                     }
                 },
                 colors =
                     TopAppBarDefaults.largeTopAppBarColors(
                         containerColor = Color.Transparent,
-                        scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                        scrolledContainerColor = Color.Transparent,
                     ),
                 scrollBehavior = scrollBehavior,
             )
+            }
         },
         contentWindowInsets = WindowInsets.safeDrawing,
         containerColor = MaterialTheme.colorScheme.surface,
@@ -201,17 +223,43 @@ fun MusicTogetherScreen(
                 .fillMaxSize()
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
     ) { innerPadding ->
+        val playerAwareBottomPadding =
+            LocalPlayerAwareWindowInsets.current
+                .only(WindowInsetsSides.Bottom)
+                .asPaddingValues()
+                .calculateBottomPadding()
+
+        val contentTopPadding =
+            if (glassHeader.liquidGlassActive) {
+                0.dp
+            } else {
+                innerPadding.calculateTopPadding()
+            }
+        val glassTopContentPadding =
+            if (glassHeader.liquidGlassActive) {
+                systemBarsTopPadding + 72.dp
+
+            } else {
+                0.dp
+            }
+
         Box(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .padding(innerPadding)
+                    .padding(top = contentTopPadding, bottom = innerPadding.calculateBottomPadding())
                     .windowInsetsPadding(
                         LocalPlayerAwareWindowInsets.current.only(
-                            WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom,
+                            WindowInsetsSides.Horizontal,
                         ),
                     ),
         ) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .glassHeaderSource(glassHeader),
+            ) {
             when (val state = screenState) {
                 MusicTogetherScreenState.Loading -> {
                     LoadingContent()
@@ -230,8 +278,19 @@ fun MusicTogetherScreen(
                         model = state.model,
                         useSupportingPane = useSupportingPane,
                         viewModel = viewModel,
+                        topContentPadding = glassTopContentPadding,
                     )
                 }
+            }
+            }
+
+            if (glassHeader.liquidGlassActive) {
+                GlassScreenHeaderOverlay(
+                    header = glassHeader,
+                    title = stringResource(R.string.music_together),
+                    onBack = navController::navigateUp,
+                    onBackLongClick = navController::backToMain,
+                )
             }
         }
     }
@@ -242,7 +301,13 @@ private fun MusicTogetherContent(
     model: MusicTogetherUiModel,
     useSupportingPane: Boolean,
     viewModel: MusicTogetherViewModel,
+    topContentPadding: Dp = 0.dp,
 ) {
+    val playerAwareBottomPadding =
+        LocalPlayerAwareWindowInsets.current
+            .only(WindowInsetsSides.Bottom)
+            .asPaddingValues()
+            .calculateBottomPadding()
     if (useSupportingPane) {
         Row(
             modifier =
@@ -257,7 +322,7 @@ private fun MusicTogetherContent(
                         .weight(1.25f)
                         .fillMaxHeight()
                         .widthIn(max = 720.dp),
-                contentPadding = PaddingValues(bottom = MusicTogetherSpacing.lg),
+                contentPadding = PaddingValues(top = topContentPadding, bottom = playerAwareBottomPadding + MusicTogetherSpacing.lg),
                 verticalArrangement = Arrangement.spacedBy(MusicTogetherSpacing.sm),
             ) {
                 item(contentType = "status") {
@@ -321,9 +386,9 @@ private fun MusicTogetherContent(
             contentPadding =
                 PaddingValues(
                     start = MusicTogetherSpacing.sm,
-                    top = MusicTogetherSpacing.xs,
+                    top = topContentPadding + MusicTogetherSpacing.xs,
                     end = MusicTogetherSpacing.sm,
-                    bottom = SettingsDimensions.ScreenBottomPadding,
+                    bottom = playerAwareBottomPadding + SettingsDimensions.ScreenBottomPadding,
                 ),
             verticalArrangement = Arrangement.spacedBy(MusicTogetherSpacing.sm),
         ) {
@@ -413,11 +478,11 @@ private fun MusicTogetherDialogs(
                 singleLine = false,
                 maxLines = 8,
                 isInputValid = {
-                    if (dialog.onlineMode) {
-                        it.trim().isNotBlank()
-                    } else {
+                    if (dialog.mode == moe.rukamori.archivetune.together.MusicTogetherConnectionMode.LAN) {
                         moe.rukamori.archivetune.together.TogetherLink
                             .decode(it) != null
+                    } else {
+                        it.trim().isNotBlank()
                     }
                 },
                 onDone = viewModel::submitJoinInput,
@@ -692,20 +757,20 @@ private fun HostControlsCard(
     ) {
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
             SegmentedButton(
-                selected = !host.onlineMode,
-                onClick = { viewModel.setHostModeOnline(false) },
+                selected = host.mode == moe.rukamori.archivetune.together.MusicTogetherConnectionMode.LAN,
+                onClick = { viewModel.setHostMode(moe.rukamori.archivetune.together.MusicTogetherConnectionMode.LAN) },
                 shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
                 icon = {},
             ) {
                 Text(text = stringResource(R.string.together_lan))
             }
             SegmentedButton(
-                selected = host.onlineMode,
-                onClick = { viewModel.setHostModeOnline(true) },
+                selected = host.mode == moe.rukamori.archivetune.together.MusicTogetherConnectionMode.PUBLIC,
+                onClick = { viewModel.setHostMode(moe.rukamori.archivetune.together.MusicTogetherConnectionMode.PUBLIC) },
                 shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
                 icon = {},
             ) {
-                Text(text = stringResource(R.string.together_online))
+                Text(text = stringResource(R.string.together_public))
             }
         }
         SettingsRow(
@@ -714,7 +779,7 @@ private fun HostControlsCard(
             subtitle = host.displayName,
             onClick = viewModel::openDisplayNameDialog,
         )
-        if (!host.onlineMode) {
+        if (host.mode == moe.rukamori.archivetune.together.MusicTogetherConnectionMode.LAN) {
             SettingsRow(
                 iconResId = R.drawable.link,
                 titleResId = R.string.together_port,
@@ -779,22 +844,22 @@ private fun JoinControlsCard(
     ) {
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
             SegmentedButton(
-                selected = !join.onlineMode,
+                selected = join.mode == moe.rukamori.archivetune.together.MusicTogetherConnectionMode.LAN,
                 enabled = !join.disabled,
-                onClick = { viewModel.setJoinModeOnline(false) },
+                onClick = { viewModel.setJoinMode(moe.rukamori.archivetune.together.MusicTogetherConnectionMode.LAN) },
                 shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
                 icon = {},
             ) {
                 Text(text = stringResource(R.string.together_join_link))
             }
             SegmentedButton(
-                selected = join.onlineMode,
+                selected = join.mode == moe.rukamori.archivetune.together.MusicTogetherConnectionMode.PUBLIC,
                 enabled = !join.disabled,
-                onClick = { viewModel.setJoinModeOnline(true) },
+                onClick = { viewModel.setJoinMode(moe.rukamori.archivetune.together.MusicTogetherConnectionMode.PUBLIC) },
                 shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
                 icon = {},
             ) {
-                Text(text = stringResource(R.string.together_join_code))
+                Text(text = stringResource(R.string.together_public))
             }
         }
         SettingsRow(
@@ -1407,6 +1472,7 @@ private fun WelcomeDialog(
             }
         },
         confirmButton = {
+            KeepStatusBarHiddenInDialog()
             Button(
                 onClick = onGotIt,
                 shapes = ButtonDefaults.shapes(),
@@ -1473,6 +1539,7 @@ private fun ConfirmParticipantDialog(
             )
         },
         confirmButton = {
+            KeepStatusBarHiddenInDialog()
             Button(
                 onClick = onConfirm,
                 colors =

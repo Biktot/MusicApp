@@ -15,7 +15,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -45,13 +47,13 @@ import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -70,16 +72,18 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.google.common.collect.ImmutableList
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import moe.rukamori.archivetune.LocalDownloadUtil
 import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
+import moe.rukamori.archivetune.LocalStableSystemBarsTopPadding
 import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.R
-import moe.rukamori.archivetune.constants.AppBarHeight
 import moe.rukamori.archivetune.extensions.togglePlayPause
 import moe.rukamori.archivetune.models.MediaMetadata
 import moe.rukamori.archivetune.spotify.SpotifyMapper
 import moe.rukamori.archivetune.spotify.SpotifyDownloadItem
+import moe.rukamori.archivetune.spotify.SPOTIFY_LIKED_SONGS_ID
 import moe.rukamori.archivetune.spotify.SpotifyPlaybackResolver
 import moe.rukamori.archivetune.spotify.SpotifyPlaylistEvent
 import moe.rukamori.archivetune.spotify.SpotifyPlaylistQueue
@@ -89,10 +93,20 @@ import moe.rukamori.archivetune.ui.component.DraggableScrollbar
 import moe.rukamori.archivetune.ui.component.EmptyPlaceholder
 import moe.rukamori.archivetune.ui.component.ExpressivePullToRefreshBox
 import moe.rukamori.archivetune.ui.component.IconButton
+import moe.rukamori.archivetune.ui.component.LiquidGlassActionPill
+import moe.rukamori.archivetune.ui.component.GlassPillTitleText
 import moe.rukamori.archivetune.ui.component.MediaDetailAction
 import moe.rukamori.archivetune.ui.component.MediaDetailHero
-import moe.rukamori.archivetune.ui.component.MediaDetailIconAction
 import moe.rukamori.archivetune.ui.component.SpotifyTrackListItem
+import moe.rukamori.archivetune.ui.component.layerBackdrop
+import moe.rukamori.archivetune.ui.component.liquidGlassContentColor
+import android.os.Build
+import moe.rukamori.archivetune.constants.LiquidGlassEnabledKey
+import moe.rukamori.archivetune.constants.AlbumCanvasEnabledKey
+import moe.rukamori.archivetune.utils.rememberPreference
+import moe.rukamori.archivetune.ui.player.LocalPlayerLyricsFullScreen
+import moe.rukamori.archivetune.ui.component.rememberBackdrop
+import moe.rukamori.archivetune.ui.component.rememberLayerBackdropSettled
 import moe.rukamori.archivetune.ui.utils.HeaderDownloadItem
 import moe.rukamori.archivetune.ui.utils.HeaderDownloadProgressIndicator
 import moe.rukamori.archivetune.ui.utils.HeaderDownloadState
@@ -101,8 +115,15 @@ import moe.rukamori.archivetune.ui.utils.headerDownloadState
 import moe.rukamori.archivetune.ui.utils.resize
 import moe.rukamori.archivetune.ui.utils.sendAddMissingDownloads
 import moe.rukamori.archivetune.ui.utils.sendRemoveDownloads
+import moe.rukamori.archivetune.ui.utils.sendPauseRunningDownloads
+import moe.rukamori.archivetune.ui.utils.sendResumePausedDownloads
 import moe.rukamori.archivetune.utils.makeTimeString
+import dev.chrisbanes.haze.hazeSource
+import moe.rukamori.archivetune.ui.screens.ScreenHeaderHaze
+import moe.rukamori.archivetune.ui.screens.rememberScreenHeaderHaze
 import kotlin.math.abs
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -112,6 +133,8 @@ fun SpotifyPlaylistScreen(
     viewModel: SpotifyPlaylistViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val canvasArtwork by viewModel.canvasArtwork.collectAsStateWithLifecycle()
+    val pageCanvasEnabled by rememberPreference(key = AlbumCanvasEnabledKey, defaultValue = true)
     val downloadUtil = LocalDownloadUtil.current
     val downloads by downloadUtil.downloads.collectAsStateWithLifecycle()
     val playerConnection = LocalPlayerConnection.current
@@ -123,10 +146,13 @@ fun SpotifyPlaylistScreen(
     val playlist = state.playlist
     val tracks = state.tracks
     val lazyListState = rememberLazyListState()
-    val systemBarsTopPadding = WindowInsets.systemBars.asPaddingValues().calculateTopPadding()
+    val systemBarsTopPadding = LocalStableSystemBarsTopPadding.current
     val snackbarHostState = remember { SnackbarHostState() }
     val downloadActionFailedMessage = stringResource(R.string.download_action_failed)
     val latestDownloads by rememberUpdatedState(downloads)
+
+    var savedScrollIndex by remember { mutableIntStateOf(0) }
+    var savedScrollOffset by remember { mutableIntStateOf(0) }
 
     val downloadState =
         remember(state.downloadItems, downloads) {
@@ -170,7 +196,7 @@ fun SpotifyPlaylistScreen(
         removeCompleted: Boolean = true,
     ) {
         val songIds = items.map(SpotifyDownloadItem::id)
-        when (headerDownloadState(songIds, latestDownloads)) {
+        when (val headerState = headerDownloadState(songIds, latestDownloads)) {
             HeaderDownloadState.Completed -> {
                 if (removeCompleted) {
                     sendRemoveDownloads(
@@ -181,11 +207,20 @@ fun SpotifyPlaylistScreen(
             }
 
             is HeaderDownloadState.Partial -> {
-                sendRemoveDownloads(
-                    context = navController.context,
-                    songIds = songIds,
-                    downloads = latestDownloads,
-                )
+
+                if (headerState.paused) {
+                    sendResumePausedDownloads(
+                        context = navController.context,
+                        songIds = songIds,
+                        downloads = latestDownloads,
+                    )
+                } else {
+                    sendPauseRunningDownloads(
+                        context = navController.context,
+                        songIds = songIds,
+                        downloads = latestDownloads,
+                    )
+                }
             }
 
             HeaderDownloadState.None -> {
@@ -199,6 +234,7 @@ fun SpotifyPlaylistScreen(
                             )
                         },
                     downloads = latestDownloads,
+                    downloadUtil = downloadUtil,
                 )
                 navController.navigate("auto_playlist/downloaded?tab=progress")
             }
@@ -255,12 +291,21 @@ fun SpotifyPlaylistScreen(
         } else {
             TopAppBarDefaults.topAppBarColors(
                 containerColor = MaterialTheme.colorScheme.surface,
-                scrolledContainerColor = MaterialTheme.colorScheme.surface,
+                scrolledContainerColor = Color.Transparent,
             )
         }
 
     LaunchedEffect(isSearching) {
-        if (isSearching) focusRequester.requestFocus()
+        if (isSearching) {
+
+            savedScrollIndex = lazyListState.firstVisibleItemIndex
+            savedScrollOffset = lazyListState.firstVisibleItemScrollOffset
+            focusRequester.requestFocus()
+        } else {
+
+            withFrameNanos {}
+            lazyListState.scrollToItem(savedScrollIndex, savedScrollOffset)
+        }
     }
 
     LaunchedEffect(viewModel) {
@@ -284,6 +329,25 @@ fun SpotifyPlaylistScreen(
         BackHandler {
             isSearching = false
             query = TextFieldValue()
+        }
+    } else {
+
+        BackHandler {
+            try {
+                if (!navController.popBackStack()) {
+                    navController.navigate("library") {
+                        launchSingleTop = true
+                    }
+                }
+            } catch (_: Exception) {
+                try {
+                    if (!navController.navigateUp()) {
+                        navController.navigate("library") { launchSingleTop = true }
+                    }
+                } catch (_: Exception) {
+
+                }
+            }
         }
     }
 
@@ -317,8 +381,20 @@ fun SpotifyPlaylistScreen(
         }
     }
 
+    val liquidGlassEnabled by rememberPreference(LiquidGlassEnabledKey, defaultValue = false)
+    val liquidGlassHeaderActive =
+        liquidGlassEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val lyricsFullScreen = LocalPlayerLyricsFullScreen.current
+
+    val screenSettled = rememberLayerBackdropSettled()
+
+    val layerBackdropActive = liquidGlassHeaderActive && !lyricsFullScreen && screenSettled
+
+    val artworkBackdrop = rememberBackdrop(surfaceColor)
+
+    val headerHaze = rememberScreenHeaderHaze()
     ExpressivePullToRefreshBox(
-        isRefreshing = state.isLoading,
+        isRefreshing = state.isLoading && tracks.isNotEmpty(),
         onRefresh = viewModel::reload,
         modifier =
             Modifier
@@ -329,6 +405,8 @@ fun SpotifyPlaylistScreen(
             state = lazyListState,
             contentPadding =
                 PaddingValues(
+
+                    top = if (isSearching) systemBarsTopPadding + 64.dp else 0.dp,
                     bottom =
                         LocalPlayerAwareWindowInsets.current
                             .union(WindowInsets.ime)
@@ -338,13 +416,18 @@ fun SpotifyPlaylistScreen(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .padding(
-                        top = if (isSearching) systemBarsTopPadding + AppBarHeight else 0.dp,
-                    ),
+                    .then(
+                        if (layerBackdropActive) {
+                            Modifier.layerBackdrop(artworkBackdrop)
+                        } else {
+                            Modifier
+                        },
+                    )
+                    .hazeSource(headerHaze),
         ) {
-            if (!isSearching) {
-                playlist?.let { currentPlaylist ->
-                    item(key = "header") {
+            playlist?.let { currentPlaylist ->
+                item(key = "header") {
+                    if (!isSearching) {
                         val trackCount = currentPlaylist.tracks?.total ?: tracks.size
                         val metadata =
                             listOfNotNull(
@@ -357,7 +440,12 @@ fun SpotifyPlaylistScreen(
                         MediaDetailHero(
                             title = currentPlaylist.name,
                             thumbnailUrl = thumbnailUrl,
-                            fallbackIcon = R.drawable.queue_music,
+                            fallbackIcon =
+                                if (currentPlaylist.id == SPOTIFY_LIKED_SONGS_ID) {
+                                    R.drawable.favorite
+                                } else {
+                                    R.drawable.queue_music
+                                },
                             systemBarsTopPadding = systemBarsTopPadding,
                             subtitle =
                                 currentPlaylist.owner
@@ -369,6 +457,12 @@ fun SpotifyPlaylistScreen(
                             isAdded = false,
                             addContentDescription = R.string.add_to_library,
                             removeContentDescription = R.string.remove_from_library,
+                            canvasPrimaryUrl =
+                                (canvasArtwork?.animated ?: canvasArtwork?.videoUrl)
+                                    ?.takeIf { pageCanvasEnabled },
+                            canvasFallbackUrl = canvasArtwork?.videoUrl?.takeIf { pageCanvasEnabled },
+                            canvasIsPlaying = true,
+                            canvasVisible = !lyricsFullScreen,
                             onShuffle =
                                 if (tracks.isNotEmpty()) {
                                     { playPlaylist(shuffled = true) }
@@ -433,40 +527,9 @@ fun SpotifyPlaylistScreen(
                                             }
                                         }
                                     }
-
-                                    MediaDetailAction(
-                                        contentDescription = R.string.download,
-                                        contentColor = contentColor,
-                                        onClick = {
-                                            navController.navigate(
-                                                "auto_playlist/downloaded?tab=progress",
-                                            )
-                                        },
-                                    ) {
-                                        val globalProgress = (globalDownloadState as? HeaderDownloadState.Partial)?.progress ?: 0f
-                                        val globalPaused = (globalDownloadState as? HeaderDownloadState.Partial)?.paused ?: false
-                                        HeaderDownloadProgressIndicator(
-                                            progress = globalProgress,
-                                            paused = globalPaused,
-                                            icon = R.drawable.list,
-                                        )
-                                    }
-                                }
-                                MediaDetailIconAction(
-                                    icon = R.drawable.sync,
-                                    contentDescription = R.string.spotify_reload_playlist,
-                                    contentColor = contentColor,
-                                    onClick = viewModel::reload,
-                                )
-                                if (tracks.isNotEmpty()) {
-                                    MediaDetailIconAction(
-                                        icon = R.drawable.mix,
-                                        contentDescription = R.string.start_mix,
-                                        contentColor = contentColor,
-                                        onClick = { playPlaylist(shuffled = true) },
-                                    )
                                 }
                             },
+                            useBlurredPlayButton = true,
                         )
                     }
                 }
@@ -562,8 +625,73 @@ fun SpotifyPlaylistScreen(
             headerItems = if (!isSearching && playlist != null) 1 else 0,
         )
 
+        ScreenHeaderHaze(
+            hazeState = headerHaze,
+            systemBarsTopPadding = systemBarsTopPadding,
+        )
+
+        if (layerBackdropActive && !isSearching && playlist != null) {
+
+            LiquidGlassActionPill(
+                backdrop = artworkBackdrop,
+                interactive = true,
+                modifier =
+                    Modifier
+                        .align(Alignment.TopStart)
+                        .padding(start = 12.dp, top = systemBarsTopPadding + 12.dp),
+            ) {
+                IconButton(
+                    onClick = {
+                        if (!navController.navigateUp()) {
+
+                            navController.navigate("library") {
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    },
+                    onLongClick = { navController.backToMain() },
+                    modifier = Modifier.size(48.dp),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.arrow_back),
+                        contentDescription = stringResource(R.string.library),
+                        tint = liquidGlassContentColor(),
+                    )
+                }
+                GlassPillTitleText(
+                    text = playlist?.name ?: stringResource(R.string.spotify),
+                )
+            }
+            LiquidGlassActionPill(
+                backdrop = artworkBackdrop,
+                modifier =
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(end = 12.dp, top = systemBarsTopPadding + 12.dp),
+            ) {
+
+                Box(
+                    modifier = Modifier.size(48.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    androidx.compose.material3.IconButton(onClick = { isSearching = true }) {
+                        Icon(
+                            painter = painterResource(R.drawable.search),
+                            contentDescription = null,
+                            tint = liquidGlassContentColor(),
+                        )
+                    }
+                }
+            }
+        }
+
+        if (isSearching || playlist == null) {
         TopAppBar(
             colors = topAppBarColors,
+            windowInsets =
+                WindowInsets(top = systemBarsTopPadding)
+                    .union(WindowInsets.systemBars.only(WindowInsetsSides.Horizontal)),
             title = {
                 if (isSearching) {
                     TextField(
@@ -600,30 +728,33 @@ fun SpotifyPlaylistScreen(
                 }
             },
             navigationIcon = {
-                IconButton(
-                    onClick = {
-                        if (isSearching) {
-                            isSearching = false
-                            query = TextFieldValue()
-                        } else {
-                            navController.navigateUp()
-                        }
-                    },
-                    onLongClick = {
-                        if (!isSearching) navController.backToMain()
-                    },
-                ) {
-                    Icon(
-                        painter =
-                            painterResource(
-                                if (isSearching) R.drawable.close else R.drawable.arrow_back,
-                            ),
-                        contentDescription = null,
-                    )
+
+                if (isSearching || showTopBarTitle) {
+                    IconButton(
+                        onClick = {
+                            if (isSearching) {
+                                isSearching = false
+                                query = TextFieldValue()
+                            } else {
+                                navController.navigateUp()
+                            }
+                        },
+                        onLongClick = {
+                            if (!isSearching) navController.backToMain()
+                        },
+                    ) {
+                        Icon(
+                            painter =
+                                painterResource(
+                                    if (isSearching) R.drawable.close else R.drawable.arrow_back,
+                                ),
+                            contentDescription = null,
+                        )
+                    }
                 }
             },
             actions = {
-                if (!isSearching) {
+                if (!isSearching && showTopBarTitle) {
                     IconButton(
                         onClick = { isSearching = true },
                         onLongClick = {},
@@ -637,6 +768,7 @@ fun SpotifyPlaylistScreen(
             },
             scrollBehavior = scrollBehavior,
         )
+        }
 
         SnackbarHost(
             hostState = snackbarHostState,

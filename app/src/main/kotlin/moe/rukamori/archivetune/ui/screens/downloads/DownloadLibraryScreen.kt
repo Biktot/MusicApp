@@ -39,12 +39,10 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ContainedLoadingIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -62,22 +60,15 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
@@ -85,10 +76,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
-import coil3.compose.AsyncImage
+import moe.rukamori.archivetune.ui.component.ItemThumbnail
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
@@ -100,14 +92,15 @@ import moe.rukamori.archivetune.downloads.DownloadSectionUiModel
 import moe.rukamori.archivetune.extensions.toMediaItem
 import moe.rukamori.archivetune.playback.queues.ListQueue
 import moe.rukamori.archivetune.ui.component.EmptyPlaceholder
+import moe.rukamori.archivetune.ui.lottie.ArchiveTuneLottie
 import moe.rukamori.archivetune.ui.utils.backToMain
 import moe.rukamori.archivetune.ui.utils.formatFileSize
 import moe.rukamori.archivetune.utils.makeTimeString
 import moe.rukamori.archivetune.viewmodels.DownloadLibraryEvent
-import moe.rukamori.archivetune.viewmodels.DownloadRemovalConfirmation
 import moe.rukamori.archivetune.viewmodels.DownloadLibraryScreenState
 import moe.rukamori.archivetune.viewmodels.DownloadLibraryTab
 import moe.rukamori.archivetune.viewmodels.DownloadLibraryViewModel
+import androidx.compose.runtime.getValue
 
 @Composable
 fun DownloadLibraryScreen(
@@ -157,13 +150,9 @@ fun DownloadLibraryScreen(
         onPauseEntry = viewModel::pause,
         onResumeEntry = viewModel::resume,
         onRemoveEntry = viewModel::remove,
-        onRequestRemoveEntry = viewModel::requestRemove,
         onPauseSection = viewModel::pause,
         onResumeSection = viewModel::resume,
         onRemoveSection = viewModel::remove,
-        onRequestRemoveSection = viewModel::requestRemove,
-        onConfirmRemove = viewModel::confirmRemove,
-        onDismissRemoveConfirmation = viewModel::dismissRemoveConfirmation,
     )
 }
 
@@ -183,13 +172,9 @@ private fun DownloadLibraryScreenContent(
     onPauseEntry: (DownloadEntryUiModel) -> Unit,
     onResumeEntry: (DownloadEntryUiModel) -> Unit,
     onRemoveEntry: (DownloadEntryUiModel) -> Unit,
-    onRequestRemoveEntry: (DownloadEntryUiModel) -> Unit,
     onPauseSection: (DownloadSectionUiModel) -> Unit,
     onResumeSection: (DownloadSectionUiModel) -> Unit,
     onRemoveSection: (DownloadSectionUiModel) -> Unit,
-    onRequestRemoveSection: (DownloadSectionUiModel) -> Unit,
-    onConfirmRemove: () -> Unit,
-    onDismissRemoveConfirmation: () -> Unit,
 ) {
     val selectedTab = state.selectedTab()
     val query = state.query()
@@ -297,7 +282,7 @@ private fun DownloadLibraryScreenContent(
                             colors =
                                 TopAppBarDefaults.topAppBarColors(
                                     containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
-                                    scrolledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                                    scrolledContainerColor = Color.Transparent,
                                 ),
                             scrollBehavior = scrollBehavior,
                         )
@@ -342,11 +327,9 @@ private fun DownloadLibraryScreenContent(
                     onPauseEntry = onPauseEntry,
                     onResumeEntry = onResumeEntry,
                     onRemoveEntry = onRemoveEntry,
-                    onRequestRemoveEntry = onRequestRemoveEntry,
                     onPauseSection = onPauseSection,
                     onResumeSection = onResumeSection,
                     onRemoveSection = onRemoveSection,
-                    onRequestRemoveSection = onRequestRemoveSection,
                 )
             }
 
@@ -361,33 +344,12 @@ private fun DownloadLibraryScreenContent(
                     onPauseEntry = onPauseEntry,
                     onResumeEntry = onResumeEntry,
                     onRemoveEntry = onRemoveEntry,
-                    onRequestRemoveEntry = onRequestRemoveEntry,
                     onPauseSection = onPauseSection,
                     onResumeSection = onResumeSection,
                     onRemoveSection = onRemoveSection,
-                    onRequestRemoveSection = onRequestRemoveSection,
                 )
             }
         }
-    }
-
-    val pendingRemoval = state.pendingRemoval
-    if (pendingRemoval != null) {
-        AlertDialog(
-            onDismissRequest = onDismissRemoveConfirmation,
-            title = { Text(stringResource(R.string.remove_download)) },
-            text = { Text(stringResource(pendingRemoval.confirmationMessageRes())) },
-            confirmButton = {
-                TextButton(onClick = onConfirmRemove) {
-                    Text(stringResource(R.string.delete))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = onDismissRemoveConfirmation) {
-                    Text(stringResource(android.R.string.cancel))
-                }
-            },
-        )
     }
 }
 
@@ -445,11 +407,9 @@ private fun DownloadPager(
     onPauseEntry: (DownloadEntryUiModel) -> Unit,
     onResumeEntry: (DownloadEntryUiModel) -> Unit,
     onRemoveEntry: (DownloadEntryUiModel) -> Unit,
-    onRequestRemoveEntry: (DownloadEntryUiModel) -> Unit,
     onPauseSection: (DownloadSectionUiModel) -> Unit,
     onResumeSection: (DownloadSectionUiModel) -> Unit,
     onRemoveSection: (DownloadSectionUiModel) -> Unit,
-    onRequestRemoveSection: (DownloadSectionUiModel) -> Unit,
 ) {
     HorizontalPager(
         state = pagerState,
@@ -466,11 +426,9 @@ private fun DownloadPager(
             onPauseEntry = onPauseEntry,
             onResumeEntry = onResumeEntry,
             onRemoveEntry = onRemoveEntry,
-            onRequestRemoveEntry = onRequestRemoveEntry,
             onPauseSection = onPauseSection,
             onResumeSection = onResumeSection,
             onRemoveSection = onRemoveSection,
-            onRequestRemoveSection = onRequestRemoveSection,
         )
     }
 }
@@ -485,13 +443,10 @@ private fun DownloadSections(
     onPauseEntry: (DownloadEntryUiModel) -> Unit,
     onResumeEntry: (DownloadEntryUiModel) -> Unit,
     onRemoveEntry: (DownloadEntryUiModel) -> Unit,
-    onRequestRemoveEntry: (DownloadEntryUiModel) -> Unit,
     onPauseSection: (DownloadSectionUiModel) -> Unit,
     onResumeSection: (DownloadSectionUiModel) -> Unit,
     onRemoveSection: (DownloadSectionUiModel) -> Unit,
-    onRequestRemoveSection: (DownloadSectionUiModel) -> Unit,
 ) {
-    var expandedItemIds by remember { mutableStateOf(emptySet<String>()) }
     if (sections.isEmpty()) {
         EmptyPlaceholder(
             icon =
@@ -512,6 +467,13 @@ private fun DownloadSections(
                         R.string.no_downloads
                     },
                 ),
+
+            lottieRes =
+                if (query.isBlank() && !inProgress) {
+                    ArchiveTuneLottie.EmptyStateRes
+                } else {
+                    null
+                },
             modifier = Modifier.padding(contentPadding),
         )
         return
@@ -538,16 +500,7 @@ private fun DownloadSections(
             ) {
                 val pauseAction = remember(section, onPauseSection) { { onPauseSection(section) } }
                 val resumeAction = remember(section, onResumeSection) { { onResumeSection(section) } }
-                val removeAction =
-                    remember(section, inProgress, onRemoveSection, onRequestRemoveSection) {
-                        {
-                            if (inProgress) {
-                                onRemoveSection(section)
-                            } else {
-                                onRequestRemoveSection(section)
-                            }
-                        }
-                    }
+                val removeAction = remember(section, onRemoveSection) { { onRemoveSection(section) } }
                 DownloadSectionHeader(
                     section = section,
                     inProgress = inProgress,
@@ -565,24 +518,7 @@ private fun DownloadSections(
                 val openAction = remember(entry, onOpenEntry) { { onOpenEntry(entry) } }
                 val pauseAction = remember(entry, onPauseEntry) { { onPauseEntry(entry) } }
                 val resumeAction = remember(entry, onResumeEntry) { { onResumeEntry(entry) } }
-                val removeAction =
-                    remember(entry, inProgress, onRemoveEntry, onRequestRemoveEntry) {
-                        {
-                            if (inProgress) {
-                                onRemoveEntry(entry)
-                            } else {
-                                onRequestRemoveEntry(entry)
-                            }
-                        }
-                    }
-                val isExpanded = entry.id in expandedItemIds
-                val toggleExpand = {
-                    expandedItemIds = if (isExpanded) {
-                        expandedItemIds - entry.id
-                    } else {
-                        expandedItemIds + entry.id
-                    }
-                }
+                val removeAction = remember(entry, onRemoveEntry) { { onRemoveEntry(entry) } }
                 DownloadEntry(
                     entry = entry,
                     inProgress = inProgress,
@@ -590,9 +526,6 @@ private fun DownloadSections(
                     onPause = pauseAction,
                     onResume = resumeAction,
                     onRemove = removeAction,
-                    isExpanded = isExpanded,
-                    onExpandToggle = toggleExpand,
-                    onRemoveChild = if (inProgress) onRemoveEntry else onRequestRemoveEntry,
                     modifier = Modifier.fillMaxWidth().widthIn(max = 840.dp).animateItem(),
                 )
             }
@@ -694,12 +627,9 @@ private fun DownloadEntry(
     onResume: () -> Unit,
     onRemove: () -> Unit,
     modifier: Modifier = Modifier,
-    isExpanded: Boolean = false,
-    onExpandToggle: () -> Unit = {},
-    onRemoveChild: (DownloadEntryUiModel) -> Unit = {},
 ) {
     Card(
-        onClick = if (inProgress || entry.children.isEmpty()) onOpen else onExpandToggle,
+        onClick = onOpen,
         modifier = modifier,
         shape = MaterialTheme.shapes.extraLarge,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
@@ -758,13 +688,13 @@ private fun DownloadEntry(
                 }
             },
             leadingContent = {
-                AsyncImage(
-                    model = entry.thumbnailUrl,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    placeholder = painterResource(entry.placeholderIcon()),
-                    error = painterResource(entry.placeholderIcon()),
-                    modifier = Modifier.size(64.dp).clip(MaterialTheme.shapes.medium),
+                ItemThumbnail(
+                    thumbnailUrl = entry.thumbnailUrl,
+                    isActive = false,
+                    isPlaying = false,
+                    shape = MaterialTheme.shapes.medium,
+                    placeholderIconRes = entry.placeholderIcon(),
+                    modifier = Modifier.size(64.dp),
                 )
             },
             trailingContent = {
@@ -773,16 +703,6 @@ private fun DownloadEntry(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     if (!inProgress) {
-                        if (entry.children.isNotEmpty()) {
-                            IconButton(onClick = onExpandToggle) {
-                                Icon(
-                                    painter = painterResource(
-                                        if (isExpanded) R.drawable.expand_less else R.drawable.expand_more
-                                    ),
-                                    contentDescription = null,
-                                )
-                            }
-                        }
                         entry.durationSeconds?.let { durationSeconds ->
                             Surface(
                                 shape = MaterialTheme.shapes.extraLarge,
@@ -815,68 +735,6 @@ private fun DownloadEntry(
             },
             colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
         )
-        if (isExpanded && entry.children.isNotEmpty()) {
-            HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 16.dp),
-                color = MaterialTheme.colorScheme.outlineVariant,
-            )
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
-            ) {
-                entry.children.forEach { child ->
-                    ListItem(
-                        headlineContent = {
-                            Text(
-                                text = child.title,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        },
-                        supportingContent = child.supportingText?.let { supportingText ->
-                            {
-                                Text(
-                                    text = supportingText,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                        },
-                        leadingContent = {
-                            AsyncImage(
-                                model = child.thumbnailUrl,
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.size(48.dp).clip(MaterialTheme.shapes.small),
-                            )
-                        },
-                        trailingContent = {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                child.durationSeconds?.let { durationSeconds ->
-                                    Text(
-                                        text = makeTimeString(durationSeconds * 1_000L),
-                                        style = MaterialTheme.typography.labelMedium,
-                                        modifier = Modifier.padding(end = 8.dp),
-                                    )
-                                }
-                                PrimaryFilledIconButton(
-                                    icon = R.drawable.delete,
-                                    contentDescription = stringResource(R.string.remove_download),
-                                    onClick = { onRemoveChild(child) },
-                                )
-                            }
-                        },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    )
-                }
-            }
-        }
     }
 }
 
@@ -954,12 +812,6 @@ private fun DownloadLibraryScreenState.isSearchActive(): Boolean =
         is DownloadLibraryScreenState.Success -> isSearchActive
         is DownloadLibraryScreenState.Empty -> isSearchActive
         is DownloadLibraryScreenState.Error -> isSearchActive
-    }
-
-private fun DownloadRemovalConfirmation.confirmationMessageRes(): Int =
-    when (this) {
-        is DownloadRemovalConfirmation.Entry -> R.string.remove_download_confirm
-        is DownloadRemovalConfirmation.Section -> R.string.remove_download_section_confirm
     }
 
 private const val CONTENT_TYPE_SECTION_HEADER = "download_section_header"

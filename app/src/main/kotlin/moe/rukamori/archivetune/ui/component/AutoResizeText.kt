@@ -10,11 +10,9 @@ package moe.rukamori.archivetune.ui.component
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
@@ -27,10 +25,9 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
-/**
- * From https://stackoverflow.com/a/69780826
- */
 @Composable
 fun AutoResizeText(
     text: String,
@@ -69,18 +66,18 @@ fun AutoResizeText(
         fontSize = fontSizeValue.sp,
         onTextLayout = {
             if (it.didOverflowHeight && !readyToDraw) {
-                // Did Overflow height, calculate next font size value
+
                 val nextFontSizeValue = fontSizeValue - fontSizeRange.step.value
                 if (nextFontSizeValue <= fontSizeRange.min.value) {
-                    // Reached minimum, set minimum font size and it's readToDraw
+
                     fontSizeValue = fontSizeRange.min.value
                     readyToDraw = true
                 } else {
-                    // Text doesn't fit yet and haven't reached minimum text range, keep decreasing
+
                     fontSizeValue = nextFontSizeValue
                 }
             } else {
-                // Text fits before reaching the minimum, it's readyToDraw
+
                 readyToDraw = true
             }
         },

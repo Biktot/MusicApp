@@ -17,7 +17,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.ime
@@ -43,13 +45,11 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,10 +72,14 @@ import androidx.media3.exoplayer.offline.Download
 import androidx.navigation.NavController
 import moe.rukamori.archivetune.LocalDownloadUtil
 import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
+import moe.rukamori.archivetune.LocalStableSystemBarsTopPadding
 import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.R
+import moe.rukamori.archivetune.constants.AlbumCanvasEnabledKey
 import moe.rukamori.archivetune.constants.AppBarHeight
 import moe.rukamori.archivetune.constants.MyTopFilter
+import moe.rukamori.archivetune.ui.player.LocalPlayerLyricsFullScreen
+import moe.rukamori.archivetune.utils.rememberPreference
 import moe.rukamori.archivetune.extensions.toMediaItem
 import moe.rukamori.archivetune.extensions.togglePlayPause
 import moe.rukamori.archivetune.playback.queues.ListQueue
@@ -98,8 +102,15 @@ import moe.rukamori.archivetune.ui.utils.backToMain
 import moe.rukamori.archivetune.ui.utils.headerDownloadState
 import moe.rukamori.archivetune.ui.utils.sendAddMissingDownloads
 import moe.rukamori.archivetune.ui.utils.sendRemoveDownloads
+import moe.rukamori.archivetune.ui.utils.sendPauseRunningDownloads
+import moe.rukamori.archivetune.ui.utils.sendResumePausedDownloads
 import moe.rukamori.archivetune.utils.makeTimeString
 import moe.rukamori.archivetune.viewmodels.TopPlaylistViewModel
+import dev.chrisbanes.haze.hazeSource
+import moe.rukamori.archivetune.ui.screens.ScreenHeaderHaze
+import moe.rukamori.archivetune.ui.screens.rememberScreenHeaderHaze
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -113,11 +124,14 @@ fun TopPlaylistScreen(
     val haptic = LocalHapticFeedback.current
     val focusManager = LocalFocusManager.current
     val playerConnection = LocalPlayerConnection.current ?: return
-    val isPlaying by playerConnection.isPlaying.collectAsState()
-    val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
+    val isPlaying by playerConnection.isPlaying.collectAsStateWithLifecycle()
+    val mediaMetadata by playerConnection.mediaMetadata.collectAsStateWithLifecycle()
     val maxSize = viewModel.top
 
-    val songs by viewModel.topSongs.collectAsState(null)
+    val songs by viewModel.topSongs.collectAsStateWithLifecycle(initialValue = null)
+    val canvasArtwork by viewModel.canvasArtwork.collectAsStateWithLifecycle()
+    val pageCanvasEnabled by rememberPreference(key = AlbumCanvasEnabledKey, defaultValue = true)
+    val lyricsFullScreen = LocalPlayerLyricsFullScreen.current
     val likeLength =
         remember(songs) {
             songs?.fastSumBy { it.song.duration } ?: 0
@@ -148,9 +162,28 @@ fun TopPlaylistScreen(
         BackHandler {
             selection = false
         }
+    } else {
+
+        BackHandler {
+            try {
+                if (!navController.popBackStack()) {
+                    navController.navigate("library") {
+                        launchSingleTop = true
+                    }
+                }
+            } catch (_: Exception) {
+                try {
+                    if (!navController.navigateUp()) {
+                        navController.navigate("library") { launchSingleTop = true }
+                    }
+                } catch (_: Exception) {
+
+                }
+            }
+        }
     }
 
-    val sortType by viewModel.topPeriod.collectAsState()
+    val sortType by viewModel.topPeriod.collectAsStateWithLifecycle()
     val name = stringResource(R.string.my_top) + " $maxSize"
 
     val downloadUtil = LocalDownloadUtil.current
@@ -270,8 +303,9 @@ fun TopPlaylistScreen(
         }
     }
 
-    val systemBarsTopPadding = WindowInsets.systemBars.asPaddingValues().calculateTopPadding()
+    val systemBarsTopPadding = LocalStableSystemBarsTopPadding.current
 
+    val headerHaze = rememberScreenHeaderHaze()
     Box(
         modifier =
             Modifier
@@ -283,6 +317,7 @@ fun TopPlaylistScreen(
             modifier =
                 Modifier
                     .fillMaxSize()
+                    .hazeSource(headerHaze)
                     .padding(
                         top = if (isSearching) systemBarsTopPadding + AppBarHeight else 0.dp,
                     ),
@@ -319,6 +354,12 @@ fun TopPlaylistScreen(
                                 isAdded = false,
                                 addContentDescription = R.string.add_to_queue,
                                 removeContentDescription = R.string.remove_from_queue,
+                                canvasPrimaryUrl =
+                                    (canvasArtwork?.animated ?: canvasArtwork?.videoUrl)
+                                        ?.takeIf { pageCanvasEnabled },
+                                canvasFallbackUrl = canvasArtwork?.videoUrl?.takeIf { pageCanvasEnabled },
+                                canvasIsPlaying = true,
+                                canvasVisible = !lyricsFullScreen,
                                 onShuffle = {
                                     playerConnection.playQueue(
                                         ListQueue(
@@ -346,17 +387,27 @@ fun TopPlaylistScreen(
                                             },
                                         contentColor = contentColor,
                                         onClick = {
-                                            when (downloadState) {
+                                            val headerState = downloadState
+                                            when (headerState) {
                                                 HeaderDownloadState.Completed -> {
                                                     showRemoveDownloadDialog = true
                                                 }
 
                                                 is HeaderDownloadState.Partial -> {
-                                                    sendRemoveDownloads(
-                                                        context = context,
-                                                        songIds = songs.orEmpty().map { it.song.id },
-                                                        downloads = downloads,
-                                                    )
+
+                                                    if (headerState.paused) {
+                                                        sendResumePausedDownloads(
+                                                            context = context,
+                                                            songIds = songs.orEmpty().map { it.song.id },
+                                                            downloads = downloads,
+                                                        )
+                                                    } else {
+                                                        sendPauseRunningDownloads(
+                                                            context = context,
+                                                            songIds = songs.orEmpty().map { it.song.id },
+                                                            downloads = downloads,
+                                                        )
+                                                    }
                                                 }
 
                                                 HeaderDownloadState.None -> {
@@ -370,6 +421,7 @@ fun TopPlaylistScreen(
                                                                 )
                                                             },
                                                         downloads = downloads,
+                                                        downloadUtil = downloadUtil,
                                                     )
                                                     navController.navigate("auto_playlist/downloaded?tab=progress")
                                                 }
@@ -402,30 +454,11 @@ fun TopPlaylistScreen(
                                             }
                                         }
                                     }
-
-                                    MediaDetailAction(
-                                        contentDescription = R.string.download,
-                                        contentColor = contentColor,
-                                        onClick = {
-                                            navController.navigate(
-                                                "auto_playlist/downloaded?tab=progress",
-                                            )
-                                        },
-                                    ) {
-                                        val globalProgress = (globalDownloadState as? HeaderDownloadState.Partial)?.progress ?: 0f
-                                        val globalPaused = (globalDownloadState as? HeaderDownloadState.Partial)?.paused ?: false
-                                        HeaderDownloadProgressIndicator(
-                                            progress = globalProgress,
-                                            paused = globalPaused,
-                                            icon = R.drawable.list,
-                                        )
-                                    }
                                 },
                             )
                         }
                     }
 
-                    // Sort Header (Period Filter)
                     item(key = "sortHeader") {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -453,7 +486,6 @@ fun TopPlaylistScreen(
                         }
                     }
 
-                    // Song items
                     itemsIndexed(
                         items = filteredSongs,
                         key = { _, song -> song.item.id },
@@ -531,7 +563,15 @@ fun TopPlaylistScreen(
             headerItems = headerItems,
         )
 
+        ScreenHeaderHaze(
+            hazeState = headerHaze,
+            systemBarsTopPadding = systemBarsTopPadding,
+        )
+
         TopAppBar(
+            windowInsets =
+                WindowInsets(top = systemBarsTopPadding)
+                    .union(WindowInsets.systemBars.only(WindowInsetsSides.Horizontal)),
             colors =
                 if (transparentAppBar) {
                     TopAppBarDefaults.topAppBarColors(
@@ -544,7 +584,7 @@ fun TopPlaylistScreen(
                 } else {
                     TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.surface,
-                        scrolledContainerColor = MaterialTheme.colorScheme.surface,
+                        scrolledContainerColor = Color.Transparent,
                     )
                 },
             title = {

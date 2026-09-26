@@ -64,14 +64,12 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -86,7 +84,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
-import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Timeline
 import androidx.media3.exoplayer.source.ShuffleOrder.DefaultShuffleOrder
@@ -101,6 +98,7 @@ import moe.rukamori.archivetune.LocalDatabase
 import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.R
 import moe.rukamori.archivetune.constants.AutoLoadMoreKey
+import moe.rukamori.archivetune.constants.ShowCodecOnPlayerKey
 import moe.rukamori.archivetune.constants.EnableHapticFeedbackKey
 import moe.rukamori.archivetune.constants.ListItemHeight
 import moe.rukamori.archivetune.constants.PlayerDesignStyle
@@ -128,6 +126,8 @@ import moe.rukamori.archivetune.utils.rememberPreference
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import java.time.LocalDateTime
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @SuppressLint("UnrememberedMutableState")
 @OptIn(ExperimentalFoundationApi::class)
@@ -381,7 +381,7 @@ fun Queue(
 
     val (showCodecOnPlayer) =
         rememberPreference(
-            key = booleanPreferencesKey("show_codec_on_player"),
+            key = ShowCodecOnPlayerKey,
             defaultValue = false,
         )
 
@@ -417,83 +417,6 @@ fun Queue(
         onCollapsedContentClick = openQueue,
         collapsedContent = {
             when (playerDesignStyle) {
-                PlayerDesignStyle.V2 -> {
-                    QueueCollapsedContentV2(
-                        showCodecOnPlayer = showCodecOnPlayer,
-                        currentFormat = currentFormat,
-                        textBackgroundColor = TextBackgroundColor,
-                        textButtonColor = textButtonColor,
-                        iconButtonColor = iconButtonColor,
-                        sleepTimerEnabled = sleepTimerEnabled,
-                        sleepTimerTimeLeft = sleepTimerTimeLeft,
-                        repeatMode = repeatMode,
-                        mediaMetadata = mediaMetadata,
-                        onExpandQueue = openQueue,
-                        onSleepTimerClick = {
-                            if (sleepTimerEnabled) {
-                                playerConnection.service.sleepTimer.clear()
-                            } else {
-                                showSleepTimerDialog = true
-                            }
-                        },
-                        onShowLyrics = onShowLyrics,
-                        onRepeatModeClick = { playerConnection.player.toggleRepeatMode() },
-                        onMenuClick = {
-                            menuState.show {
-                                PlayerMenu(
-                                    mediaMetadata = mediaMetadata,
-                                    navController = navController,
-                                    playerBottomSheetState = playerBottomSheetState,
-                                    onShowDetailsDialog = {
-                                        mediaMetadata?.id?.let {
-                                            bottomSheetPageState.show {
-                                                ShowMediaInfo(it)
-                                            }
-                                        }
-                                    },
-                                    onDismiss = menuState::dismiss,
-                                )
-                            }
-                        },
-                    )
-                }
-
-                PlayerDesignStyle.V3 -> {
-                    QueueCollapsedContentV3(
-                        showCodecOnPlayer = showCodecOnPlayer,
-                        currentFormat = currentFormat,
-                        textBackgroundColor = TextBackgroundColor,
-                        sleepTimerEnabled = sleepTimerEnabled,
-                        sleepTimerTimeLeft = sleepTimerTimeLeft,
-                        onExpandQueue = openQueue,
-                        onSleepTimerClick = {
-                            if (sleepTimerEnabled) {
-                                playerConnection.service.sleepTimer.clear()
-                            } else {
-                                showSleepTimerDialog = true
-                            }
-                        },
-                        onShowLyrics = onShowLyrics,
-                        onMenuClick = {
-                            menuState.show {
-                                PlayerMenu(
-                                    mediaMetadata = mediaMetadata,
-                                    navController = navController,
-                                    playerBottomSheetState = playerBottomSheetState,
-                                    onShowDetailsDialog = {
-                                        mediaMetadata?.id?.let {
-                                            bottomSheetPageState.show {
-                                                ShowMediaInfo(it)
-                                            }
-                                        }
-                                    },
-                                    onDismiss = menuState::dismiss,
-                                )
-                            }
-                        },
-                    )
-                }
-
                 PlayerDesignStyle.V5 -> {
                     QueueCollapsedContentV3(
                         showCodecOnPlayer = showCodecOnPlayer,
@@ -531,47 +454,6 @@ fun Queue(
                 }
 
                 PlayerDesignStyle.V4 -> {
-                    QueueCollapsedContentV4(
-                        showCodecOnPlayer = showCodecOnPlayer,
-                        currentFormat = currentFormat,
-                        textBackgroundColor = TextBackgroundColor,
-                        textButtonColor = textButtonColor,
-                        iconButtonColor = iconButtonColor,
-                        sleepTimerEnabled = sleepTimerEnabled,
-                        sleepTimerTimeLeft = sleepTimerTimeLeft,
-                        mediaMetadata = mediaMetadata,
-                        onExpandQueue = openQueue,
-                        onSleepTimerClick = {
-                            if (sleepTimerEnabled) {
-                                playerConnection.service.sleepTimer.clear()
-                            } else {
-                                showSleepTimerDialog = true
-                            }
-                        },
-                        onShowLyrics = onShowLyrics,
-                    )
-                }
-
-                PlayerDesignStyle.V1 -> {
-                    QueueCollapsedContentV1(
-                        showCodecOnPlayer = showCodecOnPlayer,
-                        currentFormat = currentFormat,
-                        textBackgroundColor = TextBackgroundColor,
-                        sleepTimerEnabled = sleepTimerEnabled,
-                        sleepTimerTimeLeft = sleepTimerTimeLeft,
-                        onExpandQueue = openQueue,
-                        onSleepTimerClick = {
-                            if (sleepTimerEnabled) {
-                                playerConnection.service.sleepTimer.clear()
-                            } else {
-                                showSleepTimerDialog = true
-                            }
-                        },
-                        onShowLyrics = onShowLyrics,
-                    )
-                }
-
-                PlayerDesignStyle.V6 -> {
                     QueueCollapsedContentV4(
                         showCodecOnPlayer = showCodecOnPlayer,
                         currentFormat = currentFormat,
@@ -648,34 +530,6 @@ fun Queue(
                     }
 
                     QueueCollapsedContentV7(
-                        textBackgroundColor = Color.White,
-                        onExpandQueue = openQueue,
-                        onShowLyrics = onShowLyrics,
-                        onDeviceClick = {
-                            SystemMediaControlResolver.openMediaOutputSwitcher(context)
-                        },
-                        onMusicTogetherClick = {
-                            playerBottomSheetState.collapseSoft()
-                            navController.navigate("settings/music_together")
-                        },
-                        device = audioDevice,
-                    )
-                }
-
-                PlayerDesignStyle.V8 -> {
-                    val audioDevice by playerConnection.service.activeAudioDevice.collectAsStateWithLifecycle()
-
-                    val view = LocalView.current
-                    DisposableEffect(view) {
-                        val listener =
-                            ViewTreeObserver.OnWindowFocusChangeListener { hasFocus ->
-                                if (hasFocus) playerConnection.service.refreshActiveDevice()
-                            }
-                        view.viewTreeObserver.addOnWindowFocusChangeListener(listener)
-                        onDispose { view.viewTreeObserver.removeOnWindowFocusChangeListener(listener) }
-                    }
-
-                    QueueCollapsedContentV8(
                         showCodecOnPlayer = showCodecOnPlayer,
                         currentFormat = currentFormat,
                         textBackgroundColor = TextBackgroundColor,
@@ -695,6 +549,30 @@ fun Queue(
                         },
                         device = audioDevice,
                     )
+                }
+
+                PlayerDesignStyle.APPLE_MUSIC -> {
+
+                }
+
+                PlayerDesignStyle.BITCHORD -> {
+
+                }
+
+                PlayerDesignStyle.TIKTOK -> {
+
+                }
+
+                PlayerDesignStyle.SIMPMUSIC -> {
+
+                }
+
+                PlayerDesignStyle.SPATIALFLOW -> {
+
+                }
+
+                PlayerDesignStyle.LOOPER -> {
+
                 }
             }
 

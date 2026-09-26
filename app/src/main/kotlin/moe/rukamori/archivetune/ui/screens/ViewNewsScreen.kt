@@ -57,10 +57,8 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.carousel.HorizontalMultiBrowseCarousel
 import androidx.compose.material3.carousel.rememberCarouselState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -95,6 +93,9 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import moe.rukamori.archivetune.ui.component.IconButton as AppIconButton
+import moe.rukamori.archivetune.ui.component.KeepStatusBarHiddenInDialog
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @Composable
 fun ViewNewsScreen(
@@ -137,7 +138,7 @@ fun ViewNewsScreen(
                 colors =
                     TopAppBarDefaults.largeTopAppBarColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-                        scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        scrolledContainerColor = Color.Transparent,
                         titleContentColor = MaterialTheme.colorScheme.onSurface,
                     ),
                 scrollBehavior = scrollBehavior,
@@ -404,6 +405,7 @@ private fun ViewNewsFullImageDialog(
                 decorFitsSystemWindows = false,
             ),
     ) {
+        KeepStatusBarHiddenInDialog()
         val context = LocalContext.current
         val model =
             remember(context, imageUrl) {

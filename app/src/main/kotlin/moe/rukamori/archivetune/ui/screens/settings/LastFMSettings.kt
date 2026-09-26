@@ -10,11 +10,13 @@
 package moe.rukamori.archivetune.ui.screens.settings
 
 import androidx.annotation.StringRes
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
@@ -29,7 +31,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -37,18 +38,22 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -56,42 +61,69 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
 import moe.rukamori.archivetune.R
+import moe.rukamori.archivetune.constants.LastFmPreferYtThumbnailsKey
 import moe.rukamori.archivetune.constants.LastFmProvider
+import moe.rukamori.archivetune.ui.component.FrostedHeaderPill
 import moe.rukamori.archivetune.ui.component.IconButton
 import moe.rukamori.archivetune.ui.component.InfoLabel
 import moe.rukamori.archivetune.ui.component.PreferenceEntry
 import moe.rukamori.archivetune.ui.component.PreferenceGroup
 import moe.rukamori.archivetune.ui.component.SwitchPreference
+import moe.rukamori.archivetune.utils.rememberPreference
 import moe.rukamori.archivetune.ui.utils.backToMain
 import moe.rukamori.archivetune.viewmodels.LastFmLoginDialogUiModel
-import moe.rukamori.archivetune.viewmodels.LastFmServiceEditorUiModel
 import moe.rukamori.archivetune.viewmodels.LastFmSettingsScreenState
 import moe.rukamori.archivetune.viewmodels.LastFmSettingsUiModel
 import moe.rukamori.archivetune.viewmodels.LastFmSettingsViewModel
 import moe.rukamori.archivetune.viewmodels.LastFmTimingEditorUiModel
 import moe.rukamori.archivetune.viewmodels.LastFmTimingSetting
 import kotlin.math.roundToInt
+import androidx.compose.foundation.layout.asPaddingValues
+import moe.rukamori.archivetune.ui.component.KeepStatusBarHiddenInDialog
+import moe.rukamori.archivetune.ui.screens.ScreenHeaderHaze
+import moe.rukamori.archivetune.ui.screens.rememberScreenHeaderHaze
+import moe.rukamori.archivetune.LocalStableSystemBarsTopPadding
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LastFMSettings(
     navController: NavController,
+    scrollTo: String? = null,
     viewModel: LastFmSettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
+
             TopAppBar(
-                title = { Text(stringResource(R.string.lastfm_integration)) },
+                title = {},
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
+                    scrolledContainerColor = Color.Transparent,
+                ),
                 navigationIcon = {
-                    IconButton(
-                        onClick = navController::navigateUp,
-                        onLongClick = navController::backToMain,
-                    ) {
-                        Icon(
-                            painterResource(R.drawable.arrow_back),
-                            contentDescription = null,
+                    FrostedHeaderPill(plain = true) {
+                        IconButton(
+                            onClick = navController::navigateUp,
+                            onLongClick = navController::backToMain,
+                        ) {
+                            Icon(
+                                painterResource(R.drawable.arrow_back),
+                                contentDescription = null,
+                            )
+                        }
+                        Text(
+                            text = stringResource(R.string.lastfm_integration),
+                            color = MaterialTheme.colorScheme.onBackground,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            modifier = Modifier.padding(end = 4.dp),
                         )
                     }
                 },
@@ -100,16 +132,15 @@ fun LastFMSettings(
     ) { innerPadding ->
         val topPadding = innerPadding.calculateTopPadding()
 
+        val headerHaze = rememberScreenHeaderHaze()
+        val systemBarsTopPadding = LocalStableSystemBarsTopPadding.current
+        Box(modifier = Modifier.fillMaxSize()) {
         LastFmSettingsContent(
+            navController = navController,
             state = state,
             topPadding = topPadding,
-            onOpenServiceEditor = viewModel::openServiceEditor,
-            onDismissServiceEditor = viewModel::dismissServiceEditor,
-            onServiceProviderChange = viewModel::updateServiceProvider,
-            onCustomEndpointChange = viewModel::updateCustomEndpoint,
-            onApiKeyOverrideChange = viewModel::updateApiKeyOverride,
-            onSecretOverrideChange = viewModel::updateSecretOverride,
-            onSaveServiceEditor = viewModel::saveServiceEditor,
+            scrollTo = scrollTo,
+            headerHaze = headerHaze,
             onOpenLoginDialog = viewModel::openLoginDialog,
             onDismissLoginDialog = viewModel::dismissLoginDialog,
             onLoginUsernameChange = viewModel::updateLoginUsername,
@@ -124,21 +155,27 @@ fun LastFMSettings(
             onTimingDelayPercentChange = viewModel::updateTimingDelayPercent,
             onTimingDelaySecondsChange = viewModel::updateTimingDelaySeconds,
             onSaveTimingEditor = viewModel::saveTimingEditor,
+
+            onSaveCustomEndpoint = { endpoint, apiKey, secret ->
+                viewModel.saveCustomEndpoint(endpoint, apiKey, secret)
+            },
         )
+
+        ScreenHeaderHaze(
+            hazeState = headerHaze,
+            systemBarsTopPadding = systemBarsTopPadding,
+        )
+        }
     }
 }
 
 @Composable
 private fun LastFmSettingsContent(
+    navController: NavController,
     state: LastFmSettingsScreenState,
     topPadding: Dp,
-    onOpenServiceEditor: () -> Unit,
-    onDismissServiceEditor: () -> Unit,
-    onServiceProviderChange: (LastFmProvider) -> Unit,
-    onCustomEndpointChange: (String) -> Unit,
-    onApiKeyOverrideChange: (String) -> Unit,
-    onSecretOverrideChange: (String) -> Unit,
-    onSaveServiceEditor: () -> Unit,
+    scrollTo: String? = null,
+    headerHaze: HazeState,
     onOpenLoginDialog: () -> Unit,
     onDismissLoginDialog: () -> Unit,
     onLoginUsernameChange: (String) -> Unit,
@@ -153,13 +190,30 @@ private fun LastFmSettingsContent(
     onTimingDelayPercentChange: (Float) -> Unit,
     onTimingDelaySecondsChange: (Int) -> Unit,
     onSaveTimingEditor: () -> Unit,
+    onSaveCustomEndpoint: (endpoint: String, apiKey: String, secret: String) -> Unit,
 ) {
+    val scrollState = rememberScrollState()
+    val positions = rememberPreferencePositions()
+    val playerAwareBottomPadding =
+        LocalPlayerAwareWindowInsets.current
+            .only(WindowInsetsSides.Bottom)
+            .asPaddingValues()
+            .calculateBottomPadding()
+
+    var showCustomEndpointDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(scrollTo) { positions.scrollToKey(scrollTo, scrollState) }
+
     Column(
         Modifier
+            .windowInsetsPadding(LocalPlayerAwareWindowInsets.current.only(WindowInsetsSides.Horizontal))
+
+            .then(positions.containerModifier())
+            .verticalScroll(scrollState)
+
+            .hazeSource(headerHaze)
             .padding(top = topPadding)
-            .windowInsetsPadding(LocalPlayerAwareWindowInsets.current.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = SettingsDimensions.ScreenBottomPadding),
+            .padding(bottom = playerAwareBottomPadding + SettingsDimensions.ScreenBottomPadding),
     ) {
         when (state) {
             LastFmSettingsScreenState.Loading -> {
@@ -176,13 +230,16 @@ private fun LastFmSettingsContent(
 
             is LastFmSettingsScreenState.Success -> {
                 LastFmSettingsSuccess(
+                    navController = navController,
                     model = state.model,
-                    onOpenServiceEditor = onOpenServiceEditor,
+                    positions = positions,
                     onOpenLoginDialog = onOpenLoginDialog,
                     onLogout = onLogout,
                     onScrobblingChange = onScrobblingChange,
                     onNowPlayingChange = onNowPlayingChange,
                     onOpenTimingEditor = onOpenTimingEditor,
+                    showCustomEndpointDialog = showCustomEndpointDialog,
+                    onShowCustomEndpointDialog = { showCustomEndpointDialog = it },
                 )
             }
         }
@@ -198,14 +255,14 @@ private fun LastFmSettingsContent(
             onPasswordChange = onLoginPasswordChange,
             onLogin = onLogin,
         )
-        LastFmServiceEditorDialog(
-            editor = model.serviceEditor,
-            onDismiss = onDismissServiceEditor,
-            onProviderChange = onServiceProviderChange,
-            onCustomEndpointChange = onCustomEndpointChange,
-            onApiKeyOverrideChange = onApiKeyOverrideChange,
-            onSecretOverrideChange = onSecretOverrideChange,
-            onSave = onSaveServiceEditor,
+
+        LastFmCustomEndpointDialog(
+            visible = showCustomEndpointDialog,
+            onDismiss = { showCustomEndpointDialog = false },
+            onSave = { endpoint, apiKey, secret ->
+                onSaveCustomEndpoint(endpoint, apiKey, secret)
+                showCustomEndpointDialog = false
+            },
         )
         LastFmTimingEditorDialog(
             editor = model.timingEditor,
@@ -251,80 +308,83 @@ private fun LastFmSettingsError(
 
 @Composable
 private fun LastFmSettingsSuccess(
+    navController: NavController,
     model: LastFmSettingsUiModel,
-    onOpenServiceEditor: () -> Unit,
+    positions: PreferencePositions,
     onOpenLoginDialog: () -> Unit,
     onLogout: () -> Unit,
     onScrobblingChange: (Boolean) -> Unit,
     onNowPlayingChange: (Boolean) -> Unit,
     onOpenTimingEditor: (LastFmTimingSetting) -> Unit,
+    showCustomEndpointDialog: Boolean,
+    onShowCustomEndpointDialog: (Boolean) -> Unit,
 ) {
-    val providerName = stringResource(model.provider.titleResId())
-    val endpointDescription =
-        if (model.endpointValid) {
-            model.resolvedEndpoint
-        } else {
-            stringResource(R.string.lastfm_endpoint_invalid)
-        }
 
-    PreferenceGroup(title = stringResource(R.string.lastfm_service)) {
+    var preferYtThumbnails by rememberPreference(LastFmPreferYtThumbnailsKey, defaultValue = false)
+
+    PreferenceGroup(
+        modifier = positions.modifierFor("lastfm_account"),
+        title = stringResource(R.string.account),
+    ) {
+
         item {
             PreferenceEntry(
-                title = { Text(stringResource(R.string.lastfm_service_provider)) },
-                description = "$providerName\n$endpointDescription",
-                icon = { Icon(painterResource(R.drawable.token), null) },
-                onClick = onOpenServiceEditor,
+                modifier = positions.modifierFor("lastfm_connect_button"),
+                title = { Text(stringResource(R.string.lastfm_connect_button)) },
+                description = stringResource(R.string.lastfm_connect_button_description),
+                icon = { Icon(painterResource(R.drawable.login), null) },
+                onClick = { navController.navigate(LASTFM_LOGIN_ROUTE) },
             )
         }
 
         item {
             PreferenceEntry(
-                title = { Text(stringResource(R.string.lastfm_api_credentials)) },
-                description =
-                    if (model.apiKeyOverride.isBlank() && model.secretOverride.isBlank()) {
-                        stringResource(R.string.lastfm_api_credentials_default)
-                    } else {
-                        stringResource(R.string.lastfm_api_credentials_custom)
+                modifier = positions.modifierFor("lastfm_connect_librefm_button"),
+                title = { Text(stringResource(R.string.lastfm_connect_librefm_button)) },
+                description = stringResource(R.string.lastfm_connect_librefm_button_description),
+                icon = { Icon(painterResource(R.drawable.login), null) },
+                onClick = { navController.navigate(LASTFM_LIBREFM_LOGIN_ROUTE) },
+            )
+        }
+
+        item {
+            PreferenceEntry(
+                modifier = positions.modifierFor("lastfm_connect_custom_button"),
+                title = { Text(stringResource(R.string.lastfm_connect_custom_button)) },
+                description = stringResource(R.string.lastfm_connect_custom_button_description),
+                icon = { Icon(painterResource(R.drawable.token), null) },
+                onClick = { onShowCustomEndpointDialog(true) },
+            )
+        }
+
+        if (model.isLoggedIn) {
+            item {
+                PreferenceEntry(
+                    title = {
+                        Text(
+                            text = model.username,
+                            modifier = Modifier.alpha(1f),
+                        )
                     },
-                icon = { Icon(painterResource(R.drawable.token), null) },
-                onClick = onOpenServiceEditor,
-            )
-        }
-    }
-
-    PreferenceGroup(title = stringResource(R.string.account)) {
-        item {
-            PreferenceEntry(
-                title = {
-                    Text(
-                        text = if (model.isLoggedIn) model.username else stringResource(R.string.not_logged_in),
-                        modifier = Modifier.alpha(if (model.isLoggedIn) 1f else 0.5f),
-                    )
-                },
-                description = null,
-                icon = { Icon(painterResource(R.drawable.token), null) },
-                trailingContent = {
-                    if (model.isLoggedIn) {
+                    description = null,
+                    icon = { Icon(painterResource(R.drawable.account), null) },
+                    trailingContent = {
                         OutlinedButton(onClick = onLogout, shapes = ButtonDefaults.shapes()) {
                             Text(stringResource(R.string.action_logout))
                         }
-                    } else {
-                        OutlinedButton(
-                            onClick = onOpenLoginDialog,
-                            enabled = model.canLogin,
-                            shapes = ButtonDefaults.shapes(),
-                        ) {
-                            Text(stringResource(R.string.action_login))
-                        }
-                    }
-                },
-            )
+                    },
+                )
+            }
         }
     }
 
-    PreferenceGroup(title = stringResource(R.string.options)) {
+    PreferenceGroup(
+        modifier = positions.modifierFor("lastfm_options"),
+        title = stringResource(R.string.options),
+    ) {
         item {
             SwitchPreference(
+                modifier = positions.modifierFor("enable_scrobbling"),
                 title = { Text(stringResource(R.string.enable_scrobbling)) },
                 checked = model.scrobblingEnabled,
                 onCheckedChange = onScrobblingChange,
@@ -334,17 +394,32 @@ private fun LastFmSettingsSuccess(
 
         item {
             SwitchPreference(
+                modifier = positions.modifierFor("lastfm_now_playing"),
                 title = { Text(stringResource(R.string.lastfm_now_playing)) },
                 checked = model.nowPlayingEnabled,
                 onCheckedChange = onNowPlayingChange,
                 isEnabled = model.canEnableScrobbling && model.scrobblingEnabled,
             )
         }
+
+        item {
+            SwitchPreference(
+                modifier = positions.modifierFor("lastfm_prefer_yt_thumbnails"),
+                title = { Text(stringResource(R.string.lastfm_prefer_yt_thumbnails)) },
+                description = stringResource(R.string.lastfm_prefer_yt_thumbnails_desc),
+                checked = preferYtThumbnails,
+                onCheckedChange = { preferYtThumbnails = it },
+            )
+        }
     }
 
-    PreferenceGroup(title = stringResource(R.string.scrobbling_configuration)) {
+    PreferenceGroup(
+        modifier = positions.modifierFor("lastfm_scrobbling_config"),
+        title = stringResource(R.string.scrobbling_configuration),
+    ) {
         item {
             PreferenceEntry(
+                modifier = positions.modifierFor("scrobble_min_track_duration"),
                 title = { Text(stringResource(R.string.scrobble_min_track_duration)) },
                 description = stringResource(R.string.duration_seconds_short, model.minTrackDurationSeconds),
                 onClick = { onOpenTimingEditor(LastFmTimingSetting.MIN_TRACK_DURATION) },
@@ -353,6 +428,7 @@ private fun LastFmSettingsSuccess(
 
         item {
             PreferenceEntry(
+                modifier = positions.modifierFor("scrobble_delay_percent"),
                 title = { Text(stringResource(R.string.scrobble_delay_percent)) },
                 description =
                     stringResource(
@@ -365,6 +441,7 @@ private fun LastFmSettingsSuccess(
 
         item {
             PreferenceEntry(
+                modifier = positions.modifierFor("scrobble_delay_minutes"),
                 title = { Text(stringResource(R.string.scrobble_delay_minutes)) },
                 description = stringResource(R.string.duration_seconds_short, model.scrobbleDelaySeconds),
                 onClick = { onOpenTimingEditor(LastFmTimingSetting.DELAY_SECONDS) },
@@ -439,6 +516,7 @@ private fun LastFmLoginDialog(
             }
         },
         confirmButton = {
+            KeepStatusBarHiddenInDialog()
             TextButton(
                 onClick = onLogin,
                 enabled =
@@ -458,117 +536,6 @@ private fun LastFmLoginDialog(
                 shapes = ButtonDefaults.shapes(),
             ) {
                 Text(stringResource(R.string.cancel))
-            }
-        },
-    )
-}
-
-@Composable
-private fun LastFmServiceEditorDialog(
-    editor: LastFmServiceEditorUiModel,
-    onDismiss: () -> Unit,
-    onProviderChange: (LastFmProvider) -> Unit,
-    onCustomEndpointChange: (String) -> Unit,
-    onApiKeyOverrideChange: (String) -> Unit,
-    onSecretOverrideChange: (String) -> Unit,
-    onSave: () -> Unit,
-) {
-    if (!editor.visible) return
-
-    AlertDialog(
-        onDismissRequest = {
-            if (!editor.isSaving) onDismiss()
-        },
-        title = { Text(stringResource(R.string.lastfm_service)) },
-        text = {
-            Column(
-                modifier =
-                    Modifier
-                        .heightIn(max = 420.dp)
-                        .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Text(
-                    text = stringResource(R.string.lastfm_service_provider),
-                    style = MaterialTheme.typography.labelLarge,
-                )
-                Row(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    val providers = remember { LastFmProvider.entries.toList() }
-                    providers.forEach { provider ->
-                        FilterChip(
-                            selected = editor.provider == provider,
-                            onClick = { onProviderChange(provider) },
-                            enabled = !editor.isSaving,
-                            label = { Text(stringResource(provider.titleResId())) },
-                        )
-                    }
-                }
-
-                if (editor.showCustomEndpoint) {
-                    OutlinedTextField(
-                        value = editor.customEndpoint,
-                        onValueChange = onCustomEndpointChange,
-                        label = { Text(stringResource(R.string.lastfm_custom_endpoint)) },
-                        singleLine = true,
-                        isError = editor.errorMessageResId == R.string.lastfm_endpoint_invalid,
-                        enabled = !editor.isSaving,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-
-                if (editor.showApiCredentials) {
-                    OutlinedTextField(
-                        value = editor.apiKeyOverride,
-                        onValueChange = onApiKeyOverrideChange,
-                        label = { Text(stringResource(R.string.lastfm_api_key_override)) },
-                        singleLine = true,
-                        enabled = !editor.isSaving,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    OutlinedTextField(
-                        value = editor.secretOverride,
-                        onValueChange = onSecretOverrideChange,
-                        label = { Text(stringResource(R.string.lastfm_secret_override)) },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        enabled = !editor.isSaving,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    InfoLabel(text = stringResource(R.string.lastfm_api_credentials_hint))
-                }
-
-                editor.errorMessageResId?.let { messageResId ->
-                    Text(
-                        text = stringResource(messageResId),
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = onSave,
-                enabled = !editor.isSaving,
-                shapes = ButtonDefaults.shapes(),
-            ) {
-                Text(stringResource(android.R.string.ok))
-            }
-        },
-        dismissButton = {
-            TextButton(
-                onClick = onDismiss,
-                enabled = !editor.isSaving,
-                shapes = ButtonDefaults.shapes(),
-            ) {
-                Text(stringResource(android.R.string.cancel))
             }
         },
     )
@@ -643,6 +610,7 @@ private fun LastFmTimingEditorDialog(
             }
         },
         confirmButton = {
+            KeepStatusBarHiddenInDialog()
             TextButton(onClick = onSave, shapes = ButtonDefaults.shapes()) {
                 Text(stringResource(android.R.string.ok))
             }
@@ -670,3 +638,86 @@ private fun LastFmTimingSetting.titleResId(): Int =
         LastFmTimingSetting.DELAY_PERCENT -> R.string.scrobble_delay_percent
         LastFmTimingSetting.DELAY_SECONDS -> R.string.scrobble_delay_minutes
     }
+
+@Composable
+private fun LastFmCustomEndpointDialog(
+    visible: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (endpoint: String, apiKey: String, secret: String) -> Unit,
+) {
+    if (!visible) return
+    var endpoint by remember { mutableStateOf("") }
+    var apiKey by remember { mutableStateOf("") }
+    var secret by remember { mutableStateOf("") }
+    var endpointError by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.lastfm_connect_custom_button)) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                InfoLabel(text = stringResource(R.string.lastfm_custom_endpoint_hint))
+                OutlinedTextField(
+                    value = endpoint,
+                    onValueChange = {
+                        endpoint = it
+                        endpointError = false
+                    },
+                    label = { Text(stringResource(R.string.lastfm_custom_endpoint)) },
+                    placeholder = { Text("https://my-scrobbler.example.com/2.0/") },
+                    singleLine = true,
+                    isError = endpointError,
+                    supportingText = if (endpointError) {
+                        { Text(stringResource(R.string.lastfm_endpoint_invalid)) }
+                    } else null,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = apiKey,
+                    onValueChange = { apiKey = it },
+                    label = { Text(stringResource(R.string.lastfm_api_key_override)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = secret,
+                    onValueChange = { secret = it },
+                    label = { Text(stringResource(R.string.lastfm_secret_override)) },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            KeepStatusBarHiddenInDialog()
+            TextButton(
+                onClick = {
+
+                    val normalized = runCatching {
+                        moe.rukamori.archivetune.lastfm.LastFM.normalizeEndpoint(endpoint.trim())
+                    }.getOrNull()
+                    if (normalized.isNullOrBlank()) {
+                        endpointError = true
+                        return@TextButton
+                    }
+                    onSave(normalized, apiKey.trim(), secret.trim())
+                },
+                shapes = ButtonDefaults.shapes(),
+            ) {
+                Text(stringResource(android.R.string.ok))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, shapes = ButtonDefaults.shapes()) {
+                Text(stringResource(android.R.string.cancel))
+            }
+        },
+    )
+}

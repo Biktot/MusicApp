@@ -9,6 +9,7 @@
 
 package moe.rukamori.archivetune.ui.screens.settings
 
+import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -49,7 +50,6 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -67,16 +67,14 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
@@ -86,19 +84,25 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import coil3.compose.AsyncImage
+import kotlinx.coroutines.launch
 import moe.rukamori.archivetune.App.Companion.forgetAccount
+import moe.rukamori.archivetune.auth.YouTubeOAuthRepository
 import moe.rukamori.archivetune.BuildConfig
 import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
+import moe.rukamori.archivetune.LocalStableSystemBarsTopPadding
 import moe.rukamori.archivetune.R
+import dev.chrisbanes.haze.hazeSource
 import moe.rukamori.archivetune.constants.AccountChannelHandleKey
 import moe.rukamori.archivetune.constants.AccountEmailKey
 import moe.rukamori.archivetune.constants.AccountNameKey
 import moe.rukamori.archivetune.constants.DataSyncIdKey
 import moe.rukamori.archivetune.constants.ForceSyncOnAccountSwitchKey
 import moe.rukamori.archivetune.constants.InnerTubeCookieKey
+import moe.rukamori.archivetune.constants.InnerTubeOAuthRefreshTokenKey
 import moe.rukamori.archivetune.constants.SavedAccountsKey
 import moe.rukamori.archivetune.constants.SelectedYtmPlaylistsKey
 import moe.rukamori.archivetune.constants.UseLoginForBrowse
@@ -106,11 +110,13 @@ import moe.rukamori.archivetune.constants.VisitorDataKey
 import moe.rukamori.archivetune.constants.YtmSyncKey
 import moe.rukamori.archivetune.innertube.YouTube
 import moe.rukamori.archivetune.innertube.utils.hasYouTubeLoginCookie
+import moe.rukamori.archivetune.ui.component.FrostedHeaderPill
 import moe.rukamori.archivetune.ui.component.IconButton
 import moe.rukamori.archivetune.ui.component.InfoLabel
 import moe.rukamori.archivetune.ui.component.TextFieldDialog
+import moe.rukamori.archivetune.ui.screens.ScreenHeaderHaze
 import moe.rukamori.archivetune.ui.screens.buildLoginRoute
-import moe.rukamori.archivetune.ui.utils.appBarScrollBehavior
+import moe.rukamori.archivetune.ui.screens.rememberScreenHeaderHaze
 import moe.rukamori.archivetune.ui.utils.backToMain
 import moe.rukamori.archivetune.utils.PreferenceStore
 import moe.rukamori.archivetune.utils.SavedAccount
@@ -124,6 +130,10 @@ import moe.rukamori.archivetune.viewmodels.AccountChannelUiModel
 import moe.rukamori.archivetune.viewmodels.AccountChannelsState
 import moe.rukamori.archivetune.viewmodels.HomeViewModel
 import java.util.UUID
+import androidx.compose.foundation.layout.asPaddingValues
+import moe.rukamori.archivetune.ui.component.KeepStatusBarHiddenInDialog
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 private val AccountContentMaxWidth = 840.dp
 private val AvatarSize = 72.dp
@@ -138,15 +148,13 @@ private data class SavedAccountCollection(
 fun AccountSettings(
     navController: NavController,
     latestVersionName: String,
-    viewModel: HomeViewModel,
 ) {
     val context = LocalContext.current
     val uriHandler = LocalUriHandler.current
-    val scrollBehavior = appBarScrollBehavior()
+    val coroutineScope = rememberCoroutineScope()
 
     val accountLabel = stringResource(R.string.account)
     val generalLabel = stringResource(R.string.general)
-    val integrationLabel = stringResource(R.string.integration)
     val miscLabel = stringResource(R.string.misc)
     val loginLabel = stringResource(R.string.login)
     val tokenDescription = stringResource(R.string.token_adv_login_description)
@@ -163,6 +171,10 @@ fun AccountSettings(
         rememberPreference(ForceSyncOnAccountSwitchKey, false)
     val (selectedYtmPlaylists, _) = rememberPreference(SelectedYtmPlaylistsKey, "")
     val (savedAccountsJson, onSavedAccountsJsonChange) = rememberPreference(SavedAccountsKey, "")
+
+    val (oauthRefreshToken, _) = rememberPreference(InnerTubeOAuthRefreshTokenKey, "")
+    val hasOAuthSession = oauthRefreshToken.isNotBlank()
+
     val savedAccounts =
         remember(savedAccountsJson) {
             SavedAccountCollection(decodeSavedAccounts(savedAccountsJson))
@@ -183,9 +195,11 @@ fun AccountSettings(
         YouTube.useLoginForBrowse = useLoginForBrowse
     }
 
+    val viewModel: HomeViewModel = hiltViewModel()
     val accountNameFromViewModel by viewModel.accountName.collectAsStateWithLifecycle()
     val accountImageUrl by viewModel.accountImageUrl.collectAsStateWithLifecycle()
     val accountChannelsState by viewModel.accountChannelsState.collectAsStateWithLifecycle()
+
     val displayName =
         when {
             accountNameFromViewModel.isNotBlank() -> accountNameFromViewModel
@@ -260,52 +274,57 @@ fun AccountSettings(
     }
 
     Scaffold(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .nestedScroll(scrollBehavior.nestedScrollConnection),
+
+        modifier = Modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.surface,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            LargeFlexibleTopAppBar(
-                title = {
-                    Column {
+            androidx.compose.material3.TopAppBar(
+                title = {},
+                navigationIcon = {
+                    FrostedHeaderPill(plain = true) {
+                        IconButton(
+                            onClick = navController::navigateUp,
+                            onLongClick = navController::backToMain,
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.arrow_back),
+                                contentDescription = null,
+                            )
+                        }
                         Text(
                             text = accountLabel,
-                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(end = 4.dp),
                         )
                     }
                 },
-                navigationIcon = {
-                    IconButton(
-                        onClick = navController::navigateUp,
-                        onLongClick = navController::backToMain,
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.arrow_back),
-                            contentDescription = null,
-                        )
-                    }
-                },
-                windowInsets = TopAppBarDefaults.windowInsets,
                 colors =
-                    TopAppBarDefaults.largeTopAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    TopAppBarDefaults.topAppBarColors(
+
+                        containerColor = Color.Transparent,
+                        scrolledContainerColor = Color.Transparent,
                     ),
-                scrollBehavior = scrollBehavior,
             )
         },
     ) { innerPadding ->
+        val playerAwareBottomPadding =
+            LocalPlayerAwareWindowInsets.current
+                .only(WindowInsetsSides.Bottom)
+                .asPaddingValues()
+                .calculateBottomPadding()
+
+        val headerHaze = rememberScreenHeaderHaze()
+        val systemBarsTopPadding = LocalStableSystemBarsTopPadding.current
         Box(
             modifier =
                 Modifier
                     .fillMaxSize()
                     .windowInsetsPadding(
                         LocalPlayerAwareWindowInsets.current.only(
-                            WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom,
+                            WindowInsetsSides.Horizontal,
                         ),
                     ),
         ) {
@@ -315,13 +334,15 @@ fun AccountSettings(
                         .fillMaxHeight()
                         .widthIn(max = AccountContentMaxWidth)
                         .fillMaxWidth()
-                        .align(Alignment.TopCenter),
+                        .align(Alignment.TopCenter)
+
+                        .hazeSource(headerHaze),
                 contentPadding =
                     PaddingValues(
                         start = 16.dp,
                         top = innerPadding.calculateTopPadding() + 8.dp,
                         end = 16.dp,
-                        bottom = SettingsDimensions.ScreenBottomPadding,
+                        bottom = playerAwareBottomPadding + SettingsDimensions.ScreenBottomPadding,
                     ),
                 verticalArrangement = Arrangement.spacedBy(20.dp),
             ) {
@@ -360,6 +381,48 @@ fun AccountSettings(
                             latestVersion = latestVersionName,
                             onClick = { uriHandler.openUri(Updater.getLatestDownloadUrl()) },
                         )
+                    }
+                }
+
+                item {
+
+                    val browserRowVisible = !isLoggedIn
+                    val rowCount = (if (browserRowVisible) 1 else 0) + (if (hasOAuthSession) 1 else 0)
+                    if (rowCount > 0) {
+                        ExpressiveSectionCard(title = loginLabel) {
+                            if (browserRowVisible) {
+                                ExpressiveActionRow(
+                                    icon = painterResource(R.drawable.login),
+                                    title = stringResource(R.string.yt_browser_sign_in),
+                                    subtitle = stringResource(R.string.yt_browser_sign_in_desc),
+                                    onClick = { navController.navigate(buildLoginRoute()) },
+                                    index = 0,
+                                    count = rowCount,
+                                )
+                            }
+
+                            if (hasOAuthSession) {
+                                ExpressiveActionRow(
+                                    icon = painterResource(R.drawable.logout),
+                                    title = stringResource(R.string.yt_oauth_sign_out),
+                                    subtitle = stringResource(R.string.yt_oauth_sign_out_desc),
+                                    accent = MaterialTheme.colorScheme.error,
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            YouTubeOAuthRepository.signOut(context)
+                                            Toast
+                                                .makeText(
+                                                    context,
+                                                    context.getString(R.string.yt_oauth_signed_out),
+                                                    Toast.LENGTH_SHORT,
+                                                ).show()
+                                        }
+                                    },
+                                    index = rowCount - 1,
+                                    count = rowCount,
+                                )
+                            }
+                        }
                     }
                 }
 
@@ -407,27 +470,6 @@ fun AccountSettings(
                 }
 
                 item {
-                    ExpressiveSectionCard(title = integrationLabel) {
-                        ExpressiveActionRow(
-                            icon = painterResource(R.drawable.integration),
-                            title = integrationLabel,
-                            subtitle = stringResource(R.string.account_integrations_summary),
-                            onClick = { navController.navigate("settings/integration") },
-                            index = 0,
-                            count = 2,
-                        )
-
-                        ExpressiveActionRow(
-                            icon = painterResource(R.drawable.fire),
-                            title = stringResource(R.string.music_together),
-                            onClick = { navController.navigate("settings/music_together") },
-                            index = 1,
-                            count = 2,
-                        )
-                    }
-                }
-
-                item {
                     ExpressiveSectionCard(title = miscLabel) {
                         ExpressiveActionRow(
                             icon = painterResource(R.drawable.visibility_off),
@@ -435,7 +477,7 @@ fun AccountSettings(
                             subtitle = stringResource(R.string.hidden_playlists_description),
                             onClick = { navController.navigate("settings/hidden_playlists") },
                             index = 0,
-                            count = 2,
+                            count = 3,
                         )
 
                         ExpressiveActionRow(
@@ -453,7 +495,16 @@ fun AccountSettings(
                                 }
                             },
                             index = 1,
-                            count = 2,
+                            count = 3,
+                        )
+
+                        ExpressiveActionRow(
+                            icon = painterResource(R.drawable.token),
+                            title = stringResource(R.string.po_token_generation),
+                            subtitle = stringResource(R.string.settings_po_token_subtitle),
+                            onClick = { navController.navigate(PO_TOKEN_ROUTE) },
+                            index = 2,
+                            count = 3,
                         )
                     }
                 }
@@ -462,6 +513,11 @@ fun AccountSettings(
                     VersionStamp()
                 }
             }
+
+            ScreenHeaderHaze(
+                hazeState = headerHaze,
+                systemBarsTopPadding = systemBarsTopPadding,
+            )
         }
     }
 
@@ -524,6 +580,7 @@ fun AccountSettings(
                 Text(text = stringResource(R.string.unsaved_account_dialog_text))
             },
             confirmButton = {
+                KeepStatusBarHiddenInDialog()
                 TextButton(
                     onClick = {
                         showUnsavedAccountDialog = false
@@ -753,6 +810,7 @@ private fun AccountSwitcherSheet(
             .orEmpty()
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
+        KeepStatusBarHiddenInDialog()
         Text(
             text = stringResource(R.string.saved_accounts),
             style = MaterialTheme.typography.headlineSmall,
@@ -777,7 +835,7 @@ private fun AccountSwitcherSheet(
                     key = { index, channel -> "${channel.dataSyncId}:${channel.name}:$index" },
                     contentType = { _, _ -> "channel" },
                 ) { index, channel ->
-                    val isActive = channel.dataSyncId == activeDataSyncId
+                    val isActive = channel.isSelected || channel.dataSyncId == activeDataSyncId
                     SegmentedListItem(
                         selected = isActive,
                         onClick = {
@@ -1309,12 +1367,4 @@ private fun TokenEditorDialog(
             InfoLabel(text = stringResource(R.string.token_adv_login_description))
         },
     )
-}
-
-private fun previewSecureValue(value: String): String {
-    val normalized = value.replace("\n", " ").replace("\r", " ").trim()
-    if (normalized.length <= 76) {
-        return normalized
-    }
-    return normalized.take(52) + "\u2025" + normalized.takeLast(18)
 }

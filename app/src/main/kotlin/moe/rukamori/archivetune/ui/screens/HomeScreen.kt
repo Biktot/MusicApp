@@ -7,7 +7,6 @@
 
 package moe.rukamori.archivetune.ui.screens
 
-import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
@@ -20,30 +19,31 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.LazyGridState
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import moe.rukamori.archivetune.playback.queues.Queue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -51,6 +51,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -58,59 +59,54 @@ import kotlinx.coroutines.CoroutineScope
 import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
 import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.R
+import moe.rukamori.archivetune.constants.DisableBlurKey
+import moe.rukamori.archivetune.constants.HomeCatalogueSwitchKey
 import moe.rukamori.archivetune.constants.QuickPicks
 import moe.rukamori.archivetune.home.HomeAction
-import moe.rukamori.archivetune.home.HomeEvent
 import moe.rukamori.archivetune.home.HomeScreenState
 import moe.rukamori.archivetune.home.HomeUiState
 import moe.rukamori.archivetune.models.MediaMetadata
-import moe.rukamori.archivetune.extensions.toMediaItem
 import moe.rukamori.archivetune.playback.PlayerConnection
-import moe.rukamori.archivetune.playback.queues.ListQueue
-import moe.rukamori.archivetune.playback.queues.YouTubeQueue
-import moe.rukamori.archivetune.ui.component.ExpressivePullToRefreshBox
 import moe.rukamori.archivetune.ui.component.LocalMenuState
 import moe.rukamori.archivetune.ui.component.MenuState
-import moe.rukamori.archivetune.ui.utils.SnapLayoutInfoProvider
+import moe.rukamori.archivetune.utils.rememberPreference
 import moe.rukamori.archivetune.viewmodels.HomeViewModel
+import dev.chrisbanes.haze.hazeSource
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 private val HomeFeedMaxWidth = 1_200.dp
-private val HomeSectionSpacing = 18.dp
+
+private val HomeSectionSpacing = 26.dp
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
     navController: NavController,
-    viewModel: HomeViewModel,
     headerScrollConnection: NestedScrollConnection? = null,
+    listState: LazyListState? = null,
+    viewModel: HomeViewModel = hiltViewModel(),
 ) {
-    val playerConnection = LocalPlayerConnection.current ?: return
+    val playerConnection = LocalPlayerConnection.current
     val menuState = LocalMenuState.current
     val haptic = LocalHapticFeedback.current
 
     val screenState by viewModel.screenState.collectAsStateWithLifecycle()
-    val isPlaying by playerConnection.isPlaying.collectAsStateWithLifecycle()
-    val mediaMetadata by playerConnection.mediaMetadata.collectAsStateWithLifecycle()
-
-    LaunchedEffect(viewModel, playerConnection, navController) {
-        viewModel.events.collect { event ->
-            when (event) {
-                is HomeEvent.OpenPodcast -> navController.navigate("podcast/${Uri.encode(event.browseId)}")
-                is HomeEvent.PlayPodcastEpisode -> {
-                    playerConnection.playQueue(
-                        ListQueue(
-                            title = event.request.title,
-                            items = event.request.items.map { metadata -> metadata.toMediaItem() },
-                            startIndex = event.request.startIndex,
-                        ),
-                    )
-                }
-            }
-        }
+    val isPlaying = playerConnection?.isPlaying?.collectAsStateWithLifecycle()?.value ?: false
+    val mediaMetadata = playerConnection?.mediaMetadata?.collectAsStateWithLifecycle()?.value
+    var pendingQueue by remember { mutableStateOf<Queue?>(null) }
+    val onPlayQueue: (Queue) -> Unit = { queue ->
+        if (playerConnection == null) pendingQueue = queue else playerConnection.playQueue(queue)
     }
+    LaunchedEffect(playerConnection, pendingQueue) {
+        val connection = playerConnection ?: return@LaunchedEffect
+        val queue = pendingQueue ?: return@LaunchedEffect
+        pendingQueue = null
+        connection.playQueue(queue)
+    }
+    androidx.activity.compose.ReportDrawnWhen { screenState !is HomeScreenState.Loading }
 
-    val lazyListState = rememberLazyListState()
-    val forgottenFavoritesGridState = rememberLazyGridState()
+    val lazyListState = listState ?: rememberLazyListState()
     val scope = rememberCoroutineScope()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val scrollToTop =
@@ -143,12 +139,6 @@ fun HomeScreen(
         }
     }
 
-    LaunchedEffect(uiState?.forgottenFavorites) {
-        if (uiState != null) {
-            forgottenFavoritesGridState.scrollToItem(0)
-        }
-    }
-
     if (selectedChip != null) {
         BackHandler {
             viewModel.onAction(HomeAction.SelectChip(selectedChip))
@@ -161,13 +151,13 @@ fun HomeScreen(
         }
     }
 
-    // Attach the shell's floating-header connection inside this screen (Step 2b) so
-    // Home's scroll/fling writes Home's own header state and can't leak into another
-    // route's header. Bubbling reaches this ancestor Box before any shell connection.
+    val homeHazeState = LocalHomeHazeState.current
+    val (disableBlur) = rememberPreference(DisableBlurKey, false)
     Box(
         modifier =
             Modifier
                 .fillMaxSize()
+                .let { m -> if (homeHazeState != null) m.hazeSource(homeHazeState) else m }
                 .then(
                     if (headerScrollConnection != null) {
                         Modifier.nestedScroll(headerScrollConnection)
@@ -176,13 +166,14 @@ fun HomeScreen(
                     },
                 ),
     ) {
+
+        if (!disableBlur) {
+            HomeAtmosphereBackground()
+        }
         when (val state = screenState) {
             HomeScreenState.Loading -> {
-                HomeStatePane(
-                    iconResId = null,
-                    messageResId = null,
-                    showLoadingIndicator = true,
-                )
+
+                HomeSkeletonFeed()
             }
 
             HomeScreenState.Empty -> {
@@ -210,11 +201,11 @@ fun HomeScreen(
                     isPlaying = isPlaying,
                     navController = navController,
                     playerConnection = playerConnection,
+                    onPlayQueue = onPlayQueue,
                     menuState = menuState,
                     haptic = haptic,
                     scope = scope,
                     lazyListState = lazyListState,
-                    forgottenFavoritesGridState = forgottenFavoritesGridState,
                     onAction = viewModel::onAction,
                 )
             }
@@ -274,8 +265,9 @@ private fun HomeStatePane(
 }
 
 @OptIn(
-    ExperimentalFoundationApi::class,
+    androidx.compose.foundation.ExperimentalFoundationApi::class,
     ExperimentalMaterial3ExpressiveApi::class,
+    ExperimentalMaterial3Api::class,
 )
 @Composable
 private fun HomeContent(
@@ -283,12 +275,12 @@ private fun HomeContent(
     mediaMetadata: MediaMetadata?,
     isPlaying: Boolean,
     navController: NavController,
-    playerConnection: PlayerConnection,
+    playerConnection: PlayerConnection?,
+    onPlayQueue: (Queue) -> Unit,
     menuState: MenuState,
     haptic: HapticFeedback,
     scope: CoroutineScope,
     lazyListState: androidx.compose.foundation.lazy.LazyListState,
-    forgottenFavoritesGridState: LazyGridState,
     onAction: (HomeAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -296,45 +288,36 @@ private fun HomeContent(
         uiState
             .takeIf { it.quickPicksMode == QuickPicks.QUICK_PICKS }
             ?.remoteQuickPicks
-    val tonalStart = MaterialTheme.colorScheme.primaryContainer
-    val tonalMiddle = MaterialTheme.colorScheme.secondaryContainer
     Box(modifier = modifier.fillMaxSize()) {
-        if (uiState.showTonalBackdrop) {
-            Box(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .height(430.dp)
-                        .align(Alignment.TopCenter)
-                        .drawWithCache {
-                            val brush =
-                                Brush.verticalGradient(
-                                    0f to tonalStart.copy(alpha = 0.30f),
-                                    0.42f to tonalMiddle.copy(alpha = 0.14f),
-                                    1f to Color.Transparent,
-                                )
-                            onDrawBehind { drawRect(brush) }
-                        },
-            )
-        }
 
-        ExpressivePullToRefreshBox(
+        val pullState = rememberPullToRefreshState()
+        PullToRefreshBox(
             isRefreshing = uiState.isRefreshing,
             onRefresh = { onAction(HomeAction.Refresh) },
+            state = pullState,
+            indicator = {},
             modifier = Modifier.fillMaxSize(),
         ) {
-            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                val forgottenItemWidthFactor = if (maxWidth * 0.475f >= 320.dp) 0.475f else 0.9f
-                val forgottenItemWidth = maxWidth.coerceAtMost(HomeFeedMaxWidth) * forgottenItemWidthFactor
-                val forgottenSnapLayoutInfoProvider =
-                    remember(forgottenFavoritesGridState, forgottenItemWidthFactor) {
-                        SnapLayoutInfoProvider(
-                            lazyGridState = forgottenFavoritesGridState,
-                            positionInLayout = { layoutSize, itemSize ->
-                                layoutSize * forgottenItemWidthFactor / 2f - itemSize / 2f
-                            },
-                        )
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+
+                val allRemoteSections = uiState.homePage?.sections.orEmpty()
+                val (livePerformanceSections, otherRemoteSections) =
+                    remember(allRemoteSections) {
+                        val live =
+                            allRemoteSections
+                                .filter { section ->
+                                    section.title.contains("Live performance", ignoreCase = true)
+                                }.filter { it.items.isNotEmpty() }
+                        val other =
+                            allRemoteSections
+                                .filter { section ->
+                                    !section.title.contains("Live performance", ignoreCase = true)
+                                }.filter { it.items.isNotEmpty() }
+                        live to other
                     }
+
+                val (homeCatalogueSwitchEnabled, _) =
+                    rememberPreference(HomeCatalogueSwitchKey, defaultValue = false)
 
                 LazyColumn(
                     state = lazyListState,
@@ -345,7 +328,48 @@ private fun HomeContent(
                             .fillMaxWidth()
                             .align(Alignment.TopCenter),
                 ) {
-                    if (uiState.showCategoryChips) {
+
+                    item(
+                        key = "home_greeting_title",
+                        contentType = "greeting_title",
+                    ) {
+                        HomeWelcomeHeader(
+                            accountName = uiState.accountName,
+                            modifier = Modifier.animateItem(),
+                        )
+                    }
+
+                    if (homeCatalogueSwitchEnabled) {
+                        item(
+                            key = "home_source_switcher",
+                            contentType = "source_switcher",
+                        ) {
+                            HomeSourceSwitcher(modifier = Modifier.animateItem())
+                        }
+                    }
+
+                    val minimalMode = uiState.minimalHomeMode
+
+                    if (uiState.heroPicks.isNotEmpty()) {
+                        item(
+                            key = "home_jump_back_in",
+                            contentType = "jump_back_in",
+                        ) {
+                            JumpBackInHeroSection(
+                                recentlyPlayed = uiState.heroPicks,
+                                mediaMetadata = mediaMetadata,
+                                isPlaying = isPlaying,
+                                navController = navController,
+                                playerConnection = playerConnection,
+                                onPlayQueue = onPlayQueue,
+                                menuState = menuState,
+                                haptic = haptic,
+                                modifier = Modifier.animateItem(),
+                            )
+                        }
+                    }
+
+                    if (!minimalMode && uiState.showCategoryChips) {
                         item(
                             key = "home_category_chips",
                             contentType = "category_chips",
@@ -359,56 +383,67 @@ private fun HomeContent(
                         }
                     }
 
-                    if (remoteQuickPicks?.items?.isNotEmpty() == true) {
+                    if (!minimalMode) {
+                        if (remoteQuickPicks?.items?.isNotEmpty() == true) {
+                            sectionSpacer("remote_quick_picks")
+                            item(
+                                key = "home_remote_quick_picks_header",
+                                contentType = "section_header",
+                            ) {
+                                HomeSectionHeader(
+                                    title = remoteQuickPicks.title,
+                                    leadingIcon = {
+                                        HomeSectionLeadingIcon(iconRes = R.drawable.discover_tune)
+                                    },
+                                    modifier = Modifier.animateItem(),
+                                )
+                            }
+                            item(
+                                key = "home_remote_quick_picks",
+                                contentType = "media_shelf",
+                            ) {
+                                HomePageSectionContent(
+                                    section = remoteQuickPicks,
+                                    mediaMetadata = mediaMetadata,
+                                    isPlaying = isPlaying,
+                                    navController = navController,
+                                    playerConnection = playerConnection,
+                                    onPlayQueue = onPlayQueue,
+                                    menuState = menuState,
+                                    haptic = haptic,
+                                    scope = scope,
+                                    modifier = Modifier.animateItem(),
+                                )
+                            }
+                        }
+
+                    }
+
+                    if (uiState.recentlyPlayed.size > 1) {
+                        sectionSpacer("recently_played")
                         item(
-                            key = "home_remote_quick_picks_header",
+                            key = "home_recently_played_header",
                             contentType = "section_header",
                         ) {
                             HomeSectionHeader(
-                                title = stringResource(R.string.quick_picks),
+                                title = stringResource(R.string.home_recently_played),
+                                leadingIcon = {
+                                    HomeSectionLeadingIcon(iconRes = R.drawable.history)
+                                },
                                 modifier = Modifier.animateItem(),
                             )
                         }
                         item(
-                            key = "home_remote_quick_picks",
-                            contentType = "quick_picks",
+                            key = "home_recently_played",
+                            contentType = "recently_played",
                         ) {
-                            RemoteQuickPicksSection(
-                                section = remoteQuickPicks,
+                            RecentlyPlayedSection(
+                                recentlyPlayed = uiState.recentlyPlayed,
                                 mediaMetadata = mediaMetadata,
                                 isPlaying = isPlaying,
-                                displayMode = uiState.quickPicksDisplayMode,
                                 navController = navController,
                                 playerConnection = playerConnection,
-                                menuState = menuState,
-                                haptic = haptic,
-                                modifier = Modifier.animateItem(),
-                            )
-                        }
-                    } else if (
-                        uiState.quickPicksMode == QuickPicks.LAST_LISTEN &&
-                            uiState.quickPicks.isNotEmpty()
-                    ) {
-                        item(
-                            key = "home_quick_picks_header",
-                            contentType = "section_header",
-                        ) {
-                            HomeSectionHeader(
-                                title = stringResource(R.string.quick_picks),
-                                modifier = Modifier.animateItem(),
-                            )
-                        }
-                        item(
-                            key = "home_quick_picks",
-                            contentType = "quick_picks",
-                        ) {
-                            QuickPicksSection(
-                                quickPicks = uiState.quickPicks,
-                                mediaMetadata = mediaMetadata,
-                                isPlaying = isPlaying,
-                                displayMode = uiState.quickPicksDisplayMode,
-                                navController = navController,
-                                playerConnection = playerConnection,
+                                onPlayQueue = onPlayQueue,
                                 menuState = menuState,
                                 haptic = haptic,
                                 modifier = Modifier.animateItem(),
@@ -416,45 +451,7 @@ private fun HomeContent(
                         }
                     }
 
-                    uiState.communitySection?.takeIf { section -> section.featuredCards.isNotEmpty() }?.let { section ->
-                        sectionSpacer("community")
-                        item(
-                            key = "home_community_header",
-                            contentType = "section_header",
-                        ) {
-                            val playAll =
-                                remember(section.playEndpoint, playerConnection) {
-                                    section.playEndpoint?.let { endpoint ->
-                                        { playerConnection.playQueue(YouTubeQueue.playlist(endpoint)) }
-                                    }
-                                }
-                            HomePageSectionTitle(
-                                section = section,
-                                navController = navController,
-                                onPlayAll = playAll,
-                                modifier = Modifier.animateItem(),
-                            )
-                        }
-                        item(
-                            key = "home_community",
-                            contentType = "featured_playlist_shelf",
-                        ) {
-                            HomePageSectionContent(
-                                section = section,
-                                mediaMetadata = mediaMetadata,
-                                isPlaying = isPlaying,
-                                navController = navController,
-                                playerConnection = playerConnection,
-                                menuState = menuState,
-                                haptic = haptic,
-                                scope = scope,
-                                onOpenRemoteItem = { itemId -> onAction(HomeAction.OpenRemoteItem(itemId)) },
-                                modifier = Modifier.animateItem(),
-                            )
-                        }
-                    }
-
-                    if (uiState.speedDialItems.isNotEmpty()) {
+                    if (!minimalMode && uiState.speedDialItems.isNotEmpty()) {
                         sectionSpacer("speed_dial")
                         item(
                             key = "home_speed_dial_header",
@@ -462,6 +459,9 @@ private fun HomeContent(
                         ) {
                             HomeSectionHeader(
                                 title = stringResource(R.string.speed_dial),
+                                leadingIcon = {
+                                    HomeSectionLeadingIcon(iconRes = R.drawable.bolt)
+                                },
                                 modifier = Modifier.animateItem(),
                             )
                         }
@@ -475,6 +475,7 @@ private fun HomeContent(
                                 isPlaying = isPlaying,
                                 navController = navController,
                                 playerConnection = playerConnection,
+                                onPlayQueue = onPlayQueue,
                                 menuState = menuState,
                                 haptic = haptic,
                                 scope = scope,
@@ -491,6 +492,9 @@ private fun HomeContent(
                         ) {
                             HomeSectionHeader(
                                 title = stringResource(R.string.keep_listening),
+                                leadingIcon = {
+                                    HomeSectionLeadingIcon(iconRes = R.drawable.listening)
+                                },
                                 modifier = Modifier.animateItem(),
                             )
                         }
@@ -504,6 +508,7 @@ private fun HomeContent(
                                 isPlaying = isPlaying,
                                 navController = navController,
                                 playerConnection = playerConnection,
+                                onPlayQueue = onPlayQueue,
                                 menuState = menuState,
                                 haptic = haptic,
                                 scope = scope,
@@ -512,7 +517,72 @@ private fun HomeContent(
                         }
                     }
 
-                    if (uiState.accountPlaylists.isNotEmpty()) {
+                    if (minimalMode && uiState.speedDialItems.isNotEmpty()) {
+                        sectionSpacer("speed_dial_minimal")
+                        item(
+                            key = "home_speed_dial_header_minimal",
+                            contentType = "section_header",
+                        ) {
+                            HomeSectionHeader(
+                                title = stringResource(R.string.speed_dial),
+                                leadingIcon = {
+                                    HomeSectionLeadingIcon(iconRes = R.drawable.bolt)
+                                },
+                                modifier = Modifier.animateItem(),
+                            )
+                        }
+                        item(
+                            key = "home_speed_dial_minimal",
+                            contentType = "speed_dial",
+                        ) {
+                            SpeedDialSection(
+                                speedDialItems = uiState.speedDialItems,
+                                mediaMetadata = mediaMetadata,
+                                isPlaying = isPlaying,
+                                navController = navController,
+                                playerConnection = playerConnection,
+                                onPlayQueue = onPlayQueue,
+                                menuState = menuState,
+                                haptic = haptic,
+                                scope = scope,
+                                modifier = Modifier.animateItem(),
+                            )
+                        }
+                    }
+
+                    livePerformanceSections.forEachIndexed { index, section ->
+                        val sectionKey = "${section.endpoint?.browseId ?: section.title}_$index"
+                        sectionSpacer("live_performances_$sectionKey")
+                        item(
+                            key = "home_live_performances_header_$sectionKey",
+                            contentType = "section_header",
+                        ) {
+                            HomePageSectionTitle(
+                                section = section,
+                                navController = navController,
+                                modifier = Modifier.animateItem(),
+                            )
+                        }
+                        item(
+                            key = "home_live_performances_$sectionKey",
+                            contentType = "media_shelf",
+                        ) {
+                            HomePageSectionContent(
+                                section = section,
+                                mediaMetadata = mediaMetadata,
+                                isPlaying = isPlaying,
+                                navController = navController,
+                                playerConnection = playerConnection,
+                                onPlayQueue = onPlayQueue,
+                                menuState = menuState,
+                                haptic = haptic,
+                                scope = scope,
+                                modifier = Modifier.animateItem(),
+                            )
+                        }
+                    }
+
+                    if (!minimalMode && uiState.accountPlaylists.isNotEmpty()) {
                         sectionSpacer("account_playlists")
                         item(
                             key = "home_account_playlists",
@@ -529,7 +599,6 @@ private fun HomeContent(
                                     mediaMetadata = mediaMetadata,
                                     isPlaying = isPlaying,
                                     navController = navController,
-                                    playerConnection = playerConnection,
                                     menuState = menuState,
                                     haptic = haptic,
                                     scope = scope,
@@ -538,7 +607,7 @@ private fun HomeContent(
                         }
                     }
 
-                    if (uiState.forgottenFavorites.isNotEmpty()) {
+                    if (!minimalMode && uiState.forgottenFavorites.isNotEmpty()) {
                         sectionSpacer("forgotten_favorites")
                         item(
                             key = "home_forgotten_favorites_header",
@@ -546,6 +615,9 @@ private fun HomeContent(
                         ) {
                             HomeSectionHeader(
                                 title = stringResource(R.string.forgotten_favorites),
+                                leadingIcon = {
+                                    HomeSectionLeadingIcon(iconRes = R.drawable.cached)
+                                },
                                 modifier = Modifier.animateItem(),
                             )
                         }
@@ -557,11 +629,9 @@ private fun HomeContent(
                                 forgottenFavorites = uiState.forgottenFavorites,
                                 mediaMetadata = mediaMetadata,
                                 isPlaying = isPlaying,
-                                horizontalLazyGridItemWidth = forgottenItemWidth,
-                                lazyGridState = forgottenFavoritesGridState,
-                                snapLayoutInfoProvider = forgottenSnapLayoutInfoProvider,
                                 navController = navController,
                                 playerConnection = playerConnection,
+                                onPlayQueue = onPlayQueue,
                                 menuState = menuState,
                                 haptic = haptic,
                                 modifier = Modifier.animateItem(),
@@ -569,85 +639,86 @@ private fun HomeContent(
                         }
                     }
 
-                    if (uiState.similarRecommendations.isNotEmpty()) {
-                        sectionSpacer("similar_recommendations")
-                        item(
-                            key = "home_similar_recommendations",
-                            contentType = "discovery_decks",
-                        ) {
-                            SimilarRecommendationsSection(
-                                recommendations = uiState.similarRecommendations,
-                                mediaMetadata = mediaMetadata,
-                                isPlaying = isPlaying,
-                                navController = navController,
-                                playerConnection = playerConnection,
-                                menuState = menuState,
-                                haptic = haptic,
-                                scope = scope,
-                                modifier = Modifier.animateItem(),
-                            )
+                    if (!minimalMode) {
+                        uiState.similarRecommendations.forEach { recommendation ->
+                            sectionSpacer("similar_${recommendation.title.id}")
+                            item(
+                                key = "home_similar_header_${recommendation.title.id}",
+                                contentType = "section_header",
+                            ) {
+                                SimilarRecommendationsTitle(
+                                    recommendation = recommendation,
+                                    navController = navController,
+                                    modifier = Modifier.animateItem(),
+                                )
+                            }
+                            item(
+                                key = "home_similar_${recommendation.title.id}",
+                                contentType = "media_shelf",
+                            ) {
+                                SimilarRecommendationsSection(
+                                    recommendation = recommendation,
+                                    mediaMetadata = mediaMetadata,
+                                    isPlaying = isPlaying,
+                                    navController = navController,
+                                    menuState = menuState,
+                                    haptic = haptic,
+                                    scope = scope,
+                                    modifier = Modifier.animateItem(),
+                                )
+                            }
                         }
                     }
 
-                    uiState.homePage?.sections.orEmpty().forEachIndexed { index, section ->
-                        val sectionKey = "${section.endpoint?.browseId ?: section.title}_$index"
-                        sectionSpacer("remote_$sectionKey")
-                        item(
-                            key = "home_remote_header_$sectionKey",
-                            contentType = "section_header",
-                        ) {
-                            val playAll =
-                                remember(section.playEndpoint, playerConnection) {
-                                    section.playEndpoint?.let { endpoint ->
-                                        { playerConnection.playQueue(YouTubeQueue.playlist(endpoint)) }
-                                    }
-                                }
-                            HomePageSectionTitle(
-                                section = section,
-                                navController = navController,
-                                onPlayAll = playAll,
-                                modifier = Modifier.animateItem(),
-                            )
-                        }
-                        item(
-                            key = "home_remote_$sectionKey",
-                            contentType = "media_shelf",
-                        ) {
-                            HomePageSectionContent(
-                                section = section,
-                                mediaMetadata = mediaMetadata,
-                                isPlaying = isPlaying,
-                                navController = navController,
-                                playerConnection = playerConnection,
-                                menuState = menuState,
-                                haptic = haptic,
-                                scope = scope,
-                                onOpenRemoteItem = { itemId -> onAction(HomeAction.OpenRemoteItem(itemId)) },
-                                modifier = Modifier.animateItem(),
-                            )
+                    if (!minimalMode) {
+                        otherRemoteSections.forEachIndexed { index, section ->
+                            val sectionKey = "${section.endpoint?.browseId ?: section.title}_$index"
+                            sectionSpacer("remote_$sectionKey")
+                            item(
+                                key = "home_remote_header_$sectionKey",
+                                contentType = "section_header",
+                            ) {
+                                HomePageSectionTitle(
+                                    section = section,
+                                    navController = navController,
+                                    modifier = Modifier.animateItem(),
+                                )
+                            }
+                            item(
+                                key = "home_remote_$sectionKey",
+                                contentType = "media_shelf",
+                            ) {
+                                HomePageSectionContent(
+                                    section = section,
+                                    mediaMetadata = mediaMetadata,
+                                    isPlaying = isPlaying,
+                                    navController = navController,
+                                    playerConnection = playerConnection,
+                                    onPlayQueue = onPlayQueue,
+                                    menuState = menuState,
+                                    haptic = haptic,
+                                    scope = scope,
+                                    modifier = Modifier.animateItem(),
+                                )
+                            }
                         }
                     }
 
                     if (uiState.isLoadingMore) {
-                        item(
-                            key = "home_loading_more",
-                            contentType = "loading",
-                        ) {
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .padding(32.dp)
-                                        .animateItem(),
-                            ) {
-                                LoadingIndicator()
-                            }
-                        }
+                        homeFeedMoreSkeleton()
                     }
                 }
-            }
         }
+        }
+
+        HomePullRefreshLine(
+            refreshing = uiState.isRefreshing,
+            distanceFraction = { pullState.distanceFraction },
+            modifier =
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .offset(y = LocalPlayerAwareWindowInsets.current.asPaddingValues().calculateTopPadding()),
+        )
     }
 }
 
@@ -657,5 +728,32 @@ private fun androidx.compose.foundation.lazy.LazyListScope.sectionSpacer(key: St
         contentType = "section_spacer",
     ) {
         Spacer(Modifier.height(HomeSectionSpacing))
+    }
+}
+
+@Composable
+internal fun HomeSkeletonFeed(
+    modifier: Modifier = Modifier,
+    contentPadding: androidx.compose.foundation.layout.PaddingValues = LocalPlayerAwareWindowInsets.current.asPaddingValues(),
+) {
+    LazyColumn(
+        contentPadding = contentPadding,
+        modifier =
+            modifier
+                .widthIn(max = HomeFeedMaxWidth)
+                .fillMaxWidth(),
+    ) {
+        item(key = "home_skeleton_greeting") {
+            HomeShimmerBox(
+                modifier =
+                    Modifier
+                        .padding(horizontal = HomeFeedGutter)
+                        .padding(vertical = 14.dp)
+                        .fillMaxWidth(0.55f)
+                        .height(34.dp),
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
+            )
+        }
+        homeFeedSkeleton()
     }
 }

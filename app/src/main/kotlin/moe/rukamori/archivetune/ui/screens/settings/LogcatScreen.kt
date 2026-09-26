@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -36,6 +37,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -48,7 +50,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MediumFlexibleTopAppBar
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedListItem
@@ -59,14 +61,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -88,7 +89,14 @@ import moe.rukamori.archivetune.viewmodels.LogcatUiEntries
 import moe.rukamori.archivetune.viewmodels.LogcatUiEntry
 import moe.rukamori.archivetune.viewmodels.LogcatUiModel
 import moe.rukamori.archivetune.viewmodels.LogcatViewModel
+import moe.rukamori.archivetune.ui.component.FrostedHeaderPill
 import moe.rukamori.archivetune.ui.component.IconButton as ArchiveTuneIconButton
+import moe.rukamori.archivetune.ui.screens.ScreenHeaderHaze
+import moe.rukamori.archivetune.ui.screens.rememberScreenHeaderHaze
+import moe.rukamori.archivetune.LocalStableSystemBarsTopPadding
+import dev.chrisbanes.haze.hazeSource
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.runtime.getValue
 
 @Composable
 fun LogcatScreen(
@@ -98,6 +106,10 @@ fun LogcatScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(Unit) {
+        moe.rukamori.archivetune.utils.GlobalLog.flush()
+    }
 
     LaunchedEffect(viewModel, context, snackbarHostState) {
         viewModel.effects.collectLatest { effect ->
@@ -133,7 +145,7 @@ fun LogcatScreen(
                     context.startActivity(
                         Intent.createChooser(
                             exportIntent,
-                            context.getString(R.string.export),
+                            context.getString(R.string.export_logs),
                         ),
                     )
                 }
@@ -195,7 +207,10 @@ private fun LogcatScreenContent(
             -> null
         }
     val listState = rememberLazyListState()
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
+    val headerHaze = rememberScreenHeaderHaze()
+    val systemBarsTopPadding = LocalStableSystemBarsTopPadding.current
+
     val logUserScrollConnection =
         remember(onPauseAutoScroll) {
             object : NestedScrollConnection {
@@ -213,7 +228,7 @@ private fun LogcatScreenContent(
         }
 
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             LogcatTopBar(
                 model = model,
@@ -224,7 +239,6 @@ private fun LogcatScreenContent(
                 onClear = onClear,
                 onShare = onShare,
                 onExport = onExport,
-                scrollBehavior = scrollBehavior,
             )
         },
         floatingActionButton = {
@@ -251,18 +265,22 @@ private fun LogcatScreenContent(
             SnackbarHost(hostState = snackbarHostState)
         },
     ) { innerPadding ->
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .windowInsetsPadding(
-                        LocalPlayerAwareWindowInsets.current.only(
-                            WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom,
-                        ),
-                    ),
-            contentAlignment = Alignment.TopCenter,
-        ) {
+
+        Box(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .windowInsetsPadding(
+                            LocalPlayerAwareWindowInsets.current.only(
+                                WindowInsetsSides.Horizontal,
+                            ),
+                        )
+
+                        .hazeSource(headerHaze),
+                contentAlignment = Alignment.TopCenter,
+            ) {
             when (state) {
                 LogcatScreenState.Loading -> {
                     LoadingIndicator(
@@ -307,6 +325,12 @@ private fun LogcatScreenContent(
                     )
                 }
             }
+            }
+
+            ScreenHeaderHaze(
+                hazeState = headerHaze,
+                systemBarsTopPadding = systemBarsTopPadding,
+            )
         }
     }
 
@@ -328,31 +352,31 @@ private fun LogcatTopBar(
     onClear: () -> Unit,
     onShare: () -> Unit,
     onExport: () -> Unit,
-    scrollBehavior: androidx.compose.material3.TopAppBarScrollBehavior,
 ) {
-    MediumFlexibleTopAppBar(
-        title = {
-            Text(
-                text = stringResource(R.string.debug_logs),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        },
-        subtitle = {
-            Text(
-                text = stringResource(R.string.filter_all_logs),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        },
+    TopAppBar(
+        title = {},
+        colors =
+            TopAppBarDefaults.topAppBarColors(
+                containerColor = Color.Transparent,
+                scrolledContainerColor = Color.Transparent,
+            ),
         navigationIcon = {
-            ArchiveTuneIconButton(
-                onClick = onNavigateBack,
-                onLongClick = onNavigateBackLongClick,
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.arrow_back),
-                    contentDescription = null,
+            FrostedHeaderPill(plain = true) {
+                ArchiveTuneIconButton(
+                    onClick = onNavigateBack,
+                    onLongClick = onNavigateBackLongClick,
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.arrow_back),
+                        contentDescription = null,
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.debug_logs),
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    modifier = Modifier.padding(end = 4.dp),
                 )
             }
         },
@@ -398,7 +422,7 @@ private fun LogcatTopBar(
                         },
                     )
                     DropdownMenuItem(
-                        text = { Text(stringResource(R.string.export)) },
+                        text = { Text(stringResource(R.string.export_logs)) },
                         onClick = onExport,
                         enabled =
                             model?.let { currentModel ->
@@ -425,7 +449,6 @@ private fun LogcatTopBar(
                 }
             }
         },
-        scrollBehavior = scrollBehavior,
     )
 }
 
@@ -440,6 +463,11 @@ private fun LogcatLogContent(
     onCopy: (String) -> Unit,
     onToggleExpanded: (String) -> Unit,
 ) {
+    val playerAwareBottomPadding =
+        LocalPlayerAwareWindowInsets.current
+            .only(WindowInsetsSides.Bottom)
+            .asPaddingValues()
+            .calculateBottomPadding()
     Column(
         modifier =
             Modifier
@@ -507,7 +535,10 @@ private fun LogcatLogContent(
                         .fillMaxWidth()
                         .weight(1f)
                         .nestedScroll(logUserScrollConnection),
-                contentPadding = PaddingValues(vertical = 8.dp),
+                contentPadding = PaddingValues(
+                    top = 8.dp,
+                    bottom = playerAwareBottomPadding + 8.dp,
+                ),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 itemsIndexed(

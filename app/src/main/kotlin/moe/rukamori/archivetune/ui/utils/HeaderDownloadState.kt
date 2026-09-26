@@ -13,8 +13,9 @@ import androidx.core.net.toUri
 import androidx.media3.exoplayer.offline.Download
 import androidx.media3.exoplayer.offline.DownloadRequest
 import androidx.media3.exoplayer.offline.DownloadService
+import moe.rukamori.archivetune.constants.DownloadSourceConfig
+import moe.rukamori.archivetune.playback.DownloadUtil
 import moe.rukamori.archivetune.playback.ExoDownloadService
-import moe.rukamori.archivetune.utils.isLocalMediaId
 
 @Immutable
 sealed interface HeaderDownloadState {
@@ -35,24 +36,42 @@ data class HeaderDownloadItem(
     val title: String,
 )
 
+private fun Map<String, Download>.forSongId(songId: String): Download? =
+    DownloadSourceConfig.songIdToDownloadIds(songId).firstNotNullOfOrNull { this[it] }
+
+private fun Map<String, Download>.isDownloadingSong(songId: String): Boolean =
+    DownloadSourceConfig.songIdToDownloadIds(songId).any { id ->
+        when (this[id]?.state) {
+            Download.STATE_QUEUED,
+            Download.STATE_DOWNLOADING,
+            Download.STATE_RESTARTING,
+            -> true
+
+            else -> false
+        }
+    }
+
 fun headerDownloadState(
     songIds: List<String>,
     downloads: Map<String, Download>,
 ): HeaderDownloadState {
-    val distinctSongIds = songIds.filterNot { it.isLocalMediaId() }.distinct()
-    if (distinctSongIds.isEmpty()) return HeaderDownloadState.None
+    if (songIds.isEmpty()) return HeaderDownloadState.None
 
     var completedCount = 0
     var progressTotal = 0f
+    var hasAnyDownload = false
     var hasRunningDownload = false
     var hasPausedDownload = false
 
+    val distinctSongIds = songIds.distinct()
+
     distinctSongIds.forEach { songId ->
-        val download = downloads[songId]
+        val download = downloads.forSongId(songId)
         when (download?.state) {
             Download.STATE_COMPLETED -> {
                 completedCount++
                 progressTotal += 1f
+                hasAnyDownload = true
             }
 
             Download.STATE_QUEUED,
@@ -65,6 +84,7 @@ fun headerDownloadState(
                         ?.div(100f)
                         ?: 0f
                 progressTotal += progress.coerceIn(0f, 1f)
+                hasAnyDownload = true
                 hasRunningDownload = true
             }
 
@@ -76,6 +96,7 @@ fun headerDownloadState(
                             ?.div(100f)
                             ?: 0f
                     progressTotal += progress.coerceIn(0f, 1f)
+                    hasAnyDownload = true
                     hasPausedDownload =
                         hasPausedDownload || download.stopReason == COLLECTION_PAUSE_STOP_REASON
                 }
@@ -106,15 +127,17 @@ fun sendAddMissingDownloads(
     context: Context,
     songs: List<HeaderDownloadItem>,
     downloads: Map<String, Download>,
+    downloadUtil: DownloadUtil,
 ) {
     songs
         .distinctBy { it.id }
-        .filter { item -> !item.id.isLocalMediaId() && downloads[item.id]?.state.shouldRequestDownload() }
+        .filter { item -> !downloads.isDownloadingSong(item.id) && downloads.forSongId(item.id)?.state.shouldRequestDownload() }
         .forEach { item ->
+            val downloadId = downloadUtil.currentSourceDownloadTarget(item.id).key
             val downloadRequest =
                 DownloadRequest
-                    .Builder(item.id, item.id.toUri())
-                    .setCustomCacheKey(item.id)
+                    .Builder(downloadId, item.id.toUri())
+                    .setCustomCacheKey(downloadId)
                     .setData(item.title.toByteArray())
                     .build()
             DownloadService.sendAddDownload(
@@ -129,24 +152,69 @@ fun sendAddMissingDownloads(
 fun sendRemoveDownloads(
     context: Context,
     songIds: List<String>,
-    downloads: Map<String, Download>? = null,
 ) {
-    val idsToRemove = if (downloads != null) {
-        songIds.distinct().filter { id ->
-            val download = downloads[id]
-            download != null && download.state != Download.STATE_COMPLETED
+    songIds.distinct().forEach { songId ->
+        DownloadSourceConfig.songIdToDownloadIds(songId).forEach { downloadId ->
+            DownloadService.sendRemoveDownload(
+                context,
+                ExoDownloadService::class.java,
+                downloadId,
+                false,
+            )
         }
-    } else {
-        songIds.distinct()
     }
-    idsToRemove.filterNot { it.isLocalMediaId() }.forEach { songId ->
-        DownloadService.sendRemoveDownload(
-            context,
-            ExoDownloadService::class.java,
-            songId,
-            false,
-        )
-    }
+}
+
+fun sendPauseRunningDownloads(
+    context: Context,
+    songIds: List<String>,
+    downloads: Map<String, Download>,
+) {
+    songIds
+        .distinct()
+        .forEach { songId ->
+            DownloadSourceConfig.songIdToDownloadIds(songId).forEach { downloadId ->
+                when (downloads[downloadId]?.state) {
+                    Download.STATE_QUEUED,
+                    Download.STATE_DOWNLOADING,
+                    Download.STATE_RESTARTING,
+                    -> DownloadService.sendSetStopReason(
+                        context,
+                        ExoDownloadService::class.java,
+                        downloadId,
+                        COLLECTION_PAUSE_STOP_REASON,
+                        false,
+                    )
+
+                    else -> Unit
+                }
+            }
+        }
+}
+
+fun sendResumePausedDownloads(
+    context: Context,
+    songIds: List<String>,
+    downloads: Map<String, Download>,
+) {
+    songIds
+        .distinct()
+        .forEach { songId ->
+            DownloadSourceConfig.songIdToDownloadIds(songId).forEach { downloadId ->
+                val download = downloads[downloadId]
+                if (download?.state == Download.STATE_STOPPED &&
+                    download.stopReason == COLLECTION_PAUSE_STOP_REASON
+                ) {
+                    DownloadService.sendSetStopReason(
+                        context,
+                        ExoDownloadService::class.java,
+                        downloadId,
+                        DOWNLOAD_STOP_REASON_NONE,
+                        false,
+                    )
+                }
+            }
+        }
 }
 
 private fun Int?.shouldRequestDownload(): Boolean =

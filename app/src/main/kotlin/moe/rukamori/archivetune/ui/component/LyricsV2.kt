@@ -14,8 +14,11 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -52,24 +55,28 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
@@ -97,45 +104,86 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import moe.rukamori.archivetune.LocalAnimationsDisabled
 import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.R
+import moe.rukamori.archivetune.ui.player.LocalLyricsScrollListener
+import moe.rukamori.archivetune.constants.LyricsClickKey
+import moe.rukamori.archivetune.constants.LyricsLineBlurKey
+import moe.rukamori.archivetune.constants.LyricsLineSpacingKey
+import moe.rukamori.archivetune.constants.LyricsRomanizeChineseKey
+import moe.rukamori.archivetune.constants.LyricsRomanizeHindiKey
+import moe.rukamori.archivetune.constants.LyricsRomanizeJapaneseKey
+import moe.rukamori.archivetune.constants.LyricsRomanizeKoreanKey
+import moe.rukamori.archivetune.constants.LyricsRomanizeOtherLanguagesKey
+import moe.rukamori.archivetune.constants.LyricsScrollKey
+import moe.rukamori.archivetune.constants.LyricsTextSizeKey
+import moe.rukamori.archivetune.constants.LyricsV2BounceFactorKey
+import moe.rukamori.archivetune.constants.LyricsV2FillTransitionWidthKey
+import moe.rukamori.archivetune.constants.LyricsV2GlowFactorKey
+import moe.rukamori.archivetune.constants.LyricsV2LrcBounceEnabledKey
 import moe.rukamori.archivetune.constants.PlayerBackgroundStyle
 import moe.rukamori.archivetune.constants.PlayerBackgroundStyleKey
+import moe.rukamori.archivetune.db.entities.LyricsEntity
+import moe.rukamori.archivetune.db.entities.LyricsEntity.Companion.LYRICS_NOT_FOUND
+import moe.rukamori.archivetune.lyrics.AiLyricsRomanization
 import moe.rukamori.archivetune.lyrics.LyricsEntry
-import moe.rukamori.archivetune.lyrics.LyricsSourceFormat
-import moe.rukamori.archivetune.lyrics.LyricsSyncType
+import moe.rukamori.archivetune.lyrics.LyricsRomanizationPreferences
 import moe.rukamori.archivetune.lyrics.LyricsUtils.findCurrentLineIndex
+import moe.rukamori.archivetune.lyrics.LyricsUtils.hasTrueWordSync
+import moe.rukamori.archivetune.lyrics.LyricsUtils.insertInstrumentalBreaks
+import moe.rukamori.archivetune.lyrics.LyricsUtils.isLineSyncedLrc
+import moe.rukamori.archivetune.lyrics.LyricsUtils.isTtml
+import moe.rukamori.archivetune.lyrics.LyricsUtils.parseLyrics
+import moe.rukamori.archivetune.lyrics.LyricsUtils.parseTtml
+import moe.rukamori.archivetune.lyrics.LyricsUtils.providedRomanizedTextForEntry
 import moe.rukamori.archivetune.lyrics.LyricsUtils.providedTranslationTextForEntry
+import moe.rukamori.archivetune.lyrics.LyricsUtils.romanizeLyricsLine
+import moe.rukamori.archivetune.lyrics.LyricsUtils.shouldRomanizeLyricsLine
 import moe.rukamori.archivetune.lyrics.WordTimestamp
-import moe.rukamori.archivetune.lyrics.toLyricsEntries
 import moe.rukamori.archivetune.ui.component.shimmer.ShimmerHost
 import moe.rukamori.archivetune.ui.component.shimmer.TextPlaceholder
 import moe.rukamori.archivetune.ui.theme.rememberArchiveTuneLyricsFontFamily
 import moe.rukamori.archivetune.ui.utils.smoothFadingEdge
 import moe.rukamori.archivetune.utils.rememberEnumPreference
-import moe.rukamori.archivetune.viewmodels.LyricsRenderScreenState
+import moe.rukamori.archivetune.utils.rememberPreference
+import moe.rukamori.archivetune.utils.reportException
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.math.abs
-import kotlin.math.roundToLong
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
-// ──────────────────────────────────────────────────────────────────────
-// Constants
-// ──────────────────────────────────────────────────────────────────────
-
-/** Lead time offset for LRC-style line-synced lyrics (ms). */
 private const val LRC_LEAD_MS = 300L
 
-/** Lead time offset for word-synced lyrics (ms). */
-private const val WORD_SYNC_LEAD_MS = 0L
+private const val TTML_LEAD_MS = 0L
 
-/** Seconds to wait before auto-scroll resumes after manual scroll. */
+private const val LYRIC_VISUAL_TUNING_OFFSET_MS = 150L
+
+private const val MIN_SWEEP_MS = 180L
+
+private const val V2_POSITION_RESET_BACKWARD_THRESHOLD_MS = 1_000L
+
 private const val MANUAL_SCROLL_TIMEOUT_MS = 3000L
+private const val V2_FIRST_FOCUS_FADE_MS = 200
+private const val V2_FIRST_FOCUS_TIMEOUT_MS = 400L
 
-/** Sentinel entry prepended so auto-scroll has headroom above the first line. */
 private val HEAD_LYRICS_ENTRY = LyricsEntry(time = 0L, text = "")
+
+private class WordSyncCache {
+    private val cache = HashMap<LyricsEntry, Boolean>()
+
+    fun getOrCompute(entry: LyricsEntry): Boolean =
+        cache.getOrPut(entry) { hasTrueWordSync(entry) }
+}
+
+@Composable
+private fun rememberWordSyncCache(): WordSyncCache = remember { WordSyncCache() }
 
 private fun isRtlText(text: String): Boolean {
     for (ch in text) {
@@ -155,19 +203,15 @@ private fun isRtlText(text: String): Boolean {
     return false
 }
 
-// ──────────────────────────────────────────────────────────────────────
-// Main Composable
-// ──────────────────────────────────────────────────────────────────────
-
 @OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun LyricsV2(
-    lyricsState: LyricsRenderScreenState,
     sliderPositionProvider: () -> Long?,
     lyricsSyncOffset: Int,
     modifier: Modifier = Modifier,
     textColorOverride: Color? = null,
     lyricsLineBlurOverride: Boolean? = null,
+    spotifyStyle: Boolean = false,
 ) {
     val playerConnection = LocalPlayerConnection.current ?: return
     val player = playerConnection.player
@@ -175,34 +219,53 @@ fun LyricsV2(
     val density = LocalDensity.current
     val scope = rememberCoroutineScope()
 
-    val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
+    val mediaMetadata by playerConnection.mediaMetadata.collectAsStateWithLifecycle()
 
-    val preparedLyrics = (lyricsState as? LyricsRenderScreenState.Success)?.lyrics
-    val preferences = preparedLyrics?.preferences
-    val lyricsClick = preferences?.clickEnabled ?: true
-    val lyricsScroll = preferences?.scrollEnabled ?: true
-    val lyricsTextSize = preferences?.textSizeSp ?: 26f
-    val lyricsLineSpacing = preferences?.lineSpacing ?: 1.3f
-    val lyricsLineBlurPreference = preferences?.lineBlurEnabled ?: true
-    val bounceFactor = preferences?.v2BounceFactor ?: 1f
-    val glowFactor = preferences?.v2GlowFactor ?: 1f
-    val fillTransitionWidth = preferences?.v2FillTransitionWidthDp ?: 8f
-    val lrcBounceEnabled = preferences?.v2LrcBounceEnabled ?: true
+    val (lyricsClick) = rememberPreference(LyricsClickKey, defaultValue = true)
+    val (lyricsScroll) = rememberPreference(LyricsScrollKey, defaultValue = true)
+    val (lyricsTextSize) = rememberPreference(LyricsTextSizeKey, defaultValue = 26f)
+    val (lyricsLineSpacing) = rememberPreference(LyricsLineSpacingKey, defaultValue = 1.3f)
+    val (lyricsLineBlurPreference) = rememberPreference(LyricsLineBlurKey, defaultValue = false)
+    val (bounceFactorPreference) = rememberPreference(LyricsV2BounceFactorKey, defaultValue = 1f)
+    val (glowFactorPreference) = rememberPreference(LyricsV2GlowFactorKey, defaultValue = 1f)
+    val (fillTransitionWidth) = rememberPreference(LyricsV2FillTransitionWidthKey, defaultValue = 8f)
+    val (lrcBounceEnabledPreference) = rememberPreference(LyricsV2LrcBounceEnabledKey, defaultValue = true)
+    val v2AnimationsDisabled = LocalAnimationsDisabled.current
+    val bounceFactor = if (v2AnimationsDisabled) 0f else bounceFactorPreference
+    val glowFactor = if (v2AnimationsDisabled) 0f else glowFactorPreference
+    val lrcBounceEnabled = lrcBounceEnabledPreference && !v2AnimationsDisabled
+    val (romanizeChinese) = rememberPreference(LyricsRomanizeChineseKey, defaultValue = true)
+    val (romanizeHindi) = rememberPreference(LyricsRomanizeHindiKey, defaultValue = true)
+    val (romanizeJapanese) = rememberPreference(LyricsRomanizeJapaneseKey, defaultValue = true)
+    val (romanizeKorean) = rememberPreference(LyricsRomanizeKoreanKey, defaultValue = true)
+    val (romanizeOtherLanguages) = rememberPreference(LyricsRomanizeOtherLanguagesKey, defaultValue = true)
+    val aiRomanizationSettings = AiLyricsRomanization.rememberSettings()
+    val romanizationPreferences =
+        remember(
+            romanizeJapanese,
+            romanizeKorean,
+            romanizeChinese,
+            romanizeHindi,
+            romanizeOtherLanguages,
+            aiRomanizationSettings.active,
+        ) {
+            LyricsRomanizationPreferences(
+                romanizeJapanese = romanizeJapanese,
+                romanizeKorean = romanizeKorean,
+                romanizeChinese = romanizeChinese,
+                romanizeHindi = romanizeHindi,
+                romanizeOther = romanizeOtherLanguages,
+                aiHandled = aiRomanizationSettings.active,
+            )
+        }
     val lyricsFontFamily = rememberArchiveTuneLyricsFontFamily()
     val playerBackground by rememberEnumPreference(PlayerBackgroundStyleKey, PlayerBackgroundStyle.DEFAULT)
 
-    // ── Text colour derived from background style ──
-    val textColor =
-        textColorOverride ?: if (playerBackground == PlayerBackgroundStyle.DEFAULT) {
-            MaterialTheme.colorScheme.onBackground
-        } else {
-            Color.White
-        }
-    val lyricsLineBlur = lyricsLineBlurOverride ?: lyricsLineBlurPreference
+    val textColor = textColorOverride ?: Color.White
+    val lyricsLineBlur = (lyricsLineBlurOverride ?: lyricsLineBlurPreference) && !v2AnimationsDisabled
 
     val inactiveAlpha = 0.35f
 
-    // ── Selection mode state ──
     var isSelectionModeActive by rememberSaveable { mutableStateOf(false) }
     val selectedIndices = remember { mutableStateListOf<Int>() }
     var showMaxSelectionToast by remember { mutableStateOf(false) }
@@ -211,54 +274,194 @@ fun LyricsV2(
     var shareDialogData by remember { mutableStateOf<Triple<String, String, String>?>(null) }
     var showShareImageDialog by remember { mutableStateOf(false) }
 
-    val showTranslations = preparedLyrics?.lines?.any { line -> line.translation != null } == true
-    val isSynced = preparedLyrics?.syncType != null && preparedLyrics.syncType != LyricsSyncType.PLAIN
-    val isWordSyncedFormat = preparedLyrics?.syncType == LyricsSyncType.WORD
-
-    val lyricsEntries: List<LyricsEntry> =
-        remember(preparedLyrics) {
-            val parsed = preparedLyrics?.toLyricsEntries().orEmpty()
-            if (parsed.isNotEmpty() && parsed.first().time >= 0) {
-                listOf(HEAD_LYRICS_ENTRY) + parsed
-            } else {
-                parsed
-            }
+    val currentLyrics by playerConnection.currentLyrics.collectAsStateWithLifecycle(initialValue = null)
+    val lyrics = currentLyrics?.lyrics
+    val showTranslations =
+        remember(currentLyrics?.source) {
+            currentLyrics?.source == LyricsEntity.Source.AI_TRANSLATION.value
         }
+
+    val isSynced = remember(lyrics) { lyrics != null && (isLineSyncedLrc(lyrics!!) || isTtml(lyrics!!)) }
+    val isTtmlFormat = remember(lyrics) { lyrics != null && isTtml(lyrics!!) }
+
+    var parsedEntries by remember(lyrics) { mutableStateOf<List<LyricsEntry>?>(null) }
+    LaunchedEffect(lyrics) {
+        val text = lyrics
+        if (text == null || text == LYRICS_NOT_FOUND) {
+            parsedEntries = emptyList()
+            return@LaunchedEffect
+        }
+        val dur = player.duration.takeIf { it > 0L } ?: 0L
+        parsedEntries =
+            withContext(Dispatchers.Default) {
+                val parsed =
+                    when {
+                        isTtml(text) -> parseTtml(text)
+                        isLineSyncedLrc(text) -> insertInstrumentalBreaks(parseLyrics(text), dur)
+                        else ->
+                            text
+                                .lines()
+                                .filter { it.isNotBlank() }
+                                .map { line -> LyricsEntry(time = -1L, text = line.trim()) }
+                    }
+                if (parsed.isNotEmpty() && parsed.first().time >= 0) {
+                    listOf(HEAD_LYRICS_ENTRY) + parsed
+                } else {
+                    parsed
+                }
+            }
+    }
+    val lyricsEntries: List<LyricsEntry> = parsedEntries.orEmpty()
 
     val entriesWithWords: List<LyricsEntry> = lyricsEntries
 
-    // ── Playback position tracking ──
-    val leadMs =
-        when {
-            preparedLyrics?.sourceFormat == LyricsSourceFormat.TTML -> WORD_SYNC_LEAD_MS
-            isWordSyncedFormat -> WORD_SYNC_LEAD_MS
-            else -> LRC_LEAD_MS
+    val wordSyncCache = rememberWordSyncCache()
+
+    val aiRomanizationSessionKey =
+        remember(mediaMetadata?.id, lyrics) { AiLyricsRomanization.sessionKey(mediaMetadata?.id, lyrics) }
+    val aiRomanizationResult by AiLyricsRomanization.results.collectAsStateWithLifecycle()
+    val aiRomanizedLines: List<String?> =
+        remember(aiRomanizationResult, aiRomanizationSessionKey, aiRomanizationSettings.active, aiRomanizationSettings.configKey, entriesWithWords) {
+            if (!aiRomanizationSettings.active) {
+                emptyList()
+            } else {
+                AiLyricsRomanization.linesFor(
+                    aiRomanizationSessionKey,
+                    entriesWithWords.map { it.text },
+                    aiRomanizationSettings,
+                )
+            }
         }
-    var currentPositionMs by remember { mutableLongStateOf(0L) }
-    var playbackPositionMs by remember { mutableLongStateOf(0L) }
-    var currentLineIndex by remember { mutableIntStateOf(0) }
-
-    LaunchedEffect(entriesWithWords, isSynced, leadMs, lyricsSyncOffset) {
-        if (!isSynced || entriesWithWords.isEmpty()) return@LaunchedEffect
-        val pollIntervalMs = if (isWordSyncedFormat) 16L else 50L
-        while (isActive) {
-            val sliderPos = sliderPositionProvider()
-            val pos = sliderPos ?: player.currentPosition
-
-            playbackPositionMs = (pos + lyricsSyncOffset.toLong()).coerceAtLeast(0L)
-            currentPositionMs = (playbackPositionMs + leadMs).coerceAtLeast(0L)
-
-            currentLineIndex = findCurrentLineIndex(entriesWithWords, currentPositionMs, 0L)
-            delay(pollIntervalMs)
+    LaunchedEffect(aiRomanizationSessionKey, entriesWithWords, aiRomanizationSettings) {
+        if (!aiRomanizationSettings.active || !aiRomanizationSettings.auto) return@LaunchedEffect
+        if (entriesWithWords.isEmpty()) return@LaunchedEffect
+        AiLyricsRomanization.request(
+            sessionKey = aiRomanizationSessionKey,
+            lines = entriesWithWords.map { it.text },
+            settings = aiRomanizationSettings,
+        )
+    }
+    LaunchedEffect(entriesWithWords, aiRomanizedLines, aiRomanizationSettings.active) {
+        if (!aiRomanizationSettings.active) return@LaunchedEffect
+        entriesWithWords.forEachIndexed { index, entry ->
+            val romanized = aiRomanizedLines.getOrNull(index)?.trim()?.takeIf { it.isNotEmpty() }
+            if (entry.romanizedTextFlow.value != romanized) {
+                entry.romanizedTextFlow.value = romanized
+            }
         }
     }
 
-    // ── Scroll State ──
-    val listState = rememberLazyListState()
+    LaunchedEffect(entriesWithWords, romanizationPreferences) {
+        if (!romanizationPreferences.isEnabled) {
+            if (aiRomanizationSettings.active) return@LaunchedEffect
+            entriesWithWords.forEach { entry ->
+                if (entry.romanizedTextFlow.value != null) {
+                    entry.romanizedTextFlow.value = null
+                }
+            }
+            return@LaunchedEffect
+        }
+
+        entriesWithWords.forEach { entry ->
+            val providerRomanized = providedRomanizedTextForEntry(entry, romanizationPreferences)
+            if (providerRomanized != null) {
+                if (entry.romanizedTextFlow.value != providerRomanized) {
+                    entry.romanizedTextFlow.value = providerRomanized
+                }
+                return@forEach
+            }
+
+            if (!shouldRomanizeLyricsLine(entry.text, romanizationPreferences)) {
+                if (entry.romanizedTextFlow.value != null) {
+                    entry.romanizedTextFlow.value = null
+                }
+                return@forEach
+            }
+
+            launch(Dispatchers.Default) {
+                val romanized =
+                    try {
+                        romanizeLyricsLine(entry.text, romanizationPreferences)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        reportException(e)
+                        null
+                    }
+                entry.romanizedTextFlow.value = romanized
+            }
+        }
+    }
+
+    val leadMs = if (isTtmlFormat) TTML_LEAD_MS else LRC_LEAD_MS
+    val currentPositionMsState = remember(lyrics) { mutableLongStateOf(0L) }
+    var currentPositionMs by currentPositionMsState
+    var playbackPositionMs by remember { mutableLongStateOf(0L) }
+    var currentLineIndex by remember { mutableIntStateOf(0) }
+
+    val currentPositionProvider: () -> Long =
+        remember(currentPositionMsState) { { currentPositionMsState.longValue } }
+
+    val latestSliderPositionProvider = rememberUpdatedState(sliderPositionProvider)
+
+    var lastRawPositionMs by remember(lyrics) { mutableLongStateOf(0L) }
+    var playbackResetTick by remember(lyrics) { mutableIntStateOf(0) }
+
+    LaunchedEffect(entriesWithWords, isSynced, leadMs, lyricsSyncOffset) {
+        if (!isSynced || entriesWithWords.isEmpty()) return@LaunchedEffect
+        val pollIntervalMs =
+            when {
+                v2AnimationsDisabled -> 100L
+                isTtmlFormat -> 16L
+                else -> 50L
+            }
+        val useFrameClock = !v2AnimationsDisabled && isTtmlFormat
+        while (isActive) {
+            val sliderPos = latestSliderPositionProvider.value()
+            val pos = sliderPos ?: player.currentPosition
+
+            val rawPlayerPositionMs = player.currentPosition.coerceAtLeast(0L)
+            if (lastRawPositionMs - rawPlayerPositionMs > V2_POSITION_RESET_BACKWARD_THRESHOLD_MS) {
+                playbackResetTick++
+            }
+            lastRawPositionMs = rawPlayerPositionMs
+
+            playbackPositionMs = (pos + lyricsSyncOffset.toLong()).coerceAtLeast(0L)
+            currentPositionMs = (playbackPositionMs + leadMs + LYRIC_VISUAL_TUNING_OFFSET_MS).coerceAtLeast(0L)
+
+            currentLineIndex = findCurrentLineIndex(entriesWithWords, currentPositionMs, 0L)
+            if (useFrameClock) {
+                withFrameNanos { }
+            } else {
+                delay(pollIntervalMs)
+            }
+        }
+    }
+
+    val listState = key(playbackResetTick) { rememberLazyListState() }
     var isManualScrolling by remember { mutableStateOf(false) }
     var lastManualScrollTime by remember { mutableLongStateOf(0L) }
 
-    // Detect manual scrolling
+    var awaitingFirstFocus by
+        remember(playbackResetTick) {
+            mutableStateOf(isSynced)
+        }
+    LaunchedEffect(awaitingFirstFocus) {
+        if (!awaitingFirstFocus) return@LaunchedEffect
+        delay(V2_FIRST_FOCUS_TIMEOUT_MS)
+        awaitingFirstFocus = false
+    }
+    val firstFocusAlpha =
+        androidx.compose.animation.core.animateFloatAsState(
+            targetValue = if (awaitingFirstFocus) 0f else 1f,
+            animationSpec =
+                tween(
+                    durationMillis = if (awaitingFirstFocus) 0 else V2_FIRST_FOCUS_FADE_MS,
+                    easing = LinearEasing,
+                ),
+            label = "lyrics-v2-first-focus-alpha",
+        )
+
     val nestedScrollConnection =
         remember {
             object : NestedScrollConnection {
@@ -275,7 +478,6 @@ fun LyricsV2(
             }
         }
 
-    // Resume auto-scroll after timeout
     LaunchedEffect(isManualScrolling, lastManualScrollTime) {
         if (isManualScrolling) {
             delay(MANUAL_SCROLL_TIMEOUT_MS)
@@ -283,18 +485,39 @@ fun LyricsV2(
         }
     }
 
-    // Auto-scroll to active line
-    LaunchedEffect(currentLineIndex, isManualScrolling, lyricsScroll) {
-        if (!lyricsScroll || isManualScrolling || !isSynced) return@LaunchedEffect
-        if (currentLineIndex < 0 || currentLineIndex >= entriesWithWords.size) return@LaunchedEffect
+    val onLyricsScroll = LocalLyricsScrollListener.current
+    LaunchedEffect(isManualScrolling) {
+        onLyricsScroll(isManualScrolling)
+    }
+
+    LaunchedEffect(currentLineIndex, isManualScrolling, lyricsScroll, entriesWithWords.size) {
+        if (!lyricsScroll || isManualScrolling || !isSynced) {
+            awaitingFirstFocus = false
+            return@LaunchedEffect
+        }
+        if (currentLineIndex < 0 || currentLineIndex >= entriesWithWords.size) {
+            if (entriesWithWords.isNotEmpty()) awaitingFirstFocus = false
+            return@LaunchedEffect
+        }
+
+        if (awaitingFirstFocus) {
+            val viewportHeight =
+                listState.layoutInfo.viewportSize.height.takeIf { it > 0 }
+                    ?: snapshotFlow { listState.layoutInfo.viewportSize.height }.first { it > 0 }
+            listState.scrollToItem(
+                index = currentLineIndex,
+                scrollOffset = -(viewportHeight * 0.35f).toInt(),
+            )
+            awaitingFirstFocus = false
+            return@LaunchedEffect
+        }
 
         val visibleInfo = listState.layoutInfo
         val viewportHeight = visibleInfo.viewportSize.height
-        val targetOffset = (viewportHeight * 0.35f).toInt() // Center bias at 35% from top
+        val targetOffset = (viewportHeight * 0.35f).toInt()
 
         val distance = abs(currentLineIndex - (listState.firstVisibleItemIndex))
         if (distance > 15) {
-            // Far jump — snap first, then settle
             listState.scrollToItem(
                 (currentLineIndex - 2).coerceAtLeast(0),
                 0,
@@ -323,7 +546,6 @@ fun LyricsV2(
         }
     }
 
-    // ── Keep screen alive ──
     val activity = context as? android.app.Activity
     DisposableEffect(Unit) {
         activity?.window?.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -332,24 +554,15 @@ fun LyricsV2(
         }
     }
 
-    // ── Render ──
     BoxWithConstraints(
         contentAlignment = Alignment.TopCenter,
         modifier =
             modifier
                 .fillMaxSize()
-                .padding(bottom = 12.dp),
+                .padding(bottom = 12.dp)
+                .graphicsLayer { alpha = firstFocusAlpha.value },
     ) {
-        if (lyricsState is LyricsRenderScreenState.Loading) {
-            ShimmerHost {
-                repeat(6) {
-                    TextPlaceholder()
-                }
-            }
-            return@BoxWithConstraints
-        }
-
-        if (lyricsState !is LyricsRenderScreenState.Success) {
+        if (lyrics == LYRICS_NOT_FOUND) {
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center,
@@ -360,6 +573,15 @@ fun LyricsV2(
                     color = textColor.copy(alpha = 0.6f),
                     textAlign = TextAlign.Center,
                 )
+            }
+            return@BoxWithConstraints
+        }
+
+        if (lyrics == null || parsedEntries == null) {
+            ShimmerHost {
+                repeat(6) {
+                    TextPlaceholder()
+                }
             }
             return@BoxWithConstraints
         }
@@ -386,12 +608,14 @@ fun LyricsV2(
                     .fillMaxSize()
                     .nestedScroll(nestedScrollConnection)
                     .smoothFadingEdge(vertical = 80.dp)
-                    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen },
+                    .graphicsLayer {
+                        compositingStrategy = CompositingStrategy.Offscreen
+                    },
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             itemsIndexed(
                 items = entriesWithWords,
-                key = { index, entry -> "${index}_${entry.time}" },
+                key = { index, entry -> "${playbackResetTick}_${index}_${entry.time}" },
                 contentType = { _, entry ->
                     when {
                         entry == HEAD_LYRICS_ENTRY -> "head"
@@ -406,126 +630,24 @@ fun LyricsV2(
                     return@itemsIndexed
                 }
 
-                // ── Instrumental break icon ──
                 if (item.isInstrumental && isSynced) {
-                    val startTimeMs = item.time
-                    val endTimeMs = item.time + item.durationMs
-                    val isActive = playbackPositionMs in startTimeMs until endTimeMs
-                    val distanceFromActive = abs(index - currentLineIndex)
-                    val instrAlpha =
-                        when {
-                            isActive -> {
-                                1f
-                            }
-
-                            isManualScrolling -> {
-                                when {
-                                    distanceFromActive == 1 -> 0.72f
-                                    distanceFromActive == 2 -> 0.56f
-                                    distanceFromActive == 3 -> 0.40f
-                                    else -> 0.28f
-                                }
-                            }
-
-                            distanceFromActive == 1 -> {
-                                0.52f
-                            }
-
-                            distanceFromActive == 2 -> {
-                                0.30f
-                            }
-
-                            distanceFromActive == 3 -> {
-                                0.18f
-                            }
-
-                            else -> {
-                                inactiveAlpha
-                            }
-                        }
-                    val animatedInstrAlpha by androidx.compose.animation.core.animateFloatAsState(
-                        targetValue = instrAlpha,
-                        animationSpec =
-                            androidx.compose.animation.core.tween(
-                                durationMillis = if (isActive) 330 else 500,
-                                easing = androidx.compose.animation.core.FastOutSlowInEasing,
-                            ),
-                        label = "v2InstrumentalAlpha",
+                    InstrumentalBreakRow(
+                        item = item,
+                        index = index,
+                        hasHeadEntry = entriesWithWords.isNotEmpty() && entriesWithWords[0] === HEAD_LYRICS_ENTRY,
+                        currentLineIndex = currentLineIndex,
+                        isManualScrolling = isManualScrolling,
+                        lyricsLineSpacing = lyricsLineSpacing,
+                        lyricsLineBlur = lyricsLineBlur,
+                        lyricsClick = lyricsClick,
+                        textColor = textColor,
+                        inactiveAlpha = inactiveAlpha,
+                        playbackPositionProvider = { playbackPositionMs },
+                        onSeek = { time -> player.seekTo(time) },
                     )
-                    val animatedInstrScale by androidx.compose.animation.core.animateFloatAsState(
-                        targetValue = if (isActive) 1f else 0.95f,
-                        animationSpec =
-                            androidx.compose.animation.core.tween(
-                                durationMillis = 166,
-                                easing = androidx.compose.animation.core.FastOutSlowInEasing,
-                            ),
-                        label = "v2InstrumentalScale",
-                    )
-                    val targetInstrBlur =
-                        when {
-                            !isSynced || isActive || isManualScrolling -> 0f
-                            distanceFromActive == 1 -> 2f
-                            distanceFromActive == 2 -> 5f
-                            else -> 12f
-                        }
-                    val animatedInstrBlur by androidx.compose.animation.core.animateFloatAsState(
-                        targetValue = targetInstrBlur,
-                        animationSpec =
-                            androidx.compose.animation.core.tween(
-                                durationMillis = 300,
-                                easing = androidx.compose.animation.core.FastOutSlowInEasing,
-                            ),
-                        label = "v2InstrumentalBlur",
-                    )
-                    Box(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(
-                                    start = 12.dp,
-                                    end = 12.dp,
-                                    top =
-                                        if (index == 0 || (index == 1 && entriesWithWords[0] == HEAD_LYRICS_ENTRY)) {
-                                            0.dp
-                                        } else {
-                                            (lyricsLineSpacing * 8).dp
-                                        },
-                                    bottom = (lyricsLineSpacing * 8).dp,
-                                ).then(
-                                    if (lyricsLineBlur) {
-                                        Modifier.blur(
-                                            radiusX = animatedInstrBlur.dp,
-                                            radiusY = animatedInstrBlur.dp,
-                                            edgeTreatment = BlurredEdgeTreatment.Unbounded,
-                                        )
-                                    } else {
-                                        Modifier
-                                    },
-                                ).graphicsLayer {
-                                    scaleX = animatedInstrScale
-                                    scaleY = animatedInstrScale
-                                    alpha = animatedInstrAlpha
-                                }.then(
-                                    if (lyricsClick && item.time > 0) {
-                                        Modifier.clickable { player.seekTo(item.time) }
-                                    } else {
-                                        Modifier
-                                    },
-                                ),
-                    ) {
-                        InstrumentalBreakItem(
-                            durationMs = item.durationMs,
-                            currentPositionMs = playbackPositionMs,
-                            startTimeMs = startTimeMs,
-                            textColor = textColor,
-                            inactiveAlpha = inactiveAlpha,
-                        )
-                    }
                     return@itemsIndexed
                 }
 
-                // ── Agent-based positioning ──
-                // v1 or null -> Start, v2 -> End, others -> Center
                 val textAlign =
                     when (item.agent?.lowercase()) {
                         "v1", null -> TextAlign.Start
@@ -544,7 +666,6 @@ fun LyricsV2(
                 val isFuture = isSynced && index > currentLineIndex
                 val isSelected = selectedIndices.contains(index)
 
-                // Distance-based alpha for non-active lines
                 val distanceFromActive = if (isSynced) abs(index - currentLineIndex) else 0
                 val lineAlpha =
                     when {
@@ -615,6 +736,19 @@ fun LyricsV2(
                         ),
                     label = "v2LineAlpha",
                 )
+                val spotifyRise = remember { Animatable(0f) }
+                LaunchedEffect(isActive, spotifyStyle) {
+                    if (!spotifyStyle) return@LaunchedEffect
+                    if (isActive) {
+                        spotifyRise.snapTo(1f)
+                        spotifyRise.animateTo(
+                            0f,
+                            tween(durationMillis = 380, easing = FastOutSlowInEasing),
+                        )
+                    } else {
+                        spotifyRise.snapTo(0f)
+                    }
+                }
                 val lineTransformOrigin =
                     remember(item.agent) {
                         when (item.agent?.lowercase()) {
@@ -635,7 +769,6 @@ fun LyricsV2(
                         }
                     }
 
-                // Background vocal detection
                 val hasBackgroundWords = item.words?.any { it.isBackground } == true
                 val isAllBackground = item.words?.all { it.isBackground || it.text.isBlank() } == true
                 val baseLayoutDirection = LocalLayoutDirection.current
@@ -646,7 +779,7 @@ fun LyricsV2(
                             ?.takeIf { it.isNotBlank() }
                             ?: item.text
                     }
-                val lineIsRtl = remember(item.isRtl, lineText) { item.isRtl ?: isRtlText(lineText) }
+                val lineIsRtl = remember(lineText) { isRtlText(lineText) }
                 val lineLayoutDirection =
                     remember(lineIsRtl, baseLayoutDirection) {
                         if (lineIsRtl) LayoutDirection.Rtl else baseLayoutDirection
@@ -692,6 +825,9 @@ fun LyricsV2(
                                     scaleY = animatedLineScale
                                     alpha = animatedLineAlpha
                                     transformOrigin = lineTransformOrigin
+                                    if (spotifyStyle) {
+                                        translationY = spotifyRise.value * 14.dp.toPx()
+                                    }
                                 }.combinedClickable(
                                     enabled = true,
                                     onClick = {
@@ -725,7 +861,13 @@ fun LyricsV2(
                                 ),
                         horizontalAlignment = horizontalAlignment,
                     ) {
-                        val romanizedText = item.providerRomanizedText
+                        val romanizedText =
+                            if (romanizationPreferences.showsRomanization) {
+                                val value by item.romanizedTextFlow.collectAsStateWithLifecycle()
+                                value
+                            } else {
+                                null
+                            }
                         val translationText =
                             remember(showTranslations, item.providerTranslationText, item.text) {
                                 if (showTranslations) providedTranslationTextForEntry(item) else null
@@ -755,23 +897,41 @@ fun LyricsV2(
                             )
                         }
 
-                        if (item.words != null && isSynced) {
-                            LyricsLineV2(
-                                words = item.words!!,
-                                isActive = isActive,
-                                isPast = isPast,
-                                currentPositionMs = currentPositionMs,
-                                textColor = textColor,
-                                inactiveAlpha = inactiveAlpha,
-                                baseFontSize = lyricsTextSize,
-                                isLineAllBackground = isAllBackground,
-                                textAlign = textAlign,
-                                lyricsFontFamily = lyricsFontFamily,
-                                isRtl = lineIsRtl,
-                                bounceFactor = bounceFactor,
-                                glowFactor = glowFactor,
-                                fillTransitionWidth = fillTransitionWidth,
-                            )
+                        if (item.words != null && isSynced && wordSyncCache.getOrCompute(item)) {
+                            if (spotifyStyle) {
+                                LyricsLineSpotify(
+                                    words = item.words!!,
+                                    isActive = isActive,
+                                    isPast = isPast,
+                                    distanceFromActive = distanceFromActive,
+                                    currentPositionProvider = currentPositionProvider,
+                                    textColor = textColor,
+                                    inactiveAlpha = inactiveAlpha,
+                                    baseFontSize = lyricsTextSize,
+                                    isLineAllBackground = isAllBackground,
+                                    textAlign = textAlign,
+                                    lyricsFontFamily = lyricsFontFamily,
+                                    isRtl = lineIsRtl,
+                                )
+                            } else {
+                                LyricsLineV2(
+                                    words = item.words!!,
+                                    isActive = isActive,
+                                    isPast = isPast,
+                                    distanceFromActive = distanceFromActive,
+                                    currentPositionProvider = currentPositionProvider,
+                                    textColor = textColor,
+                                    inactiveAlpha = inactiveAlpha,
+                                    baseFontSize = lyricsTextSize,
+                                    isLineAllBackground = isAllBackground,
+                                    textAlign = textAlign,
+                                    lyricsFontFamily = lyricsFontFamily,
+                                    isRtl = lineIsRtl,
+                                    bounceFactor = bounceFactor,
+                                    glowFactor = glowFactor,
+                                    fillTransitionWidth = fillTransitionWidth,
+                                )
+                            }
                         } else if (isSynced) {
                             LyricsLineLrcBounce(
                                 text = item.text,
@@ -817,13 +977,11 @@ fun LyricsV2(
                 }
             }
 
-            // Bottom spacer for overscroll
             item {
                 Spacer(modifier = Modifier.height(300.dp))
             }
         }
 
-        // ── Resume auto-scroll button ──
         if (isManualScrolling && isSynced) {
             androidx.compose.material3.FilledTonalButton(
                 onClick = {
@@ -1044,17 +1202,14 @@ fun LyricsV2(
     }
 }
 
-// ──────────────────────────────────────────────────────────────────────
-// Line-level composable: renders words with fluid fill animation
-// ──────────────────────────────────────────────────────────────────────
-
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun LyricsLineV2(
     words: List<WordTimestamp>,
     isActive: Boolean,
     isPast: Boolean,
-    currentPositionMs: Long,
+    distanceFromActive: Int,
+    currentPositionProvider: () -> Long,
     textColor: Color,
     inactiveAlpha: Float,
     baseFontSize: Float,
@@ -1073,11 +1228,19 @@ private fun LyricsLineV2(
             else -> Arrangement.Start
         }
 
-    // Split words into main and background
     val mainWords = words.filter { !it.isBackground }
     val bgWords = words.filter { it.isBackground }
 
-    // 1. Render main words First (if any)
+    val isNearActive = isActive || distanceFromActive <= 1
+    val effectivePositionMs =
+        if (isNearActive) {
+            currentPositionProvider()
+        } else if (isPast) {
+            Long.MAX_VALUE
+        } else {
+            0L
+        }
+
     if (mainWords.isNotEmpty()) {
         FlowRow(
             modifier = Modifier.fillMaxWidth(),
@@ -1106,7 +1269,7 @@ private fun LyricsLineV2(
                     wordIndex = wordIndex,
                     isLineActive = isActive,
                     isLinePast = isPast,
-                    currentPositionMs = currentPositionMs,
+                    currentPositionMs = effectivePositionMs,
                     textColor = textColor,
                     inactiveAlpha = inactiveAlpha,
                     fontSize = if (isLineAllBackground) baseFontSize * 0.82f else baseFontSize,
@@ -1121,13 +1284,12 @@ private fun LyricsLineV2(
         }
     }
 
-    // 2. Render background words explicitly on a NEW line, noticeably smaller
     if (bgWords.isNotEmpty()) {
         val spacerHeight = if (mainWords.isNotEmpty()) 4.dp else 0.dp
         if (mainWords.isNotEmpty()) Spacer(modifier = Modifier.height(spacerHeight))
 
         FlowRow(
-            modifier = Modifier.fillMaxWidth().alpha(0.85f), // Slightly dimmer overall
+            modifier = Modifier.fillMaxWidth().alpha(0.85f),
             horizontalArrangement = arrangement,
         ) {
             bgWords.forEachIndexed { wordIndex, word ->
@@ -1149,11 +1311,11 @@ private fun LyricsLineV2(
                     wordIndex = wordIndex + mainWords.size,
                     isLineActive = isActive,
                     isLinePast = isPast,
-                    currentPositionMs = currentPositionMs,
+                    currentPositionMs = effectivePositionMs,
                     textColor = textColor,
                     inactiveAlpha = inactiveAlpha,
-                    fontSize = baseFontSize * 0.65f, // ~65% size of main text
-                    isBackground = true, // Force dimmer styling inside AnimatedWordV2
+                    fontSize = baseFontSize * 0.65f,
+                    isBackground = true,
                     lyricsFontFamily = lyricsFontFamily,
                     isRtl = isRtl,
                     bounceFactor = bounceFactor,
@@ -1164,10 +1326,6 @@ private fun LyricsLineV2(
         }
     }
 }
-
-// ──────────────────────────────────────────────────────────────────────
-// Word-level composable: liquid fill sweep + glow + bounce
-// ──────────────────────────────────────────────────────────────────────
 
 @Composable
 private fun AnimatedWordV2(
@@ -1186,29 +1344,46 @@ private fun AnimatedWordV2(
     glowFactor: Float,
     fillTransitionWidth: Float,
 ) {
-    val wordStartMs = (word.startTime * 1000).roundToLong()
-    val wordEndMs = (word.endTime * 1000).roundToLong()
+    val wordStartMs = (word.startTime * 1000).toLong()
+    val wordEndMs = (word.endTime * 1000).toLong()
     val wordDuration = (wordEndMs - wordStartMs).coerceAtLeast(1L)
 
     val isWordComplete = currentPositionMs >= wordEndMs
     val isWordActive = currentPositionMs in wordStartMs until wordEndMs
 
-    // Perfect linear progress [0..1] that matches individual word timings
-    val progress =
+    val sweepAnimatable = remember(word) { androidx.compose.animation.core.Animatable(0f) }
+    androidx.compose.runtime.LaunchedEffect(isWordActive, isWordComplete, wordStartMs, wordEndMs) {
         when {
-            isWordComplete -> 1f
-            currentPositionMs <= wordStartMs -> 0f
-            else -> ((currentPositionMs - wordStartMs).toFloat() / wordDuration).coerceIn(0f, 1f)
+            isWordComplete && sweepAnimatable.value < 1f -> {
+                sweepAnimatable.animateTo(
+                    1f,
+                    androidx.compose.animation.core.tween(
+                        durationMillis = 80,
+                        easing = androidx.compose.animation.core.LinearEasing,
+                    ),
+                )
+            }
+            isWordActive -> {
+                val remainingMs = (wordEndMs - currentPositionMs).coerceAtLeast(1L)
+                val animDurationMs = maxOf(remainingMs, MIN_SWEEP_MS)
+                sweepAnimatable.animateTo(
+                    1f,
+                    androidx.compose.animation.core.tween(
+                        durationMillis = animDurationMs.toInt().coerceAtLeast(1),
+                        easing = androidx.compose.animation.core.LinearEasing,
+                    ),
+                )
+            }
+            else -> {
+                sweepAnimatable.snapTo(0f)
+            }
         }
+    }
+    val progress = if (isWordComplete) 1f else sweepAnimatable.value
 
-    // ── Bounce and Float animation ──
-    // Subtle scale up peaking halfway through the word. Exact timing sync!
     val sinProgress = kotlin.math.sin(progress * kotlin.math.PI).toFloat()
     val wordScale = 1f + (0.015f * bounceFactor * sinProgress)
 
-    // Float is only applied when the word is actively sung, making it pop from the line.
-    // We use animateFloatAsState so that when it finishes (and drops to 0f),
-    // it smoothly decays back into place rather than a harsh mathematical snap.
     val targetFloat = if (isWordActive) -4f * bounceFactor * sinProgress else 0f
     val floatOffset by androidx.compose.animation.core.animateFloatAsState(
         targetValue = targetFloat,
@@ -1220,9 +1395,6 @@ private fun AnimatedWordV2(
         label = "v2FloatOffset",
     )
 
-    // ── Glow intensity ──
-    // "lines and words that are done animating shouldnt continue to glow"
-    // Make glow build up faster: reach max intensity at 50% progress
     val glowProgress = (progress * 2f).coerceAtMost(1f)
     val glowAlpha = if (isWordActive) glowProgress * 0.45f * glowFactor else 0f
     val glowRadius = if (isWordActive) glowProgress * 12f * glowFactor else 0f
@@ -1231,7 +1403,25 @@ private fun AnimatedWordV2(
     val fontWeight = if (isLineActive || isLinePast) FontWeight.ExtraBold else FontWeight.SemiBold
     val glowPadding = 10.dp
 
-    // ── Two-layer rendering: dim base + liquid fill overlay ──
+    val baseHeadlineStyle = MaterialTheme.typography.headlineMedium
+    val baseTextStyle =
+        remember(baseHeadlineStyle, actualFontSize, fontWeight, lyricsFontFamily) {
+            baseHeadlineStyle.copy(
+                fontSize = actualFontSize.sp,
+                fontWeight = fontWeight,
+                fontStyle = FontStyle.Normal,
+                lineHeight = (actualFontSize * 1.35f).sp,
+                fontFamily = lyricsFontFamily ?: baseHeadlineStyle.fontFamily,
+            )
+        }
+
+    val sweepColors =
+        if (isRtl) {
+            remember { listOf(Color.Transparent, Color.Black) }
+        } else {
+            remember { listOf(Color.Black, Color.Transparent) }
+        }
+
     Box(
         modifier =
             Modifier
@@ -1259,43 +1449,32 @@ private fun AnimatedWordV2(
                     scaleY = wordScale
                 },
     ) {
-        // Layer 1: Base text (always dimmed)
         Text(
             text = word.text,
-            style =
-                MaterialTheme.typography.headlineMedium.copy(
-                    fontSize = actualFontSize.sp,
-                    fontWeight = fontWeight,
-                    fontStyle = FontStyle.Normal,
-                    lineHeight = (actualFontSize * 1.35f).sp,
-                    fontFamily = lyricsFontFamily ?: MaterialTheme.typography.headlineMedium.fontFamily,
-                ),
+            style = baseTextStyle,
             color = textColor.copy(alpha = if (isBackground) inactiveAlpha * 0.7f else inactiveAlpha),
             modifier = Modifier.padding(glowPadding),
         )
 
-        // Layer 2: Filled overlay with liquid sweep mask + glow
         if (isWordComplete || isWordActive || isLinePast) {
-            Text(
-                text = word.text,
-                style =
-                    MaterialTheme.typography.headlineMedium.copy(
-                        fontSize = actualFontSize.sp,
-                        fontWeight = fontWeight,
-                        fontStyle = FontStyle.Normal,
-                        lineHeight = (actualFontSize * 1.35f).sp,
-                        fontFamily = lyricsFontFamily ?: MaterialTheme.typography.headlineMedium.fontFamily,
-                        shadow =
-                            if (glowAlpha > 0f) {
+            val overlayTextStyle =
+                if (glowAlpha > 0f) {
+                    remember(baseTextStyle, glowAlpha, glowRadius, textColor) {
+                        baseTextStyle.copy(
+                            shadow =
                                 Shadow(
                                     color = textColor.copy(alpha = glowAlpha),
                                     offset = Offset.Zero,
                                     blurRadius = glowRadius.coerceAtLeast(1f),
-                                )
-                            } else {
-                                null
-                            },
-                    ),
+                                ),
+                        )
+                    }
+                } else {
+                    baseTextStyle
+                }
+            Text(
+                text = word.text,
+                style = overlayTextStyle,
                 color =
                     textColor.copy(
                         alpha = if (isBackground) 0.75f else 1f,
@@ -1316,12 +1495,7 @@ private fun AnimatedWordV2(
                                 drawRect(
                                     brush =
                                         androidx.compose.ui.graphics.Brush.horizontalGradient(
-                                            colors =
-                                                if (isRtl) {
-                                                    listOf(Color.Transparent, Color.Black)
-                                                } else {
-                                                    listOf(Color.Black, Color.Transparent)
-                                                },
+                                            colors = sweepColors,
                                             startX = center - edgeWidth,
                                             endX = center + edgeWidth,
                                         ),
@@ -1336,9 +1510,260 @@ private fun AnimatedWordV2(
     }
 }
 
-// ──────────────────────────────────────────────────────────────────────
-// LRC bounce: word-by-word spring bounce for line-synced lyrics
-// ──────────────────────────────────────────────────────────────────────
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun LyricsLineSpotify(
+    words: List<WordTimestamp>,
+    isActive: Boolean,
+    isPast: Boolean,
+    distanceFromActive: Int,
+    currentPositionProvider: () -> Long,
+    textColor: Color,
+    inactiveAlpha: Float,
+    baseFontSize: Float,
+    isLineAllBackground: Boolean,
+    textAlign: TextAlign,
+    lyricsFontFamily: FontFamily?,
+    isRtl: Boolean,
+) {
+    val arrangement =
+        when (textAlign) {
+            TextAlign.Center -> Arrangement.Center
+            TextAlign.End -> Arrangement.End
+            else -> Arrangement.Start
+        }
+
+    val mainWords = words.filter { !it.isBackground }
+    val bgWords = words.filter { it.isBackground }
+
+    val isNearActive = isActive || distanceFromActive <= 1
+    val effectivePositionMs =
+        if (isNearActive) {
+            currentPositionProvider()
+        } else if (isPast) {
+            Long.MAX_VALUE
+        } else {
+            0L
+        }
+
+    val pillVisible = isActive && !isPast
+
+    if (mainWords.isNotEmpty()) {
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = arrangement,
+        ) {
+            mainWords.forEachIndexed { _, word ->
+                if (word.text == " ") {
+                    Text(
+                        text = " ",
+                        style =
+                            MaterialTheme.typography.headlineMedium.copy(
+                                fontSize = if (isLineAllBackground) (baseFontSize * 0.82f).sp else baseFontSize.sp,
+                                fontFamily = lyricsFontFamily ?: MaterialTheme.typography.headlineMedium.fontFamily,
+                            ),
+                        color = Color.Transparent,
+                    )
+                    return@forEachIndexed
+                }
+                if (word.text == "\n") {
+                    Spacer(modifier = Modifier.fillMaxWidth())
+                    return@forEachIndexed
+                }
+                SpotifyWord(
+                    word = word,
+                    isLineActive = isActive,
+                    pillVisible = pillVisible,
+                    currentPositionMs = effectivePositionMs,
+                    textColor = textColor,
+                    inactiveAlpha = inactiveAlpha,
+                    fontSize = if (isLineAllBackground) baseFontSize * 0.82f else baseFontSize,
+                    isBackground = isLineAllBackground,
+                    lyricsFontFamily = lyricsFontFamily,
+                    isRtl = isRtl,
+                )
+            }
+        }
+    }
+
+    if (bgWords.isNotEmpty()) {
+        if (mainWords.isNotEmpty()) Spacer(modifier = Modifier.height(4.dp))
+        FlowRow(
+            modifier = Modifier.fillMaxWidth().alpha(0.85f),
+            horizontalArrangement = arrangement,
+        ) {
+            bgWords.forEachIndexed { _, word ->
+                if (word.text == " ") {
+                    Text(
+                        text = " ",
+                        style =
+                            MaterialTheme.typography.headlineMedium.copy(
+                                fontSize = (baseFontSize * 0.65f).sp,
+                                fontFamily = lyricsFontFamily ?: MaterialTheme.typography.headlineMedium.fontFamily,
+                            ),
+                        color = Color.Transparent,
+                    )
+                    return@forEachIndexed
+                }
+                if (word.text == "\n") {
+                    Spacer(modifier = Modifier.fillMaxWidth())
+                    return@forEachIndexed
+                }
+                SpotifyWord(
+                    word = word,
+                    isLineActive = isActive,
+                    pillVisible = pillVisible,
+                    currentPositionMs = effectivePositionMs,
+                    textColor = textColor,
+                    inactiveAlpha = inactiveAlpha,
+                    fontSize = baseFontSize * 0.65f,
+                    isBackground = true,
+                    lyricsFontFamily = lyricsFontFamily,
+                    isRtl = isRtl,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun SpotifyWord(
+    word: WordTimestamp,
+    isLineActive: Boolean,
+    pillVisible: Boolean,
+    currentPositionMs: Long,
+    textColor: Color,
+    inactiveAlpha: Float,
+    fontSize: Float,
+    isBackground: Boolean,
+    lyricsFontFamily: FontFamily?,
+    isRtl: Boolean,
+) {
+    val wordStartMs = (word.startTime * 1000).toLong()
+    val wordEndMs = (word.endTime * 1000).toLong()
+    val isWordComplete = currentPositionMs >= wordEndMs
+    val isWordActive = currentPositionMs in wordStartMs until wordEndMs
+
+    val sweepAnimatable = remember(word) { Animatable(0f) }
+    LaunchedEffect(isWordActive, isWordComplete, wordStartMs, wordEndMs) {
+        when {
+            isWordComplete && sweepAnimatable.value < 1f -> {
+                sweepAnimatable.animateTo(
+                    1f,
+                    tween(durationMillis = 80, easing = LinearEasing),
+                )
+            }
+
+            isWordActive -> {
+                val remainingMs = (wordEndMs - currentPositionMs).coerceAtLeast(1L)
+                sweepAnimatable.animateTo(
+                    1f,
+                    tween(
+                        durationMillis = maxOf(remainingMs, MIN_SWEEP_MS).toInt().coerceAtLeast(1),
+                        easing = LinearEasing,
+                    ),
+                )
+            }
+
+            else -> {
+                sweepAnimatable.snapTo(0f)
+            }
+        }
+    }
+    val progress = if (isWordComplete) 1f else sweepAnimatable.value
+
+    val pillRadius = 6.dp
+    val pillPaddingHorizontal = 7.dp
+    val pillPaddingVertical = 1.dp
+    val interWordGap = 2.dp
+
+    val baseHeadlineStyle = MaterialTheme.typography.headlineMedium
+    val textStyle =
+        remember(baseHeadlineStyle, fontSize, lyricsFontFamily) {
+            baseHeadlineStyle.copy(
+                fontSize = fontSize.sp,
+                fontWeight = FontWeight.SemiBold,
+                fontStyle = FontStyle.Normal,
+                lineHeight = (fontSize * 1.35f).sp,
+                fontFamily = lyricsFontFamily ?: baseHeadlineStyle.fontFamily,
+            )
+        }
+
+    Box(
+        modifier =
+            Modifier
+                .padding(horizontal = interWordGap)
+                .drawBehind {
+                    if (!pillVisible) return@drawBehind
+                    val r = pillRadius.toPx()
+                    drawRoundRect(
+                        color = textColor.copy(alpha = 0.15f),
+                        cornerRadius = CornerRadius(r),
+                    )
+                    val pillWidth = size.width
+                    val fillPx = pillWidth * progress
+                    if (fillPx > 0f) {
+                        val left = if (isRtl) pillWidth - fillPx else 0f
+                        clipRect(left, 0f, left + fillPx, size.height) {
+                            drawRoundRect(
+                                color = textColor.copy(alpha = 0.32f),
+                                cornerRadius = CornerRadius(r),
+                            )
+                        }
+                    }
+                }
+                .padding(horizontal = pillPaddingHorizontal, vertical = pillPaddingVertical),
+    ) {
+        Text(
+            text = word.text,
+            style = textStyle,
+            color = textColor.copy(alpha = if (isBackground) inactiveAlpha * 0.75f else (inactiveAlpha + 0.1f).coerceAtMost(1f)),
+        )
+
+        if (pillVisible && (isWordComplete || isWordActive) && isLineActive) {
+            Text(
+                text = word.text,
+                style = textStyle,
+                color = textColor.copy(alpha = if (isBackground) 0.75f else 1f),
+                modifier =
+                    if (isWordActive && !isWordComplete) {
+                        Modifier
+                            .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                            .drawWithContent {
+                                val padHpx = pillPaddingHorizontal.toPx()
+                                val pillWidth = size.width + padHpx * 2f
+                                val fillPx = pillWidth * progress
+                                val pillLeft = if (isRtl) pillWidth - fillPx else 0f
+                                val rawLeft = pillLeft - padHpx
+                                val solidFraction = (rawLeft / size.width).coerceIn(0f, 1f)
+                                drawContent()
+                                drawRect(
+                                    brush =
+                                        if (isRtl) {
+                                            Brush.horizontalGradient(
+                                                0f to Color.Transparent,
+                                                solidFraction.coerceAtMost(1f) to Color.Transparent,
+                                                solidFraction.coerceAtLeast(0f) to Color.Black,
+                                                1f to Color.Black,
+                                            )
+                                        } else {
+                                            Brush.horizontalGradient(
+                                                0f to Color.Black,
+                                                solidFraction.coerceIn(0f, 1f) to Color.Black,
+                                                solidFraction.coerceAtLeast(0f) to Color.Transparent,
+                                                1f to Color.Transparent,
+                                            )
+                                        },
+                                    blendMode = BlendMode.DstIn,
+                                )
+                            }
+                    } else {
+                        Modifier
+                    },
+            )
+        }
+    }
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -1469,9 +1894,121 @@ private fun LrcBouncingWord(
     )
 }
 
-// ──────────────────────────────────────────────────────────────────────
-// Instrumental break icon: music-note filled bottom-to-top over the gap
-// ──────────────────────────────────────────────────────────────────────
+@Composable
+private fun InstrumentalBreakRow(
+    item: LyricsEntry,
+    index: Int,
+    hasHeadEntry: Boolean,
+    currentLineIndex: Int,
+    isManualScrolling: Boolean,
+    lyricsLineSpacing: Float,
+    lyricsLineBlur: Boolean,
+    lyricsClick: Boolean,
+    textColor: Color,
+    inactiveAlpha: Float,
+    playbackPositionProvider: () -> Long,
+    onSeek: (Long) -> Unit,
+) {
+    val startTimeMs = item.time
+    val endTimeMs = item.time + item.durationMs
+    val playbackPositionMs = playbackPositionProvider()
+    val isActive = playbackPositionMs in startTimeMs until endTimeMs
+    val distanceFromActive = abs(index - currentLineIndex)
+    val instrAlpha =
+        when {
+            isActive -> 1f
+            isManualScrolling -> {
+                when {
+                    distanceFromActive == 1 -> 0.72f
+                    distanceFromActive == 2 -> 0.56f
+                    distanceFromActive == 3 -> 0.40f
+                    else -> 0.28f
+                }
+            }
+            distanceFromActive == 1 -> 0.52f
+            distanceFromActive == 2 -> 0.30f
+            distanceFromActive == 3 -> 0.18f
+            else -> inactiveAlpha
+        }
+    val animatedInstrAlpha by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = instrAlpha,
+        animationSpec =
+            androidx.compose.animation.core.tween(
+                durationMillis = if (isActive) 330 else 500,
+                easing = androidx.compose.animation.core.FastOutSlowInEasing,
+            ),
+        label = "v2InstrumentalAlpha",
+    )
+    val animatedInstrScale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isActive) 1f else 0.95f,
+        animationSpec =
+            androidx.compose.animation.core.tween(
+                durationMillis = 166,
+                easing = androidx.compose.animation.core.FastOutSlowInEasing,
+            ),
+        label = "v2InstrumentalScale",
+    )
+    val targetInstrBlur =
+        when {
+            isActive || isManualScrolling -> 0f
+            distanceFromActive == 1 -> 2f
+            distanceFromActive == 2 -> 5f
+            else -> 12f
+        }
+    val animatedInstrBlur by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = targetInstrBlur,
+        animationSpec =
+            androidx.compose.animation.core.tween(
+                durationMillis = 300,
+                easing = androidx.compose.animation.core.FastOutSlowInEasing,
+            ),
+        label = "v2InstrumentalBlur",
+    )
+    Box(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(
+                    start = 12.dp,
+                    end = 12.dp,
+                    top =
+                        if (index == 0 || (index == 1 && hasHeadEntry)) {
+                            0.dp
+                        } else {
+                            (lyricsLineSpacing * 8).dp
+                        },
+                    bottom = (lyricsLineSpacing * 8).dp,
+                ).then(
+                    if (lyricsLineBlur) {
+                        Modifier.blur(
+                            radiusX = animatedInstrBlur.dp,
+                            radiusY = animatedInstrBlur.dp,
+                            edgeTreatment = BlurredEdgeTreatment.Unbounded,
+                        )
+                    } else {
+                        Modifier
+                    },
+                ).graphicsLayer {
+                    scaleX = animatedInstrScale
+                    scaleY = animatedInstrScale
+                    alpha = animatedInstrAlpha
+                }.then(
+                    if (lyricsClick && item.time > 0) {
+                        Modifier.clickable { onSeek(item.time) }
+                    } else {
+                        Modifier
+                    },
+                ),
+    ) {
+        InstrumentalBreakItem(
+            durationMs = item.durationMs,
+            currentPositionMs = playbackPositionMs,
+            startTimeMs = startTimeMs,
+            textColor = textColor,
+            inactiveAlpha = inactiveAlpha,
+        )
+    }
+}
 
 @Composable
 private fun InstrumentalBreakItem(

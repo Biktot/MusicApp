@@ -9,6 +9,7 @@
 
 package moe.rukamori.archivetune.ui.screens
 
+import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -20,6 +21,9 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -35,6 +39,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
@@ -46,11 +52,9 @@ import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,7 +67,11 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
@@ -76,25 +84,34 @@ import com.valentinilk.shimmer.shimmer
 import moe.rukamori.archivetune.LocalDatabase
 import moe.rukamori.archivetune.LocalDownloadUtil
 import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
+import moe.rukamori.archivetune.LocalStableSystemBarsTopPadding
 import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.R
+import moe.rukamori.archivetune.constants.AlbumCanvasEnabledKey
 import moe.rukamori.archivetune.constants.AppBarHeight
 import moe.rukamori.archivetune.constants.HideExplicitKey
+import moe.rukamori.archivetune.constants.LiquidGlassEnabledKey
+import moe.rukamori.archivetune.ui.player.LocalPlayerLyricsFullScreen
 import moe.rukamori.archivetune.db.entities.Album
 import moe.rukamori.archivetune.extensions.togglePlayPause
 import moe.rukamori.archivetune.playback.queues.LocalAlbumRadio
 import moe.rukamori.archivetune.ui.component.IconButton
+import moe.rukamori.archivetune.ui.component.LiquidGlassActionPill
+import moe.rukamori.archivetune.ui.component.GlassPillTitleText
 import moe.rukamori.archivetune.ui.component.LocalMenuState
 import moe.rukamori.archivetune.ui.component.MediaDetailAction
 import moe.rukamori.archivetune.ui.component.MediaDetailHero
-import moe.rukamori.archivetune.ui.component.MediaDetailStatePanel
 import moe.rukamori.archivetune.ui.component.NavigationTitle
 import moe.rukamori.archivetune.ui.component.SongListItem
 import moe.rukamori.archivetune.ui.component.YouTubeGridItem
+import moe.rukamori.archivetune.ui.component.layerBackdrop
+import moe.rukamori.archivetune.ui.component.liquidGlassContentColor
+import moe.rukamori.archivetune.ui.component.rememberBackdrop
 import moe.rukamori.archivetune.ui.component.shimmer.ButtonPlaceholder
 import moe.rukamori.archivetune.ui.component.shimmer.ListItemPlaceHolder
 import moe.rukamori.archivetune.ui.component.shimmer.ShimmerHost
 import moe.rukamori.archivetune.ui.component.shimmer.TextPlaceholder
+import moe.rukamori.archivetune.ui.component.rememberLayerBackdropSettled
 import moe.rukamori.archivetune.ui.menu.AlbumMenu
 import moe.rukamori.archivetune.ui.menu.SelectionSongMenu
 import moe.rukamori.archivetune.ui.menu.SongMenu
@@ -107,10 +124,17 @@ import moe.rukamori.archivetune.ui.utils.backToMain
 import moe.rukamori.archivetune.ui.utils.headerDownloadState
 import moe.rukamori.archivetune.ui.utils.sendAddMissingDownloads
 import moe.rukamori.archivetune.ui.utils.sendRemoveDownloads
+import moe.rukamori.archivetune.ui.utils.sendPauseRunningDownloads
+import moe.rukamori.archivetune.ui.utils.sendResumePausedDownloads
 import moe.rukamori.archivetune.utils.makeTimeString
 import moe.rukamori.archivetune.utils.rememberPreference
 import moe.rukamori.archivetune.viewmodels.AlbumUiState
 import moe.rukamori.archivetune.viewmodels.AlbumViewModel
+import dev.chrisbanes.haze.hazeSource
+import moe.rukamori.archivetune.ui.screens.ScreenHeaderHaze
+import moe.rukamori.archivetune.ui.screens.rememberScreenHeaderHaze
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -126,7 +150,6 @@ fun AlbumScreen(
     val playerConnection = LocalPlayerConnection.current ?: return
 
     val scope = rememberCoroutineScope()
-    val retry = remember(viewModel) { viewModel::retry }
 
     val isPlaying by playerConnection.isPlaying.collectAsStateWithLifecycle()
     val mediaMetadata by playerConnection.mediaMetadata.collectAsStateWithLifecycle()
@@ -134,10 +157,25 @@ fun AlbumScreen(
     val albumWithSongs by viewModel.albumWithSongs.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val otherVersions by viewModel.otherVersions.collectAsStateWithLifecycle()
+    val canvasArtwork by viewModel.canvasArtwork.collectAsStateWithLifecycle()
     val hideExplicit by rememberPreference(key = HideExplicitKey, defaultValue = false)
 
-    // System bars padding
-    val systemBarsTopPadding = WindowInsets.systemBars.asPaddingValues().calculateTopPadding()
+    val albumCanvasEnabled by rememberPreference(key = AlbumCanvasEnabledKey, defaultValue = true)
+
+    val liquidGlassEnabled by rememberPreference(
+        key = LiquidGlassEnabledKey,
+        defaultValue = false,
+    )
+    val liquidGlassHeaderActive =
+        liquidGlassEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
+    val lyricsFullScreen = LocalPlayerLyricsFullScreen.current
+
+    val screenSettled = rememberLayerBackdropSettled()
+
+    val layerBackdropActive = liquidGlassHeaderActive && !lyricsFullScreen && screenSettled
+
+    val systemBarsTopPadding = LocalStableSystemBarsTopPadding.current
 
     val surfaceColor = MaterialTheme.colorScheme.surface
 
@@ -193,7 +231,7 @@ fun AlbumScreen(
     }
 
     LaunchedEffect(albumWithSongs) {
-        val songIds = albumWithSongs?.songs?.filterNot { it.song.isLocal }?.map { it.id }.orEmpty()
+        val songIds = albumWithSongs?.songs?.map { it.id }.orEmpty()
         if (songIds.isEmpty()) {
             downloads = emptyMap()
             downloadState = HeaderDownloadState.None
@@ -205,7 +243,6 @@ fun AlbumScreen(
         }
     }
 
-    // State for LazyColumn to track scroll
     val lazyListState = rememberLazyListState()
 
     val showTopBarTitle by remember {
@@ -220,6 +257,9 @@ fun AlbumScreen(
         }
     }
 
+    val artworkBackdrop = rememberBackdrop(surfaceColor)
+
+    val headerHaze = rememberScreenHeaderHaze()
     Box(
         modifier =
             Modifier
@@ -227,6 +267,12 @@ fun AlbumScreen(
                 .background(surfaceColor),
     ) {
         LazyColumn(
+            modifier =
+                (if (layerBackdropActive) {
+                    Modifier.layerBackdrop(artworkBackdrop)
+                } else {
+                    Modifier
+                }).hazeSource(headerHaze),
             state = lazyListState,
             contentPadding =
                 PaddingValues(
@@ -241,10 +287,22 @@ fun AlbumScreen(
                         remember(albumWithSongs.artists) {
                             buildAnnotatedString {
                                 albumWithSongs.artists.fastForEachIndexed { index, artist ->
+
+                                    val linkStyles =
+                                        TextLinkStyles(
+                                            style = SpanStyle(textDecoration = TextDecoration.None),
+                                            focusedStyle = SpanStyle(textDecoration = TextDecoration.None),
+                                            hoveredStyle = SpanStyle(textDecoration = TextDecoration.None),
+                                            pressedStyle = SpanStyle(textDecoration = TextDecoration.None),
+                                        )
                                     withLink(
-                                        LinkAnnotation.Clickable(artist.id) {
-                                            navController.navigate("artist/${artist.id}")
-                                        },
+                                        LinkAnnotation.Clickable(
+                                            tag = artist.id,
+                                            styles = linkStyles,
+                                            linkInteractionListener = {
+                                                navController.navigate("artist/${artist.id}")
+                                            },
+                                        ),
                                     ) {
                                         append(artist.name)
                                     }
@@ -279,6 +337,14 @@ fun AlbumScreen(
                         isAdded = isBookmarked,
                         addContentDescription = R.string.add_to_library,
                         removeContentDescription = R.string.remove_from_library,
+
+                        canvasPrimaryUrl =
+                            (canvasArtwork?.animated ?: canvasArtwork?.videoUrl)
+                                ?.takeIf { albumCanvasEnabled },
+                        canvasFallbackUrl = canvasArtwork?.videoUrl?.takeIf { albumCanvasEnabled },
+                        canvasIsPlaying = true,
+
+                        canvasVisible = !lyricsFullScreen,
                         onShuffle =
                             if (albumWithSongs.songs.isEmpty()) {
                                 null
@@ -301,13 +367,9 @@ fun AlbumScreen(
                                     playerConnection.playQueue(LocalAlbumRadio(albumWithSongs))
                                 }
                             },
-                        onToggleAdd = {
-                            database.query {
-                                update(albumWithSongs.album.toggleLike())
-                            }
-                        },
+                        onToggleAdd = null,
                         additionalPrimaryActions = { contentColor ->
-                            if (!albumWithSongs.album.isLocal && albumWithSongs.songs.any { !it.song.isLocal }) {
+                            if (albumWithSongs.songs.isNotEmpty()) {
                                 MediaDetailAction(
                                     contentDescription =
                                         if (downloadState == HeaderDownloadState.Completed) {
@@ -317,7 +379,8 @@ fun AlbumScreen(
                                         },
                                     contentColor = contentColor,
                                     onClick = {
-                                        when (downloadState) {
+                                        val headerState = downloadState
+                                        when (headerState) {
                                             HeaderDownloadState.Completed -> {
                                                 sendRemoveDownloads(
                                                     context = context,
@@ -326,11 +389,20 @@ fun AlbumScreen(
                                             }
 
                                             is HeaderDownloadState.Partial -> {
-                                                sendRemoveDownloads(
-                                                    context = context,
-                                                    songIds = albumWithSongs.songs.map { it.id },
-                                                    downloads = downloads,
-                                                )
+
+                                                if (headerState.paused) {
+                                                    sendResumePausedDownloads(
+                                                        context = context,
+                                                        songIds = albumWithSongs.songs.map { it.id },
+                                                        downloads = downloads,
+                                                    )
+                                                } else {
+                                                    sendPauseRunningDownloads(
+                                                        context = context,
+                                                        songIds = albumWithSongs.songs.map { it.id },
+                                                        downloads = downloads,
+                                                    )
+                                                }
                                             }
 
                                             HeaderDownloadState.None -> {
@@ -344,6 +416,7 @@ fun AlbumScreen(
                                                             )
                                                         },
                                                     downloads = downloads,
+                                                    downloadUtil = downloadUtil,
                                                 )
                                                 navController.navigate("auto_playlist/downloaded?tab=progress")
                                             }
@@ -376,44 +449,25 @@ fun AlbumScreen(
                                         }
                                     }
                                 }
-
-                                MediaDetailAction(
-                                    contentDescription = R.string.download,
-                                    contentColor = contentColor,
-                                    onClick = {
-                                        navController.navigate(
-                                            "auto_playlist/downloaded?tab=progress",
-                                        )
-                                    },
-                                ) {
-                                    val globalProgress = (globalDownloadState as? HeaderDownloadState.Partial)?.progress ?: 0f
-                                    val globalPaused = (globalDownloadState as? HeaderDownloadState.Partial)?.paused ?: false
-                                    HeaderDownloadProgressIndicator(
-                                        progress = globalProgress,
-                                        paused = globalPaused,
-                                        icon = R.drawable.list,
-                                    )
-                                }
                             }
                         },
+                        useBlurredPlayButton = liquidGlassHeaderActive,
                     )
                 }
 
-                // Songs Section Header
                 item(key = "songs_header") {
                     NavigationTitle(
                         title = stringResource(R.string.songs),
                     )
                 }
 
-                // Songs List
                 itemsIndexed(
                     items = wrappedSongs,
                     key = { _, song -> song.item.id },
                 ) { index, songWrapper ->
                     SongListItem(
                         song = songWrapper.item,
-                        albumIndex = songWrapper.item.song.trackNumber ?: (index + 1),
+                        albumIndex = index + 1,
                         isActive = songWrapper.item.id == mediaMetadata?.id,
                         isPlaying = isPlaying,
                         showInLibraryIcon = true,
@@ -466,7 +520,6 @@ fun AlbumScreen(
                     )
                 }
 
-                // Other Versions Section
                 if (otherVersions.isNotEmpty()) {
                     item(key = "other_versions_header") {
                         NavigationTitle(
@@ -507,7 +560,7 @@ fun AlbumScreen(
             } else {
                 when (val state = uiState) {
                     AlbumUiState.Loading,
-                    AlbumUiState.Success,
+                    AlbumUiState.Content,
                     -> {
                         item(key = "shimmer") {
                             ShimmerHost {
@@ -580,44 +633,243 @@ fun AlbumScreen(
 
                     AlbumUiState.Empty -> {
                         item(key = "empty") {
-                            MediaDetailStatePanel(
-                                title = stringResource(R.string.empty_album),
-                                description = stringResource(R.string.empty_album_desc),
-                                iconRes = R.drawable.album,
+                            Column(
                                 modifier =
                                     Modifier
-                                        .fillParentMaxSize()
-                                        .padding(top = systemBarsTopPadding + AppBarHeight),
-                            )
+                                        .fillMaxWidth()
+                                        .padding(top = systemBarsTopPadding + AppBarHeight)
+                                        .padding(32.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.empty_album),
+                                    style = MaterialTheme.typography.titleLarge,
+                                    textAlign = TextAlign.Center,
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = stringResource(R.string.empty_album_desc),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                )
+                            }
                         }
                     }
 
                     is AlbumUiState.Error -> {
                         item(key = "error") {
-                            MediaDetailStatePanel(
-                                title =
-                                    stringResource(
-                                        if (state.isNotFound) R.string.album_not_found else R.string.error_unknown,
-                                    ),
-                                description =
-                                    stringResource(
-                                        if (state.isNotFound) R.string.album_not_found_desc else R.string.error_unknown,
-                                    ),
-                                iconRes = R.drawable.error,
-                                actionLabel = stringResource(R.string.retry),
-                                onAction = retry,
+                            Column(
                                 modifier =
                                     Modifier
-                                        .fillParentMaxSize()
-                                        .padding(top = systemBarsTopPadding + AppBarHeight),
-                            )
+                                        .fillMaxWidth()
+                                        .padding(top = systemBarsTopPadding + AppBarHeight)
+                                        .padding(32.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                Text(
+                                    text =
+                                        if (state.isNotFound) {
+                                            stringResource(
+                                                R.string.album_not_found,
+                                            )
+                                        } else {
+                                            stringResource(R.string.error_unknown)
+                                        },
+                                    style = MaterialTheme.typography.titleLarge,
+                                    color = if (state.isNotFound) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.error,
+                                    textAlign = TextAlign.Center,
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text =
+                                        if (state.isNotFound) {
+                                            stringResource(
+                                                R.string.album_not_found_desc,
+                                            )
+                                        } else {
+                                            stringResource(R.string.error_unknown)
+                                        },
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Button(onClick = { viewModel.retry() }, shapes = ButtonDefaults.shapes()) {
+                                    Text(stringResource(R.string.retry))
+                                }
+                            }
                         }
                     }
                 }
             }
         }
 
-        // Top App Bar
+        ScreenHeaderHaze(
+            hazeState = headerHaze,
+            systemBarsTopPadding = systemBarsTopPadding,
+        )
+
+        val currentAlbumWithSongs = albumWithSongs
+        if (layerBackdropActive && currentAlbumWithSongs != null &&
+            currentAlbumWithSongs.songs.isNotEmpty()
+        ) {
+            LiquidGlassActionPill(
+                backdrop = artworkBackdrop,
+                interactive = true,
+                modifier =
+                    Modifier
+                        .align(Alignment.TopStart)
+                        .padding(start = 12.dp, top = systemBarsTopPadding + 12.dp),
+            ) {
+                IconButton(
+                    onClick = {
+                        if (selection) {
+                            selection = false
+                            wrappedSongs.forEach { it.isSelected = false }
+                        } else {
+                            navController.navigateUp()
+                        }
+                    },
+                    onLongClick = {
+                        if (!selection) {
+                            navController.backToMain()
+                        }
+                    },
+                    modifier = Modifier.size(48.dp),
+                ) {
+                    Icon(
+                        painter =
+                            painterResource(
+                                if (selection) R.drawable.close else R.drawable.arrow_back,
+                            ),
+                        contentDescription = stringResource(R.string.back_button_desc),
+                        tint = liquidGlassContentColor(),
+                    )
+                }
+                if (selection) {
+                    val count = wrappedSongs.count { it.isSelected }
+                    GlassPillTitleText(
+                        text = pluralStringResource(R.plurals.n_song, count, count),
+                    )
+                }
+            }
+            LiquidGlassActionPill(
+                backdrop = artworkBackdrop,
+                modifier =
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(end = 12.dp, top = systemBarsTopPadding + 12.dp),
+            ) {
+                if (selection) {
+
+                    val selectedCount = wrappedSongs.count { it.isSelected }
+                    val allSelected = selectedCount == wrappedSongs.size && wrappedSongs.isNotEmpty()
+                    Box(
+                        modifier = Modifier.size(48.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        androidx.compose.material3.IconButton(
+                            onClick = {
+                                if (allSelected) {
+                                    wrappedSongs.forEach { it.isSelected = false }
+                                } else {
+                                    wrappedSongs.forEach { it.isSelected = true }
+                                }
+                            },
+                        ) {
+                            Icon(
+                                painter =
+                                    painterResource(
+                                        if (allSelected) R.drawable.deselect else R.drawable.select_all,
+                                    ),
+                                contentDescription = null,
+                                tint = liquidGlassContentColor(),
+                            )
+                        }
+                    }
+                    Box(
+                        modifier = Modifier.size(48.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        androidx.compose.material3.IconButton(onClick = {
+                            menuState.show {
+                                SelectionSongMenu(
+                                    songSelection =
+                                        wrappedSongs
+                                            .filter { it.isSelected }
+                                            .map { it.item },
+                                    onDismiss = menuState::dismiss,
+                                    clearAction = {
+                                        selection = false
+                                        wrappedSongs.forEach { it.isSelected = false }
+                                    },
+                                )
+                            }
+                        }) {
+                            Icon(
+                                painter = painterResource(R.drawable.more_vert),
+                                contentDescription = null,
+                                tint = liquidGlassContentColor(),
+                            )
+                        }
+                    }
+                } else {
+
+                Box(
+                    modifier = Modifier.size(48.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    androidx.compose.material3.IconButton(onClick = {
+                        database.query {
+                            update(currentAlbumWithSongs.album.toggleLike())
+                        }
+                    }) {
+                        Icon(
+                            painter =
+                                painterResource(
+                                    if (currentAlbumWithSongs.album.bookmarkedAt != null) {
+                                        R.drawable.favorite
+                                    } else {
+                                        R.drawable.favorite_border
+                                    },
+                                ),
+                            contentDescription = null,
+                            tint = liquidGlassContentColor(),
+                        )
+                    }
+                }
+
+                Box(
+                    modifier = Modifier.size(48.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    androidx.compose.material3.IconButton(onClick = {
+                        menuState.show {
+                            AlbumMenu(
+                                originalAlbum =
+                                    Album(
+                                        currentAlbumWithSongs.album,
+                                        currentAlbumWithSongs.artists,
+                                    ),
+                                navController = navController,
+                                onDismiss = menuState::dismiss,
+                            )
+                        }
+                    }) {
+                        Icon(
+                            painter = painterResource(R.drawable.more_horiz),
+                            contentDescription = null,
+                            tint = liquidGlassContentColor(),
+                        )
+                    }
+                }
+                }
+            }
+        }
+
+        if (!liquidGlassHeaderActive) {
+
         val topAppBarColors =
             if (transparentAppBar) {
                 TopAppBarDefaults.topAppBarColors(
@@ -630,12 +882,15 @@ fun AlbumScreen(
             } else {
                 TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.surface,
-                    scrolledContainerColor = MaterialTheme.colorScheme.surface,
+                    scrolledContainerColor = Color.Transparent,
                 )
             }
 
         TopAppBar(
             modifier = Modifier.align(Alignment.TopCenter),
+            windowInsets =
+                WindowInsets(top = systemBarsTopPadding)
+                    .union(WindowInsets.systemBars.only(WindowInsetsSides.Horizontal)),
             colors = topAppBarColors,
             scrollBehavior = scrollBehavior,
             title = {
@@ -655,27 +910,30 @@ fun AlbumScreen(
                 }
             },
             navigationIcon = {
-                IconButton(
-                    onClick = {
-                        if (selection) {
-                            selection = false
-                        } else {
-                            navController.navigateUp()
-                        }
-                    },
-                    onLongClick = {
-                        if (!selection) {
-                            navController.backToMain()
-                        }
-                    },
-                ) {
-                    Icon(
-                        painter =
-                            painterResource(
-                                if (selection) R.drawable.close else R.drawable.arrow_back,
-                            ),
-                        contentDescription = null,
-                    )
+
+                if (selection || showTopBarTitle || !liquidGlassHeaderActive) {
+                    IconButton(
+                        onClick = {
+                            if (selection) {
+                                selection = false
+                            } else {
+                                navController.navigateUp()
+                            }
+                        },
+                        onLongClick = {
+                            if (!selection) {
+                                navController.backToMain()
+                            }
+                        },
+                    ) {
+                        Icon(
+                            painter =
+                                painterResource(
+                                    if (selection) R.drawable.close else R.drawable.arrow_back,
+                                ),
+                            contentDescription = null,
+                        )
+                    }
                 }
             },
             actions = {
@@ -721,32 +979,36 @@ fun AlbumScreen(
                         )
                     }
                 } else {
-                    albumWithSongs?.let { currentAlbum ->
-                        IconButton(
-                            onClick = {
-                                menuState.show {
-                                    AlbumMenu(
-                                        originalAlbum =
-                                            Album(
-                                                currentAlbum.album,
-                                                currentAlbum.artists,
-                                            ),
-                                        navController = navController,
-                                        onDismiss = menuState::dismiss,
-                                    )
-                                }
-                            },
-                            onLongClick = {},
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.more_horiz),
-                                contentDescription = stringResource(R.string.more_options),
-                            )
+
+                    if (showTopBarTitle || !liquidGlassHeaderActive) {
+                        albumWithSongs?.let { currentAlbum ->
+                            IconButton(
+                                onClick = {
+                                    menuState.show {
+                                        AlbumMenu(
+                                            originalAlbum =
+                                                Album(
+                                                    currentAlbum.album,
+                                                    currentAlbum.artists,
+                                                ),
+                                            navController = navController,
+                                            onDismiss = menuState::dismiss,
+                                        )
+                                    }
+                                },
+                                onLongClick = {},
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.more_horiz),
+                                    contentDescription = stringResource(R.string.more_options),
+                                )
+                            }
                         }
                     }
                 }
             },
         )
+        }
     }
 }
 

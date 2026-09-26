@@ -7,28 +7,31 @@
 
 package moe.rukamori.archivetune.ui.screens.search
 
-import android.util.Base64
+import moe.rukamori.archivetune.constants.SearchProvider
+import java.util.Base64
 
-internal const val OnlineSearchResultRoute = "search/{encodedQuery}"
+internal const val OnlineSearchResultRoute = "search/{encodedQuery}?provider={provider}"
 internal const val OnlineSearchResultRoutePrefix = "search/"
 internal const val OnlineSearchResultArgument = "encodedQuery"
+internal const val OnlineSearchProviderArgument = "provider"
 
 private const val EmptyOnlineSearchQuery = "~"
-private val OnlineSearchQueryEncodingFlags =
-    Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING
 
-internal fun onlineSearchResultRoute(query: String): String {
+private val OnlineSearchQueryEncoder: Base64.Encoder = Base64.getUrlEncoder().withoutPadding()
+private val OnlineSearchQueryDecoder: Base64.Decoder = Base64.getUrlDecoder()
+
+internal fun onlineSearchResultRoute(
+    query: String,
+    provider: SearchProvider = SearchProvider.YOUTUBE,
+): String {
     val encodedQuery =
         if (query.isEmpty()) {
             EmptyOnlineSearchQuery
         } else {
-            Base64.encodeToString(
-                query.toByteArray(Charsets.UTF_8),
-                OnlineSearchQueryEncodingFlags,
-            )
+            OnlineSearchQueryEncoder.encodeToString(query.toByteArray(Charsets.UTF_8))
         }
 
-    return "$OnlineSearchResultRoutePrefix$encodedQuery"
+    return "$OnlineSearchResultRoutePrefix$encodedQuery?provider=${provider.name}"
 }
 
 internal fun decodeOnlineSearchQuery(encodedQuery: String): String =
@@ -37,7 +40,7 @@ internal fun decodeOnlineSearchQuery(encodedQuery: String): String =
     } else {
         runCatching {
             String(
-                Base64.decode(encodedQuery, OnlineSearchQueryEncodingFlags),
+                OnlineSearchQueryDecoder.decode(encodedQuery),
                 Charsets.UTF_8,
             )
         }.getOrElse {

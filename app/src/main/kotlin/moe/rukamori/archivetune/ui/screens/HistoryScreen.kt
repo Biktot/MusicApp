@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -44,14 +45,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CornerSize
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.ContainedLoadingIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
@@ -62,20 +66,17 @@ import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialShapes
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SearchBarDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.ToggleButton
-import androidx.compose.material3.ToggleButtonDefaults
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -97,6 +98,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import android.os.Build
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -104,9 +107,12 @@ import kotlinx.coroutines.delay
 import moe.rukamori.archivetune.LocalAnimationsDisabled
 import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
 import moe.rukamori.archivetune.LocalPlayerConnection
+import moe.rukamori.archivetune.LocalStableSystemBarsTopPadding
 import moe.rukamori.archivetune.R
+import moe.rukamori.archivetune.constants.AppBarHeight
 import moe.rukamori.archivetune.constants.HistorySource
 import moe.rukamori.archivetune.constants.InnerTubeCookieKey
+import moe.rukamori.archivetune.constants.LiquidGlassEnabledKey
 import moe.rukamori.archivetune.db.entities.EventWithSong
 import moe.rukamori.archivetune.extensions.metadata
 import moe.rukamori.archivetune.extensions.toMediaItem
@@ -117,14 +123,23 @@ import moe.rukamori.archivetune.innertube.utils.hasYouTubeLoginCookie
 import moe.rukamori.archivetune.models.toMediaMetadata
 import moe.rukamori.archivetune.playback.queues.ListQueue
 import moe.rukamori.archivetune.playback.queues.YouTubeQueue
-import moe.rukamori.archivetune.ui.component.HideOnScrollFAB
+import moe.rukamori.archivetune.ui.component.AppleMusicPlaylistHero
+import moe.rukamori.archivetune.ui.component.AppleMusicStyleAccentColor
+import moe.rukamori.archivetune.ui.component.DefaultDialog
+import moe.rukamori.archivetune.ui.component.FrostedHeaderPill
+import moe.rukamori.archivetune.ui.component.LiquidGlassActionPill
 import moe.rukamori.archivetune.ui.component.LocalMenuState
+import moe.rukamori.archivetune.ui.component.PlatformBackdrop
 import moe.rukamori.archivetune.ui.component.SongListItem
 import moe.rukamori.archivetune.ui.component.TopSearch
 import moe.rukamori.archivetune.ui.component.YouTubeListItem
+import moe.rukamori.archivetune.ui.component.layerBackdrop
+import moe.rukamori.archivetune.ui.component.liquidGlassContentColor
+import moe.rukamori.archivetune.ui.component.rememberBackdrop
 import moe.rukamori.archivetune.ui.menu.SelectionMediaMetadataMenu
 import moe.rukamori.archivetune.ui.menu.SongMenu
 import moe.rukamori.archivetune.ui.menu.YouTubeSongMenu
+import moe.rukamori.archivetune.ui.player.LocalPlayerLyricsFullScreen
 import moe.rukamori.archivetune.ui.utils.appBarScrollBehavior
 import moe.rukamori.archivetune.ui.utils.backToMain
 import moe.rukamori.archivetune.utils.rememberPreference
@@ -133,6 +148,9 @@ import moe.rukamori.archivetune.viewmodels.HistoryViewModel
 import moe.rukamori.archivetune.viewmodels.RemoteHistoryUiState
 import java.time.format.DateTimeFormatter
 import moe.rukamori.archivetune.ui.component.IconButton as AppIconButton
+import dev.chrisbanes.haze.hazeSource
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @Composable
 fun HistoryScreen(
@@ -169,6 +187,9 @@ fun HistoryScreen(
     val focusRequester = remember { FocusRequester() }
     val localListState = rememberLazyListState()
     val remoteListState = rememberLazyListState()
+
+    val localSearchListState = rememberLazyListState()
+    val remoteSearchListState = rememberLazyListState()
     val scrollBehavior =
         appBarScrollBehavior(
             canScroll = { !isSearching && selectedEventIds.isEmpty() },
@@ -268,35 +289,160 @@ fun HistoryScreen(
             localVisibleEvents.size
         }
 
-    val historySourceDock: @Composable () -> Unit = {
-        HistorySourceDock(
-            visibleSongCount = currentVisibleCount,
-            availableSources = availableSources,
-            currentSource = historySource,
-            onSourceChange = { newSource ->
-                if (newSource == historySource) return@HistorySourceDock
+    var showClearHistoryDialog by remember { mutableStateOf(false) }
 
-                viewModel.historySource.value = newSource
-                if (newSource == HistorySource.REMOTE) {
-                    when (remoteHistoryState) {
-                        is RemoteHistoryUiState.Error -> {
-                            viewModel.fetchRemoteHistory()
-                        }
+    val liquidGlassEnabled by rememberPreference(LiquidGlassEnabledKey, defaultValue = false)
+    val lyricsFullScreen = LocalPlayerLyricsFullScreen.current
+    val liquidGlassHeaderActive =
+        liquidGlassEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            !lyricsFullScreen
+    val systemBarsTopPadding = LocalStableSystemBarsTopPadding.current
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    val backdrop = rememberBackdrop(surfaceColor)
 
-                        is RemoteHistoryUiState.Empty -> {
-                            viewModel.enqueueSilentFetch()
-                        }
+    val showPersistentLiquidGlassHeader =
+        liquidGlassHeaderActive && !showSearchBar
 
-                        else -> {
-                            Unit
-                        }
-                    }
+    if (showClearHistoryDialog) {
+        DefaultDialog(
+            onDismiss = { showClearHistoryDialog = false },
+            title = { Text(text = stringResource(R.string.history)) },
+            content = {
+                Text(
+                    text = stringResource(R.string.remove_from_history_confirm),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(horizontal = 18.dp),
+                )
+            },
+            buttons = {
+                androidx.compose.material3.TextButton(
+                    onClick = { showClearHistoryDialog = false },
+                    shapes = androidx.compose.material3.ButtonDefaults.shapes(),
+                ) {
+                    Text(text = stringResource(android.R.string.cancel))
+                }
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        showClearHistoryDialog = false
+                        val allEventIds = localVisibleEvents.map { it.event.id }
+                        viewModel.removeEventsFromHistory(allEventIds)
+                    },
+                    shapes = androidx.compose.material3.ButtonDefaults.shapes(),
+                ) {
+                    Text(text = stringResource(android.R.string.ok))
                 }
             },
         )
     }
 
-    val historyContent: @Composable (Dp) -> Unit = { topPadding ->
+    val historySourceDock: @Composable () -> Unit = {
+
+        Column(modifier = Modifier.fillMaxWidth()) {
+            AppleMusicPlaylistHero(
+                sectionLabel = stringResource(R.string.recently_played),
+                title = stringResource(R.string.history),
+                subtitle = pluralStringResource(R.plurals.n_song, currentVisibleCount, currentVisibleCount),
+                onPlay = {
+                    if (historySource == HistorySource.REMOTE) {
+                        if (remoteVisibleSongs.isNotEmpty()) {
+                            playerConnection.playQueue(
+                                ListQueue(
+                                    title = context.getString(R.string.history),
+                                    items = remoteVisibleSongs.map { it.toMediaItem() },
+                                ),
+                            )
+                        }
+                    } else if (localVisibleEvents.isNotEmpty()) {
+                        playerConnection.playQueue(
+                            ListQueue(
+                                title = context.getString(R.string.history),
+                                items = localVisibleEvents.map { it.song.toMediaItem() },
+                            ),
+                        )
+                    }
+                },
+                onShuffle = {
+                    if (historySource == HistorySource.REMOTE) {
+                        if (remoteVisibleSongs.isNotEmpty()) {
+                            playerConnection.playQueue(
+                                ListQueue(
+                                    title = context.getString(R.string.history),
+                                    items = remoteVisibleSongs.map { it.toMediaItem() }.shuffled(),
+                                ),
+                            )
+                        }
+                    } else if (localVisibleEvents.isNotEmpty()) {
+                        playerConnection.playQueue(
+                            ListQueue(
+                                title = context.getString(R.string.history),
+                                items = localVisibleEvents.map { it.song.toMediaItem() }.shuffled(),
+                            ),
+                        )
+                    }
+                },
+                onPrimaryTrailing =
+                    if (historySource == HistorySource.LOCAL && localVisibleEvents.isNotEmpty()) {
+                        { showClearHistoryDialog = true }
+                    } else {
+                        null
+                    },
+                primaryTrailingIcon = R.drawable.close,
+                primaryTrailingDescription = R.string.clear,
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+
+                        .padding(
+                            top = if (showPersistentLiquidGlassHeader) {
+                                systemBarsTopPadding + AppBarHeight + 8.dp
+                            } else {
+                                8.dp
+                            },
+                        ),
+            )
+            if (availableSources.size > 1) {
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+
+                            .padding(top = 12.dp, start = 20.dp, end = 20.dp),
+                    horizontalArrangement = Arrangement.Start,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    HistorySourcePill(
+                        currentSource = historySource,
+                        availableSources = availableSources,
+                        onSourceChange = { newSource ->
+                            if (newSource == historySource) return@HistorySourcePill
+
+                            viewModel.historySource.value = newSource
+                            if (newSource == HistorySource.REMOTE) {
+                                when (remoteHistoryState) {
+                                    is RemoteHistoryUiState.Error -> {
+                                        viewModel.fetchRemoteHistory()
+                                    }
+
+                                    is RemoteHistoryUiState.Empty -> {
+                                        viewModel.enqueueSilentFetch()
+                                    }
+
+                                    else -> {
+                                        Unit
+                                    }
+                                }
+                            }
+                        },
+                    )
+                }
+            }
+        }
+    }
+
+    val historyContent: @Composable (Dp, Boolean) -> Unit = { topPadding, searchMode ->
+
+        val activeLocalState = if (searchMode) localSearchListState else localListState
+        val activeRemoteState = if (searchMode) remoteSearchListState else remoteListState
         Crossfade(
             targetState = historySource,
             animationSpec = tween(durationMillis = motionDuration),
@@ -305,8 +451,9 @@ fun HistoryScreen(
             when (source) {
                 HistorySource.REMOTE -> {
                     RemoteHistoryFeed(
-                        listState = remoteListState,
+                        listState = activeRemoteState,
                         topPadding = topPadding,
+                        backdrop = backdrop.takeIf { liquidGlassHeaderActive },
                         headerContent = historySourceDock,
                         remoteHistoryState = remoteHistoryState,
                         filteredSections = filteredRemoteSections,
@@ -337,8 +484,9 @@ fun HistoryScreen(
 
                 HistorySource.LOCAL -> {
                     LocalHistoryFeed(
-                        listState = localListState,
+                        listState = activeLocalState,
                         topPadding = topPadding,
+                        backdrop = backdrop.takeIf { liquidGlassHeaderActive },
                         headerContent = historySourceDock,
                         filteredEvents = filteredEvents,
                         visibleEvents = localVisibleEvents,
@@ -415,23 +563,20 @@ fun HistoryScreen(
         }
     }
 
-    // A. When screen opens + user is logged in → fetch remote history in background
     LaunchedEffect("prefetch", isLoggedIn) {
         if (!isLoggedIn) return@LaunchedEffect
         if (remoteHistoryState is RemoteHistoryUiState.Success) return@LaunchedEffect
-        delay(1_000) // wait for screen
+        delay(1_000)
 
         viewModel.fetchRemoteHistorySilent()
     }
 
-    // B. When playback sync happens → retry with backoff
     LaunchedEffect("sync", isLoggedIn) {
         YouTube.historySyncEvent.collect {
             if (!isLoggedIn) return@collect
 
-            // Retry 3 times with increasing delay (handles slow internet)
             repeat(3) { attempt ->
-                delay(3000L * (attempt + 1)) // 3s, 6s, 9s
+                delay(3000L * (attempt + 1))
                 viewModel.fetchRemoteHistorySilent()
                 if (remoteHistoryState is RemoteHistoryUiState.Success) return@collect
             }
@@ -454,45 +599,156 @@ fun HistoryScreen(
         containerColor = MaterialTheme.colorScheme.surface,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            if (!showSearchBar) {
+
+            if (!showSearchBar && !showPersistentLiquidGlassHeader) {
                 LargeFlexibleTopAppBar(
                     title = {
-                        Text(
-                            text =
-                                if (selectionCount > 0) {
-                                    pluralStringResource(R.plurals.n_song, selectionCount, selectionCount)
-                                } else {
-                                    stringResource(R.string.history)
-                                },
-                            fontWeight = FontWeight.Bold,
-                        )
+
+                        if (selectionCount > 0) {
+                            FrostedHeaderPill {
+                                Text(
+                                    text = pluralStringResource(R.plurals.n_song, selectionCount, selectionCount),
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                        }
                     },
                     navigationIcon = {
-                        AppIconButton(
-                            onClick = {
-                                if (selectionCount > 0) {
-                                    clearSelection()
-                                } else {
-                                    navController.navigateUp()
-                                }
-                            },
-                            onLongClick = {
-                                if (selectionCount == 0) {
-                                    navController.backToMain()
-                                }
-                            },
-                        ) {
-                            Icon(
-                                painter =
-                                    painterResource(
-                                        if (selectionCount > 0) R.drawable.close else R.drawable.arrow_back,
-                                    ),
-                                contentDescription = null,
+
+                        FrostedHeaderPill {
+                            AppIconButton(
+                                onClick = {
+                                    if (selectionCount > 0) {
+                                        clearSelection()
+                                    } else {
+                                        navController.navigateUp()
+                                    }
+                                },
+                                onLongClick = {
+                                    if (selectionCount == 0) {
+                                        navController.backToMain()
+                                    }
+                                },
+                            ) {
+                                Icon(
+                                    painter =
+                                        painterResource(
+                                            if (selectionCount > 0) R.drawable.close else R.drawable.arrow_back,
+                                        ),
+                                    contentDescription = null,
+                                )
+                            }
+                            Text(
+                                text = stringResource(R.string.library),
+                                color = MaterialTheme.colorScheme.onBackground,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                modifier = Modifier.padding(end = 4.dp),
                             )
                         }
                     },
                     actions = {
                         if (selectionCount == 0) {
+                            FrostedHeaderPill(modifier = Modifier.padding(end = 8.dp)) {
+                                AppIconButton(
+                                    onClick = { isSearching = true },
+                                    onLongClick = {},
+                                ) {
+                                    Icon(
+                                        painter = painterResource(R.drawable.search),
+                                        contentDescription = null,
+                                    )
+                                }
+                            }
+                        }
+                    },
+                    scrollBehavior = scrollBehavior,
+                    colors =
+                        TopAppBarDefaults.largeTopAppBarColors(
+                            containerColor = Color.Transparent,
+                            scrolledContainerColor = Color.Transparent,
+                        ),
+                )
+            }
+        },
+    ) { innerPadding ->
+
+        val headerHaze = rememberScreenHeaderHaze()
+        Box(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .hazeSource(headerHaze),
+            ) {
+                if (!showSearchBar) {
+
+                    val topPaddingForContent =
+                        if (showPersistentLiquidGlassHeader) 0.dp
+                        else innerPadding.calculateTopPadding()
+                    historyContent(topPaddingForContent, false)
+                }
+            }
+            ScreenHeaderHaze(
+                hazeState = headerHaze,
+                systemBarsTopPadding = systemBarsTopPadding,
+            )
+
+            if (showPersistentLiquidGlassHeader) {
+
+                LiquidGlassActionPill(
+                    backdrop = backdrop,
+                    interactive = true,
+                    modifier =
+                        Modifier
+                            .align(Alignment.TopStart)
+                            .padding(start = 12.dp, top = systemBarsTopPadding + 12.dp),
+                ) {
+                    AppIconButton(
+                        onClick = {
+                            if (selectionCount > 0) clearSelection() else navController.navigateUp()
+                        },
+                        onLongClick = {
+                            if (selectionCount == 0) navController.backToMain()
+                        },
+                        modifier = Modifier.size(48.dp),
+                    ) {
+                        Icon(
+                            painter =
+                                painterResource(
+                                    if (selectionCount > 0) R.drawable.close else R.drawable.arrow_back,
+                                ),
+                            contentDescription = stringResource(R.string.library),
+                            tint = liquidGlassContentColor(),
+                        )
+                    }
+                    Text(
+                        text =
+                            if (selectionCount > 0) {
+                                pluralStringResource(R.plurals.n_song, selectionCount, selectionCount)
+                            } else {
+                                stringResource(R.string.library)
+                            },
+                        color = liquidGlassContentColor(),
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(end = 12.dp),
+                    )
+                }
+
+                if (selectionCount == 0) {
+                    LiquidGlassActionPill(
+                        backdrop = backdrop,
+                        modifier =
+                            Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(end = 12.dp, top = systemBarsTopPadding + 12.dp),
+                    ) {
+                        Box(
+                            modifier = Modifier.size(48.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
                             AppIconButton(
                                 onClick = { isSearching = true },
                                 onLongClick = {},
@@ -500,50 +756,20 @@ fun HistoryScreen(
                                 Icon(
                                     painter = painterResource(R.drawable.search),
                                     contentDescription = null,
+                                    tint = liquidGlassContentColor(),
                                 )
                             }
                         }
-                    },
-                    scrollBehavior = scrollBehavior,
-                    colors =
-                        TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.surface,
-                            scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                        ),
-                )
-            }
-        },
-        floatingActionButton = {
-            HideOnScrollFAB(
-                visible = !showSearchBar && selectionCount == 0 && currentVisibleCount > 0,
-                lazyListState = activeListState,
-                icon = R.drawable.shuffle,
-                label = stringResource(R.string.shuffle),
-                onClick = {
-                    if (historySource == HistorySource.REMOTE) {
-                        if (remoteVisibleSongs.isNotEmpty()) {
-                            playerConnection.playQueue(
-                                ListQueue(
-                                    title = context.getString(R.string.history),
-                                    items = remoteVisibleSongs.map { it.toMediaItem() }.shuffled(),
-                                ),
-                            )
-                        }
-                    } else if (localVisibleEvents.isNotEmpty()) {
-                        playerConnection.playQueue(
-                            ListQueue(
-                                title = context.getString(R.string.history),
-                                items = localVisibleEvents.map { it.song.toMediaItem() }.shuffled(),
-                            ),
-                        )
                     }
-                },
-            )
-        },
-    ) { innerPadding ->
-        Box(modifier = Modifier.fillMaxSize()) {
-            if (!showSearchBar) {
-                historyContent(innerPadding.calculateTopPadding())
+                }
+            }
+
+            val isListScrolling by remember {
+                derivedStateOf {
+                    val activeState = if (historySource == HistorySource.REMOTE) remoteListState else localListState
+                    activeState.firstVisibleItemIndex > 0 ||
+                        activeState.firstVisibleItemScrollOffset > 0
+                }
             }
 
             AnimatedVisibility(
@@ -564,6 +790,11 @@ fun HistoryScreen(
                         }
                     },
                     modifier = Modifier.fillMaxSize(),
+
+                    colors = SearchBarDefaults.colors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                    ),
+                    tonalElevation = 0.dp,
                     placeholder = {
                         Text(text = stringResource(R.string.search))
                     },
@@ -597,7 +828,7 @@ fun HistoryScreen(
                     },
                     focusRequester = focusRequester,
                 ) {
-                    historyContent(0.dp)
+                    historyContent(0.dp, true)
                 }
             }
 
@@ -634,6 +865,7 @@ fun HistoryScreen(
 private fun LocalHistoryFeed(
     listState: LazyListState,
     topPadding: Dp,
+    backdrop: PlatformBackdrop?,
     headerContent: @Composable () -> Unit,
     filteredEvents: Map<DateAgo, List<EventWithSong>>,
     visibleEvents: List<EventWithSong>,
@@ -671,6 +903,8 @@ private fun LocalHistoryFeed(
                 .wrapContentWidth(Alignment.CenterHorizontally)
                 .widthIn(max = 840.dp)
                 .padding(top = topPadding)
+
+                .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
                 .windowInsetsPadding(
                     LocalPlayerAwareWindowInsets.current.only(
                         WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom,
@@ -708,7 +942,7 @@ private fun LocalHistoryFeed(
             }
         } else {
             filteredEvents.forEach { (dateAgo, songsForDate) ->
-                stickyHeader(key = "header_$dateAgo") {
+                item(key = "header_$dateAgo", contentType = "history_section_header") {
                     HistorySectionHeader(
                         title = dateAgoToString(dateAgo),
                         songCount = songsForDate.size,
@@ -790,6 +1024,7 @@ private fun LocalHistoryFeed(
 private fun RemoteHistoryFeed(
     listState: LazyListState,
     topPadding: Dp,
+    backdrop: PlatformBackdrop?,
     headerContent: @Composable () -> Unit,
     remoteHistoryState: RemoteHistoryUiState,
     filteredSections: List<HistoryPage.HistorySection>,
@@ -808,6 +1043,8 @@ private fun RemoteHistoryFeed(
                 .wrapContentWidth(Alignment.CenterHorizontally)
                 .widthIn(max = 840.dp)
                 .padding(top = topPadding)
+
+                .then(if (backdrop != null) Modifier.layerBackdrop(backdrop) else Modifier)
                 .windowInsetsPadding(
                     LocalPlayerAwareWindowInsets.current.only(
                         WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom,
@@ -867,7 +1104,7 @@ private fun RemoteHistoryFeed(
                     }
                 } else {
                     filteredSections.forEach { section ->
-                        stickyHeader(key = "header_${section.title}") {
+                        item(key = "header_${section.title}", contentType = "history_section_header") {
                             HistorySectionHeader(
                                 title = section.title,
                                 songCount = section.songs.size,
@@ -913,95 +1150,6 @@ private fun RemoteHistoryFeed(
                             }
                         }
                     }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun HistorySourceDock(
-    visibleSongCount: Int,
-    availableSources: List<HistorySource>,
-    currentSource: HistorySource,
-    onSourceChange: (HistorySource) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Box(
-        modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Surface(
-            modifier = Modifier.fillMaxWidth().widthIn(max = 840.dp),
-            shape = MaterialTheme.shapes.extraLarge,
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
-        ) {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.fillMaxWidth().padding(20.dp),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    Surface(
-                        modifier = Modifier.size(64.dp),
-                        shape = MaterialTheme.shapes.large,
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Icon(
-                                painter = painterResource(R.drawable.history),
-                                contentDescription = null,
-                                modifier = Modifier.size(28.dp),
-                            )
-                        }
-                    }
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Text(
-                            text =
-                                stringResource(
-                                    if (currentSource == HistorySource.LOCAL) {
-                                        R.string.local_history
-                                    } else {
-                                        R.string.remote_history
-                                    },
-                                ),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Text(
-                            text =
-                                stringResource(
-                                    if (currentSource == HistorySource.LOCAL) {
-                                        R.string.history_local_summary
-                                    } else {
-                                        R.string.history_remote_summary
-                                    },
-                                ),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                        Text(
-                            text = pluralStringResource(R.plurals.n_song, visibleSongCount, visibleSongCount),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
-                if (availableSources.size > 1) {
-                    HistorySourceSelector(
-                        currentSource = currentSource,
-                        availableSources = availableSources,
-                        onSourceChange = onSourceChange,
-                    )
                 }
             }
         }
@@ -1107,54 +1255,101 @@ private fun HistorySectionHeader(
 }
 
 @Composable
-private fun HistorySourceSelector(
+private fun HistorySourcePill(
     currentSource: HistorySource,
     availableSources: List<HistorySource>,
     onSourceChange: (HistorySource) -> Unit,
 ) {
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
-        modifier = Modifier.fillMaxWidth(),
+
+    var expanded by remember { mutableStateOf(false) }
+    val accent = AppleMusicStyleAccentColor
+    val onBackgroundColor = MaterialTheme.colorScheme.onBackground
+    val containerColor = onBackgroundColor.copy(alpha = 0.06f)
+    val currentLabel =
+        stringResource(
+            if (currentSource == HistorySource.LOCAL) {
+                R.string.local_history
+            } else {
+                R.string.remote_history
+            },
+        )
+
+    Box(
+        modifier =
+            Modifier
+
+                .wrapContentWidth(align = Alignment.Start),
+        contentAlignment = Alignment.TopStart,
     ) {
-        availableSources.forEachIndexed { index, source ->
-            val checked = source == currentSource
-            ToggleButton(
-                checked = checked,
-                onCheckedChange = {
-                    if (!checked) {
-                        onSourceChange(source)
-                    }
-                },
+        Box {
+            Surface(
+                onClick = { if (availableSources.size > 1) expanded = true },
                 modifier =
                     Modifier
-                        .weight(1f)
-                        .height(52.dp),
-                shapes =
-                    when (index) {
-                        0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
-                        availableSources.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
-                        else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
-                    },
-                colors =
-                    ToggleButtonDefaults.toggleButtonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        checkedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                        checkedContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                    ),
+                        .clip(RoundedCornerShape(percent = 50))
+                        .height(46.dp),
+                shape = RoundedCornerShape(percent = 50),
+                color = containerColor,
             ) {
-                Text(
-                    text =
-                        stringResource(
-                            if (source == HistorySource.LOCAL) {
-                                R.string.local_history
-                            } else {
-                                R.string.remote_history
-                            },
-                        ),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
+
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxHeight()
+                            .padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.history),
+                        contentDescription = null,
+                        tint = accent,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(
+                        text = currentLabel,
+                        color = accent,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (availableSources.size > 1) {
+                        Icon(
+                            painter = painterResource(R.drawable.expand_more),
+                            contentDescription = null,
+                            tint = accent,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                }
+            }
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+            ) {
+                availableSources.forEach { source ->
+                    val label =
+                        stringResource(source.titleResId())
+                    val isSelected = source == currentSource
+                    DropdownMenuItem(
+                        text = { Text(label) },
+                        trailingIcon = {
+                            if (isSelected) {
+                                Icon(
+                                    painter = painterResource(R.drawable.check),
+                                    contentDescription = null,
+                                    tint = accent,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        },
+                        onClick = {
+                            expanded = false
+                            if (!isSelected) onSourceChange(source)
+                        },
+                    )
+                }
             }
         }
     }
@@ -1350,3 +1545,9 @@ private fun filterRemoteSections(
 }
 
 private const val HISTORY_LOAD_MORE_THRESHOLD = 12
+
+private fun HistorySource.titleResId(): Int =
+    when (this) {
+        HistorySource.LOCAL -> R.string.local_history
+        HistorySource.REMOTE -> R.string.remote_history
+    }

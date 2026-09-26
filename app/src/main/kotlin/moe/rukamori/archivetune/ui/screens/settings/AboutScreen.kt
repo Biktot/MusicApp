@@ -32,6 +32,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import dev.chrisbanes.haze.hazeSource
+import moe.rukamori.archivetune.LocalStableSystemBarsTopPadding
+import moe.rukamori.archivetune.ui.screens.ScreenHeaderHaze
+import moe.rukamori.archivetune.ui.screens.rememberScreenHeaderHaze
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -44,7 +48,6 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
@@ -54,16 +57,13 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -73,14 +73,15 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.graphics.Color
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import coil3.compose.AsyncImage
 import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
 import moe.rukamori.archivetune.R
+import moe.rukamori.archivetune.ui.component.FrostedHeaderPill
 import moe.rukamori.archivetune.ui.component.IconButton
-import moe.rukamori.archivetune.ui.utils.appBarScrollBehavior
 import moe.rukamori.archivetune.ui.utils.backToMain
 import moe.rukamori.archivetune.viewmodels.AboutContributorUiCollection
 import moe.rukamori.archivetune.viewmodels.AboutContributorsUiState
@@ -96,6 +97,9 @@ import moe.rukamori.archivetune.viewmodels.AboutUiModel
 import moe.rukamori.archivetune.viewmodels.AboutViewModel
 import moe.rukamori.archivetune.viewmodels.TeamMember
 import moe.rukamori.archivetune.viewmodels.TeamMemberCollection
+import androidx.compose.foundation.layout.asPaddingValues
+import moe.rukamori.archivetune.ui.component.KeepStatusBarHiddenInDialog
+import androidx.compose.runtime.getValue
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -105,7 +109,6 @@ fun AboutScreen(
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val uriHandler = LocalUriHandler.current
-    val scrollBehavior = appBarScrollBehavior()
 
     LaunchedEffect(viewModel, uriHandler) {
         viewModel.effects.collect { effect ->
@@ -117,7 +120,6 @@ fun AboutScreen(
 
     AboutScreenContent(
         state = state,
-        scrollBehavior = scrollBehavior,
         onNavigateUp = navController::navigateUp,
         onNavigateHome = navController::backToMain,
         onOpenUri = viewModel::openUri,
@@ -134,7 +136,6 @@ fun AboutScreen(
 @Composable
 private fun AboutScreenContent(
     state: AboutScreenState,
-    scrollBehavior: TopAppBarScrollBehavior,
     onNavigateUp: () -> Unit,
     onNavigateHome: () -> Unit,
     onOpenUri: (String) -> Unit,
@@ -148,45 +149,56 @@ private fun AboutScreenContent(
     val listState = rememberLazyListState()
 
     Scaffold(
-        modifier =
-            Modifier
-                .fillMaxSize()
-                .nestedScroll(scrollBehavior.nestedScrollConnection),
+
+        modifier = Modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.surface,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            LargeFlexibleTopAppBar(
-                title = {
-                    Text(
-                        text = stringResource(R.string.about),
-                        fontWeight = FontWeight.Bold,
-                    )
-                },
+            TopAppBar(
+                title = {},
                 navigationIcon = {
-                    IconButton(
-                        onClick = onNavigateUp,
-                        onLongClick = onNavigateHome,
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.arrow_back),
-                            contentDescription = stringResource(R.string.back_button_desc),
+                    FrostedHeaderPill(plain = true) {
+                        IconButton(
+                            onClick = onNavigateUp,
+                            onLongClick = onNavigateHome,
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.arrow_back),
+                                contentDescription = stringResource(R.string.back_button_desc),
+                            )
+                        }
+                        Text(
+                            text = stringResource(R.string.about),
+                            color = MaterialTheme.colorScheme.onBackground,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            modifier = Modifier.padding(end = 4.dp),
                         )
                     }
                 },
+                actions = {},
                 colors =
-                    TopAppBarDefaults.largeTopAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        scrolledContainerColor = Color.Transparent,
                     ),
-                scrollBehavior = scrollBehavior,
             )
         },
     ) { innerPadding ->
+        val playerAwareBottomPadding =
+            LocalPlayerAwareWindowInsets.current
+                .only(WindowInsetsSides.Bottom)
+                .asPaddingValues()
+                .calculateBottomPadding()
         val playerAwareInsets =
             LocalPlayerAwareWindowInsets.current.only(
-                WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom,
+                WindowInsetsSides.Horizontal,
             )
 
+        val headerHaze = rememberScreenHeaderHaze()
+        val systemBarsTopPadding = LocalStableSystemBarsTopPadding.current
+
+        Box(modifier = Modifier.fillMaxSize()) {
         when (state) {
             AboutScreenState.Loading -> {
                 AboutLoadingContent(
@@ -230,15 +242,23 @@ private fun AboutScreenContent(
                     modifier =
                         Modifier
                             .fillMaxSize()
-                            .windowInsetsPadding(playerAwareInsets),
+                            .windowInsetsPadding(playerAwareInsets)
+
+                            .hazeSource(headerHaze),
                     contentPadding =
                         PaddingValues(
                             top = innerPadding.calculateTopPadding() + AboutSpacing.xs,
-                            bottom = SettingsDimensions.ScreenBottomPadding,
+                            bottom = playerAwareBottomPadding + SettingsDimensions.ScreenBottomPadding,
                         ),
                     listState = listState,
                 )
             }
+        }
+
+            ScreenHeaderHaze(
+                hazeState = headerHaze,
+                systemBarsTopPadding = systemBarsTopPadding,
+            )
         }
     }
 
@@ -333,6 +353,7 @@ private fun AboutFullScreenDialog(
                 decorFitsSystemWindows = false,
             ),
     ) {
+        KeepStatusBarHiddenInDialog()
         Scaffold(
             modifier = Modifier.fillMaxSize(),
             containerColor = MaterialTheme.colorScheme.surface,
@@ -358,7 +379,7 @@ private fun AboutFullScreenDialog(
                     colors =
                         TopAppBarDefaults.topAppBarColors(
                             containerColor = MaterialTheme.colorScheme.surface,
-                            scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                            scrolledContainerColor = Color.Transparent,
                         ),
                 )
             },
@@ -672,7 +693,7 @@ private fun AboutSuccessContent(
     contentPadding: PaddingValues,
     listState: LazyListState,
 ) {
-    val leadDevelopers = remember(model.leadDeveloper) { TeamMemberCollection.of(model.leadDeveloper) }
+    val leadDevelopers = model.leadDevelopers
 
     LazyColumn(
         state = listState,

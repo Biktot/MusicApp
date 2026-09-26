@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -74,13 +75,11 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -94,6 +93,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
@@ -108,6 +108,7 @@ import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
 import moe.rukamori.archivetune.R
 import moe.rukamori.archivetune.constants.CustomThemeColorKey
 import moe.rukamori.archivetune.constants.DynamicThemeKey
+import moe.rukamori.archivetune.ui.component.FrostedHeaderPill
 import moe.rukamori.archivetune.ui.component.IconButton
 import moe.rukamori.archivetune.ui.svg.DynamicSVGImage
 import moe.rukamori.archivetune.ui.svg.PALETTE
@@ -118,6 +119,10 @@ import moe.rukamori.archivetune.ui.theme.ThemeSeedPaletteCodec
 import moe.rukamori.archivetune.ui.theme.palette.TonalPalettes
 import moe.rukamori.archivetune.ui.utils.backToMain
 import moe.rukamori.archivetune.utils.rememberPreference
+import androidx.compose.foundation.layout.asPaddingValues
+import moe.rukamori.archivetune.ui.component.KeepStatusBarHiddenInDialog
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 private enum class SeedRole {
     PRIMARY,
@@ -697,16 +702,6 @@ object ThemePalettes {
             neutral = Color(0xFFFF5F1F),
         )
 
-    val Cyberpunk =
-        ThemePalette(
-            id = "cyberpunk",
-            nameResId = R.string.palette_cyberpunk,
-            primary = Color(0xFFFF00FF),
-            secondary = Color(0xFFFF00FF),
-            tertiary = Color(0xFFFF00FF),
-            neutral = Color(0xFFFF00FF),
-        )
-
     val Synthwave =
         ThemePalette(
             id = "synthwave",
@@ -797,26 +792,6 @@ object ThemePalettes {
             neutral = Color(0xFF00FF7F),
         )
 
-    val Candy =
-        ThemePalette(
-            id = "candy",
-            nameResId = R.string.palette_candy,
-            primary = Color(0xFFFF69B4),
-            secondary = Color(0xFFFF69B4),
-            tertiary = Color(0xFFFF69B4),
-            neutral = Color(0xFFFF69B4),
-        )
-
-    val Rainbow =
-        ThemePalette(
-            id = "rainbow",
-            nameResId = R.string.palette_rainbow,
-            primary = Color(0xFFFF0000),
-            secondary = Color(0xFFFF0000),
-            tertiary = Color(0xFFFF0000),
-            neutral = Color(0xFFFF0000),
-        )
-
     val allPalettes: List<ThemePalette> =
         listOf(
             Default,
@@ -875,7 +850,6 @@ object ThemePalettes {
             NeonPink,
             NeonBlue,
             NeonOrange,
-            Cyberpunk,
             Synthwave,
             Ocean,
             Forest,
@@ -885,13 +859,20 @@ object ThemePalettes {
             Summer,
             Twilight,
             Aurora,
-            Candy,
-            Rainbow,
+        )
+
+    private val RetiredPaletteIds =
+        mapOf(
+            "cyberpunk" to "magenta_pop",
+            "candy" to "hot_pink",
+            "rainbow" to "youtube_red",
         )
 
     fun findByPrimaryColor(colorHex: String): ThemePalette? = allPalettes.find { it.primary.toHexString() == colorHex }
 
-    fun findById(id: String): ThemePalette? = allPalettes.find { it.id == id }
+    fun findById(id: String): ThemePalette? =
+        allPalettes.find { it.id == id }
+            ?: RetiredPaletteIds[id]?.let { survivor -> allPalettes.find { it.id == survivor } }
 
     fun getRandomPalette(): ThemePalette = allPalettes.random()
 
@@ -1002,15 +983,25 @@ fun PalettePickerScreen(navController: NavController) {
         }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.color_palette)) },
+                title = {},
                 navigationIcon = {
-                    IconButton(
-                        onClick = navController::navigateUp,
-                        onLongClick = navController::backToMain,
-                    ) {
-                        Icon(painterResource(R.drawable.arrow_back), contentDescription = null)
+                    FrostedHeaderPill(plain = true) {
+                        IconButton(
+                            onClick = navController::navigateUp,
+                            onLongClick = navController::backToMain,
+                        ) {
+                            Icon(painterResource(R.drawable.arrow_back), contentDescription = null)
+                        }
+                        Text(
+                            text = stringResource(R.string.color_palette),
+                            color = MaterialTheme.colorScheme.onBackground,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            modifier = Modifier.padding(end = 4.dp),
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
@@ -1042,13 +1033,19 @@ fun PalettePickerScreen(navController: NavController) {
             }
         },
     ) { paddingValues ->
+        val playerAwareBottomPadding =
+            LocalPlayerAwareWindowInsets.current
+                .only(WindowInsetsSides.Bottom)
+                .asPaddingValues()
+                .calculateBottomPadding()
         Column(
             modifier =
                 Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
-                    .windowInsetsPadding(LocalPlayerAwareWindowInsets.current.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
-                    .verticalScroll(rememberScrollState()),
+                    .windowInsetsPadding(LocalPlayerAwareWindowInsets.current.only(WindowInsetsSides.Horizontal))
+                    .verticalScroll(rememberScrollState())
+                    .padding(bottom = playerAwareBottomPadding + SettingsDimensions.ScreenBottomPadding),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Spacer(modifier = Modifier.height(16.dp))
@@ -1172,6 +1169,7 @@ fun ThemeCreatorScreen(navController: NavController) {
         AlertDialog(
             onDismissRequest = { showImportErrorDialog = false },
             confirmButton = {
+                KeepStatusBarHiddenInDialog()
                 TextButton(onClick = { showImportErrorDialog = false }, shapes = ButtonDefaults.shapes()) {
                     Text(text = stringResource(android.R.string.ok))
                 }
@@ -1187,15 +1185,25 @@ fun ThemeCreatorScreen(navController: NavController) {
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
-                title = { Text(text = stringResource(R.string.theme_creator_title)) },
+                title = {},
                 navigationIcon = {
-                    IconButton(
-                        onClick = navController::navigateUp,
-                        onLongClick = navController::backToMain,
-                    ) {
-                        Icon(painter = painterResource(R.drawable.arrow_back), contentDescription = null)
+                    FrostedHeaderPill(plain = true) {
+                        IconButton(
+                            onClick = navController::navigateUp,
+                            onLongClick = navController::backToMain,
+                        ) {
+                            Icon(painter = painterResource(R.drawable.arrow_back), contentDescription = null)
+                        }
+                        Text(
+                            text = stringResource(R.string.theme_creator_title),
+                            color = MaterialTheme.colorScheme.onBackground,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            modifier = Modifier.padding(end = 4.dp),
+                        )
                     }
                 },
                 actions = {
@@ -1252,13 +1260,19 @@ fun ThemeCreatorScreen(navController: NavController) {
             }
         },
     ) { paddingValues ->
+        val playerAwareBottomPadding =
+            LocalPlayerAwareWindowInsets.current
+                .only(WindowInsetsSides.Bottom)
+                .asPaddingValues()
+                .calculateBottomPadding()
         Column(
             modifier =
                 Modifier
                     .fillMaxWidth()
                     .padding(paddingValues)
-                    .windowInsetsPadding(LocalPlayerAwareWindowInsets.current.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
-                    .verticalScroll(rememberScrollState()),
+                    .windowInsetsPadding(LocalPlayerAwareWindowInsets.current.only(WindowInsetsSides.Horizontal))
+                    .verticalScroll(rememberScrollState())
+                    .padding(bottom = playerAwareBottomPadding + SettingsDimensions.ScreenBottomPadding),
         ) {
             SimpleThemePreview(
                 palette = currentPalette,
@@ -1472,7 +1486,7 @@ private fun SelectableMiniPalette(
                             .offset(24.dp, 24.dp),
                     color = palette.secondary,
                 ) {}
-                AnimatedVisibility(
+                androidx.compose.animation.AnimatedVisibility(
                     visible = isSelected,
                     modifier =
                         Modifier

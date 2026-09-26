@@ -21,21 +21,24 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -45,20 +48,32 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import kotlinx.coroutines.flow.collectLatest
+import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
+import moe.rukamori.archivetune.LocalStableSystemBarsTopPadding
 import moe.rukamori.archivetune.R
 import moe.rukamori.archivetune.androidauto.AndroidAutoActionSlot
 import moe.rukamori.archivetune.androidauto.AndroidAutoConnectionStatus
 import moe.rukamori.archivetune.androidauto.AndroidAutoCustomAction
 import moe.rukamori.archivetune.androidauto.AndroidAutoSettingsSnapshot
+import moe.rukamori.archivetune.constants.AppBarHeight
+import moe.rukamori.archivetune.ui.component.IconButton
 import moe.rukamori.archivetune.ui.component.ListPreference
 import moe.rukamori.archivetune.ui.component.PreferenceEntry
 import moe.rukamori.archivetune.ui.component.PreferenceGroup
 import moe.rukamori.archivetune.ui.component.SwitchPreference
+import moe.rukamori.archivetune.ui.component.glassAwareSurface
+import moe.rukamori.archivetune.ui.screens.GlassScreenHeaderOverlay
+import moe.rukamori.archivetune.ui.screens.ScreenHeaderHaze
+import moe.rukamori.archivetune.ui.screens.glassHeaderSource
+import moe.rukamori.archivetune.ui.screens.rememberGlassScreenHeader
+import moe.rukamori.archivetune.ui.utils.backToMain
 import moe.rukamori.archivetune.viewmodels.AndroidAutoSettingsAction
 import moe.rukamori.archivetune.viewmodels.AndroidAutoSettingsEvent
 import moe.rukamori.archivetune.viewmodels.AndroidAutoSettingsState
@@ -72,16 +87,25 @@ private val secondaryAndroidAutoActions = AndroidAutoCustomAction.entries
 @Composable
 fun AndroidAutoSettings(
     navController: NavController,
+    scrollTo: String? = null,
     viewModel: AndroidAutoSettingsViewModel = hiltViewModel(),
 ) {
     val onBack = remember(navController) { { navController.navigateUp(); Unit } }
-    AndroidAutoSettingsRoute(onBack = onBack, viewModel = viewModel)
+    val onBackLongClick = remember(navController) { { navController.backToMain(); Unit } }
+    AndroidAutoSettingsRoute(
+        onBack = onBack,
+        onBackLongClick = onBackLongClick,
+        viewModel = viewModel,
+        scrollTo = scrollTo,
+    )
 }
 
 @Composable
 fun AndroidAutoSettingsRoute(
     onBack: () -> Unit,
+    onBackLongClick: () -> Unit,
     viewModel: AndroidAutoSettingsViewModel = hiltViewModel(),
+    scrollTo: String? = null,
 ) {
     val context = LocalContext.current
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -112,7 +136,13 @@ fun AndroidAutoSettingsRoute(
             }
         }
     }
-    AndroidAutoSettingsContent(state = state, onAction = onAction, onBack = onBack)
+    AndroidAutoSettingsContent(
+        state = state,
+        onAction = onAction,
+        onBack = onBack,
+        onBackLongClick = onBackLongClick,
+        scrollTo = scrollTo,
+    )
 }
 
 @Composable
@@ -120,37 +150,125 @@ private fun AndroidAutoSettingsContent(
     state: AndroidAutoSettingsState,
     onAction: (AndroidAutoSettingsAction) -> Unit,
     onBack: () -> Unit,
+    onBackLongClick: () -> Unit,
+    scrollTo: String? = null,
     modifier: Modifier = Modifier,
 ) {
+    // Settings-main-page recipe: the scrolling preferences are the haze/backdrop
+    // source and extend behind the header row, a progressive ScreenHeaderHaze
+    // band fades over the status bar and the header is a liquid-glass round
+    // back button plus a centred title when the liquid-glass look is enabled.
+    // The header row sits flush below the status bar (no double inset) and the
+    // content behind it is real scrolling content, so the glass reads
+    // translucent instead of sampling an opaque empty surface.
+    val glassHeader = rememberGlassScreenHeader()
+    val systemBarsTopPadding = LocalStableSystemBarsTopPadding.current
+
     Scaffold(
-        modifier = modifier.windowInsetsPadding(WindowInsets.safeDrawing),
-        topBar = {
-            TopAppBar(
-                title = { Text(stringResource(R.string.android_auto)) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(painterResource(R.drawable.arrow_back), stringResource(R.string.back_button_desc))
+        modifier = modifier,
+        containerColor = glassAwareSurface(),
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
+    ) { _ ->
+        Box(modifier = Modifier.fillMaxSize()) {
+            when (state) {
+                AndroidAutoSettingsState.Loading -> Box(
+                    Modifier
+                        .fillMaxSize()
+                        .glassHeaderSource(glassHeader),
+                    contentAlignment = Alignment.Center,
+                ) { CircularProgressIndicator() }
+                is AndroidAutoSettingsState.Success -> {
+                    // Settings-main-page recipe: the bottom inset comes from
+                    // the player-aware window insets (navigation bar PLUS the
+                    // mini player height when playback is active) instead of
+                    // plain safeDrawing — otherwise the mini player overlapped
+                    // the last preference rows on this page.
+                    val playerAwareBottomPadding =
+                        LocalPlayerAwareWindowInsets.current
+                            .only(WindowInsetsSides.Bottom)
+                            .asPaddingValues()
+                            .calculateBottomPadding()
+                    AndroidAutoSettingsBody(
+                        model = state.model,
+                        onAction = onAction,
+                        scrollTo = scrollTo,
+                        bottomBarPadding = playerAwareBottomPadding,
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .glassHeaderSource(glassHeader)
+                                .windowInsetsPadding(
+                                    LocalPlayerAwareWindowInsets.current.only(
+                                        WindowInsetsSides.Horizontal,
+                                    ),
+                                ),
+                    )
+                }
+                AndroidAutoSettingsState.Empty -> AndroidAutoSettingsFailure(
+                    onAction,
+                    Modifier
+                        .fillMaxSize()
+                        .glassHeaderSource(glassHeader),
+                )
+                is AndroidAutoSettingsState.Error -> AndroidAutoSettingsFailure(
+                    onAction = onAction,
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .glassHeaderSource(glassHeader),
+                    messageRes = state.messageRes,
+                )
+            }
+
+            // Glass header exactly like the home screen: the back button AND
+            // the title live together inside one liquid-glass pill, floating
+            // over the scrolling content with the ScreenHeaderHaze band over
+            // the status bar. Without glass: a plain flush app bar row.
+            val backdrop = glassHeader.backdrop
+            if (backdrop != null) {
+                GlassScreenHeaderOverlay(
+                    header = glassHeader,
+                    title = stringResource(R.string.android_auto),
+                    onBack = onBack,
+                    onBackLongClick = onBackLongClick,
+                )
+            } else {
+                ScreenHeaderHaze(
+                    hazeState = glassHeader.haze,
+                    systemBarsTopPadding = systemBarsTopPadding,
+                )
+                Box(
+                    modifier =
+                        Modifier
+                            .align(Alignment.TopCenter)
+                            .fillMaxWidth()
+                            .padding(top = systemBarsTopPadding)
+                            .height(AppBarHeight),
+                ) {
+                    Text(
+                        text = stringResource(R.string.android_auto),
+                        color = MaterialTheme.colorScheme.onBackground,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleLarge,
+                        maxLines = 1,
+                        modifier = Modifier.align(Alignment.Center),
+                    )
+
+                    IconButton(
+                        onClick = onBack,
+                        onLongClick = onBackLongClick,
+                        modifier =
+                            Modifier
+                                .align(Alignment.CenterStart)
+                                .padding(start = 12.dp),
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.arrow_back),
+                            contentDescription = stringResource(R.string.back_button_desc),
+                        )
                     }
-                },
-            )
-        },
-    ) { padding ->
-        when (state) {
-            AndroidAutoSettingsState.Loading -> Box(
-                Modifier.fillMaxSize().padding(padding),
-                contentAlignment = Alignment.Center,
-            ) { CircularProgressIndicator() }
-            is AndroidAutoSettingsState.Success -> AndroidAutoSettingsBody(
-                model = state.model,
-                onAction = onAction,
-                modifier = Modifier.padding(padding),
-            )
-            AndroidAutoSettingsState.Empty -> AndroidAutoSettingsFailure(onAction, Modifier.padding(padding))
-            is AndroidAutoSettingsState.Error -> AndroidAutoSettingsFailure(
-                onAction = onAction,
-                modifier = Modifier.padding(padding),
-                messageRes = state.messageRes,
-            )
+                }
+            }
         }
     }
 }
@@ -159,21 +277,32 @@ private fun AndroidAutoSettingsContent(
 private fun AndroidAutoSettingsBody(
     model: AndroidAutoSettingsUiModel,
     onAction: (AndroidAutoSettingsAction) -> Unit,
+    scrollTo: String? = null,
+    bottomBarPadding: Dp = 0.dp,
     modifier: Modifier = Modifier,
 ) {
     val configuration = model.snapshot.configuration
+    val positions = rememberPreferencePositions()
+    val scrollState = rememberScrollState()
+    val systemBarsTopPadding = LocalStableSystemBarsTopPadding.current
+    LaunchedEffect(scrollTo, model) { positions.scrollToKey(scrollTo, scrollState) }
     Column(
         modifier =
             modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(bottom = SettingsDimensions.ScreenBottomPadding),
+                .verticalScroll(scrollState)
+                .then(positions.containerModifier())
+                .padding(bottom = bottomBarPadding + SettingsDimensions.ScreenBottomPadding),
     ) {
+        // Content scrolls behind the header row, like the settings main page.
+        Spacer(Modifier.height(systemBarsTopPadding + AppBarHeight + 8.dp))
+
         AndroidAutoConnectionPreferences(snapshot = model.snapshot, onAction = onAction)
 
         PreferenceGroup(title = stringResource(R.string.android_auto_content)) {
             item {
                 SwitchPreference(
+                    modifier = positions.modifierFor("android_auto_online_recommendations"),
                     title = { Text(stringResource(R.string.android_auto_online_recommendations)) },
                     description = stringResource(R.string.android_auto_online_recommendations_desc),
                     icon = { Icon(painterResource(R.drawable.discover_tune), null) },
@@ -186,6 +315,7 @@ private fun AndroidAutoSettingsBody(
             }
             item {
                 SwitchPreference(
+                    modifier = positions.modifierFor("android_auto_online_voice_search"),
                     title = { Text(stringResource(R.string.android_auto_online_voice_search)) },
                     description = stringResource(R.string.android_auto_online_voice_search_desc),
                     icon = { Icon(painterResource(R.drawable.mic), null) },
@@ -198,6 +328,7 @@ private fun AndroidAutoSettingsBody(
             }
             item {
                 SwitchPreference(
+                    modifier = positions.modifierFor("android_auto_local_songs"),
                     title = { Text(stringResource(R.string.android_auto_local_songs)) },
                     description =
                         stringResource(
@@ -225,6 +356,7 @@ private fun AndroidAutoSettingsBody(
         PreferenceGroup(title = stringResource(R.string.android_auto_data)) {
             item {
                 SwitchPreference(
+                    modifier = positions.modifierFor("android_auto_metered_playback"),
                     title = { Text(stringResource(R.string.android_auto_metered_playback)) },
                     description = stringResource(R.string.android_auto_metered_playback_desc),
                     icon = { Icon(painterResource(R.drawable.android_cell), null) },
@@ -237,6 +369,7 @@ private fun AndroidAutoSettingsBody(
             }
             item {
                 SwitchPreference(
+                    modifier = positions.modifierFor("android_auto_metered_artwork"),
                     title = { Text(stringResource(R.string.android_auto_metered_artwork)) },
                     description = stringResource(R.string.android_auto_metered_artwork_desc),
                     icon = { Icon(painterResource(R.drawable.image), null) },
@@ -252,6 +385,7 @@ private fun AndroidAutoSettingsBody(
         PreferenceGroup(title = stringResource(R.string.android_auto_controls)) {
             item {
                 ListPreference(
+                    modifier = positions.modifierFor("android_auto_primary_action"),
                     title = { Text(stringResource(R.string.android_auto_primary_action)) },
                     icon = {
                         Icon(
@@ -277,6 +411,7 @@ private fun AndroidAutoSettingsBody(
             }
             item {
                 ListPreference(
+                    modifier = positions.modifierFor("android_auto_secondary_action"),
                     title = { Text(stringResource(R.string.android_auto_secondary_action)) },
                     icon = {
                         Icon(

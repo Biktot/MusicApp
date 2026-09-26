@@ -23,7 +23,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -32,9 +34,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
+import dev.chrisbanes.haze.hazeSource
+import moe.rukamori.archivetune.LocalStableSystemBarsTopPadding
+import moe.rukamori.archivetune.ui.screens.ScreenHeaderHaze
+import moe.rukamori.archivetune.ui.screens.rememberScreenHeaderHaze
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -48,19 +54,19 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -69,15 +75,17 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.media3.common.Player
+import androidx.media3.datasource.cache.Cache
 import androidx.navigation.NavController
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
-import moe.rukamori.archivetune.BuildConfig
-import moe.rukamori.archivetune.LeakCanaryController
-import moe.rukamori.archivetune.LeakCanaryToggle
+import moe.rukamori.archivetune.LocalDownloadUtil
 import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
 import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.R
+import moe.rukamori.archivetune.constants.ManualSourceLoginEnabledKey
+import moe.rukamori.archivetune.constants.ShowCodecOnPlayerKey
+import moe.rukamori.archivetune.ui.component.FrostedHeaderPill
 import moe.rukamori.archivetune.ui.component.IconButton
 import moe.rukamori.archivetune.ui.component.PreferenceEntry
 import moe.rukamori.archivetune.ui.component.PreferenceGroup
@@ -86,6 +94,23 @@ import moe.rukamori.archivetune.ui.utils.backToMain
 import moe.rukamori.archivetune.utils.makeTimeString
 import moe.rukamori.archivetune.utils.rememberPreference
 import kotlin.math.roundToInt
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+
+private fun sumCachedBytesForSong(
+    downloadUtil: moe.rukamori.archivetune.playback.DownloadUtil?,
+    songId: String,
+): Long {
+    val cache = downloadUtil?.playerCache ?: return 0L
+    var total = 0L
+    for (key in listOf("qobuz:$songId", "tidal:$songId", "deezer:$songId", "apple:$songId", songId)) {
+        total += runCatching { sumCacheSpans(cache, key) }.getOrDefault(0L)
+    }
+    return total
+}
+
+private fun sumCacheSpans(cache: Cache, key: String): Long =
+    runCatching { cache.getCachedSpans(key) }.getOrNull()?.sumOf { it.length } ?: 0L
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -104,57 +129,74 @@ fun DebugSettings(navController: NavController) {
 
     val (showCodecOnPlayer, onShowCodecOnPlayerChange) =
         rememberPreference(
-            key = booleanPreferencesKey("show_codec_on_player"),
+            key = ShowCodecOnPlayerKey,
             defaultValue = false,
         )
 
-    val leakCanaryPreference =
-        if (BuildConfig.LEAK_CANARY_TOGGLE_AVAILABLE) {
-            rememberPreference(
-                key = booleanPreferencesKey(LeakCanaryToggle.PREFERENCE_KEY),
-                defaultValue = false,
-            )
-        } else {
-            null
-        }
-    val context = LocalContext.current
+    val (manualSourceLogin, onManualSourceLoginChange) =
+        rememberPreference(
+            key = ManualSourceLoginEnabledKey,
+            defaultValue = false,
+        )
 
     val playerConnection = LocalPlayerConnection.current
 
+    val headerHaze = rememberScreenHeaderHaze()
+    val systemBarsTopPadding = LocalStableSystemBarsTopPadding.current
+
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
-                title = {
-                    Column {
+                title = {},
+                navigationIcon = {
+                    FrostedHeaderPill(plain = true) {
+                        IconButton(
+                            onClick = navController::navigateUp,
+                            onLongClick = navController::backToMain,
+                        ) {
+                            Icon(painterResource(R.drawable.arrow_back), contentDescription = null)
+                        }
                         Text(
                             text = stringResource(R.string.experiment_settings),
-                            style = MaterialTheme.typography.titleLarge,
+                                style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.onBackground,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            modifier = Modifier.padding(end = 4.dp),
                         )
                     }
                 },
-                navigationIcon = {
-                    IconButton(
-                        onClick = navController::navigateUp,
-                        onLongClick = navController::backToMain,
-                    ) {
-                        Icon(painterResource(R.drawable.arrow_back), contentDescription = null)
-                    }
-                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
+                    scrolledContainerColor = Color.Transparent,
+                ),
             )
         },
     ) { innerPadding: PaddingValues ->
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .windowInsetsPadding(
-                        LocalPlayerAwareWindowInsets.current.only(
-                            WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom,
-                        ),
-                    ).verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
+        val playerAwareBottomPadding =
+            LocalPlayerAwareWindowInsets.current
+                .only(WindowInsetsSides.Bottom)
+                .asPaddingValues()
+                .calculateBottomPadding()
+        val topPadding = innerPadding.calculateTopPadding()
+        val scrollState = rememberScrollState()
+        Box(modifier = Modifier.fillMaxSize()) {
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .windowInsetsPadding(
+                            LocalPlayerAwareWindowInsets.current.only(
+                                WindowInsetsSides.Horizontal,
+                            ),
+                        ).verticalScroll(scrollState)
+
+                        .hazeSource(headerHaze)
+                        .padding(top = topPadding)
+                        .padding(bottom = playerAwareBottomPadding + SettingsDimensions.ScreenBottomPadding),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
             PreferenceGroup(title = stringResource(R.string.experimental_features)) {
                 item {
                     SwitchPreference(
@@ -186,19 +228,14 @@ fun DebugSettings(navController: NavController) {
                     )
                 }
 
-                leakCanaryPreference?.let { preference ->
-                    item {
-                        SwitchPreference(
-                            title = { Text(stringResource(R.string.enable_leak_canary)) },
-                            description = stringResource(R.string.enable_leak_canary_description),
-                            icon = { Icon(painterResource(R.drawable.experiment), null) },
-                            checked = preference.value,
-                            onCheckedChange = { enabled ->
-                                preference.value = enabled
-                                LeakCanaryController.setEnabled(context, enabled)
-                            },
-                        )
-                    }
+                item {
+                    SwitchPreference(
+                        title = { Text(stringResource(R.string.manual_source_login)) },
+                        description = stringResource(R.string.description_manual_source_login),
+                        icon = { Icon(painterResource(R.drawable.login), null) },
+                        checked = manualSourceLogin,
+                        onCheckedChange = onManualSourceLoginChange,
+                    )
                 }
 
                 item {
@@ -249,16 +286,20 @@ fun DebugSettings(navController: NavController) {
                     NerdStatsSection(playerConnection = playerConnection)
                 }
             }
+            }
 
-            Spacer(modifier = Modifier.height(SettingsDimensions.ScreenBottomPadding))
+            ScreenHeaderHaze(
+                hazeState = headerHaze,
+                systemBarsTopPadding = systemBarsTopPadding,
+            )
         }
     }
 }
 
 @Composable
 private fun DiscordDebugSection() {
-    val lastStartTs: Long? by DiscordPresenceManager.lastRpcStartTimeFlow.collectAsState(initial = null)
-    val lastEndTs: Long? by DiscordPresenceManager.lastRpcEndTimeFlow.collectAsState(initial = null)
+    val lastStartTs: Long? by DiscordPresenceManager.lastRpcStartTimeFlow.collectAsStateWithLifecycle(initialValue = null)
+    val lastEndTs: Long? by DiscordPresenceManager.lastRpcEndTimeFlow.collectAsStateWithLifecycle(initialValue = null)
     val lastStart: String = lastStartTs?.let { makeTimeString(it) } ?: "—"
     val lastEnd: String = lastEndTs?.let { makeTimeString(it) } ?: "—"
     val isRunning = DiscordPresenceManager.isRunning()
@@ -284,7 +325,9 @@ private fun DiscordDebugSection() {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+
                 Row(
+                    modifier = Modifier.weight(1f),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -317,6 +360,8 @@ private fun DiscordDebugSection() {
                             text = stringResource(R.string.discord_integration),
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
                         Text(
                             text =
@@ -326,6 +371,8 @@ private fun DiscordDebugSection() {
                                     stringResource(R.string.presence_manager_stopped)
                                 },
                             style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                             color =
                                 if (isRunning) {
                                     MaterialTheme.colorScheme.primary
@@ -432,14 +479,17 @@ private fun DebugTimestampItem(
 private fun NerdStatsSection(playerConnection: moe.rukamori.archivetune.playback.PlayerConnection?) {
     if (playerConnection == null) return
 
-    val currentFormat by playerConnection.currentFormat.collectAsState(initial = null)
-    val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
+    val currentFormat by playerConnection.currentFormat.collectAsStateWithLifecycle(initialValue = null)
+    val mediaMetadata by playerConnection.mediaMetadata.collectAsStateWithLifecycle()
     val player = playerConnection.player
+    val downloadUtil = LocalDownloadUtil.current
 
-    var bufferPercentage by remember { mutableStateOf(0) }
-    var bufferedPosition by remember { mutableStateOf(0L) }
-    var currentPosition by remember { mutableStateOf(0L) }
+    var bufferPercentage by remember { mutableIntStateOf(0) }
+    var bufferedPosition by remember { mutableLongStateOf(0L) }
+    var currentPosition by remember { mutableLongStateOf(0L) }
     var playbackSpeed by remember { mutableStateOf(1.0f) }
+
+    var fallbackSizeBytes by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(Unit) {
         while (isActive) {
@@ -447,6 +497,15 @@ private fun NerdStatsSection(playerConnection: moe.rukamori.archivetune.playback
             bufferedPosition = player.bufferedPosition
             currentPosition = player.currentPosition
             playbackSpeed = player.playbackParameters.speed
+
+            val songId = mediaMetadata?.id
+            if (songId != null && (currentFormat?.contentLength ?: 0L) <= 0L) {
+                fallbackSizeBytes = runCatching {
+                    sumCachedBytesForSong(downloadUtil, songId)
+                }.getOrNull()?.takeIf { it > 0L }
+            } else {
+                fallbackSizeBytes = null
+            }
             delay(500)
         }
     }
@@ -552,7 +611,9 @@ private fun NerdStatsSection(playerConnection: moe.rukamori.archivetune.playback
                                     if (it > 0) {
                                         "${String.format("%.2f", it / 1024.0 / 1024.0)} MB"
                                     } else {
-                                        stringResource(R.string.unknown_content_length)
+                                        fallbackSizeBytes?.let { bytes ->
+                                            "${String.format("%.2f", bytes / 1024.0 / 1024.0)} MB"
+                                        } ?: stringResource(R.string.unknown_content_length)
                                     }
                                 } ?: stringResource(R.string.unknown_content_length),
                             modifier = Modifier.weight(1f),

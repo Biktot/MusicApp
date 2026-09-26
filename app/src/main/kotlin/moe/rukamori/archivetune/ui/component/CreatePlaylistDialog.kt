@@ -20,7 +20,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
@@ -34,6 +33,7 @@ import moe.rukamori.archivetune.viewmodels.CreatePlaylistEvent
 import moe.rukamori.archivetune.viewmodels.CreatePlaylistScreenState
 import moe.rukamori.archivetune.viewmodels.CreatePlaylistUiData
 import moe.rukamori.archivetune.viewmodels.CreatePlaylistViewModel
+import androidx.compose.runtime.getValue
 
 @Composable
 fun CreatePlaylistDialog(
@@ -71,71 +71,40 @@ fun CreatePlaylistDialog(
         }
     }
 
-    when (val state = screenState) {
-        CreatePlaylistScreenState.Loading -> {
-            CreatePlaylistDialogContent(
-                data =
-                    CreatePlaylistUiData(
-                        name = initialTextFieldValue.orEmpty(),
-                        allowSyncing = allowSyncing,
-                        isSignedIn = false,
-                        isSyncEnabled = false,
-                        syncRequested = false,
-                        isSubmitting = false,
-                    ),
-                isLoading = true,
-                errorMessageResId = null,
-                onNameChange = updateName,
-                onSyncRequestedChange = updateSyncRequested,
-                onSubmit = submit,
-                onDismiss = dismiss,
-            )
+    val resolvedData: CreatePlaylistUiData =
+        when (val state = screenState) {
+            is CreatePlaylistScreenState.Success -> state.data
+            is CreatePlaylistScreenState.Error -> state.data
+            CreatePlaylistScreenState.Loading ->
+                CreatePlaylistUiData(
+                    name = initialTextFieldValue.orEmpty(),
+                    allowSyncing = allowSyncing,
+                    isSignedIn = false,
+                    isSyncEnabled = false,
+                    syncRequested = false,
+                    isSubmitting = false,
+                )
+            CreatePlaylistScreenState.Empty ->
+                CreatePlaylistUiData(
+                    name = "",
+                    allowSyncing = allowSyncing,
+                    isSignedIn = false,
+                    isSyncEnabled = false,
+                    syncRequested = false,
+                    isSubmitting = false,
+                )
         }
+    val resolvedErrorResId = (screenState as? CreatePlaylistScreenState.Error)?.messageResId
 
-        is CreatePlaylistScreenState.Success -> {
-            CreatePlaylistDialogContent(
-                data = state.data,
-                isLoading = false,
-                errorMessageResId = null,
-                onNameChange = updateName,
-                onSyncRequestedChange = updateSyncRequested,
-                onSubmit = submit,
-                onDismiss = dismiss,
-            )
-        }
-
-        CreatePlaylistScreenState.Empty -> {
-            CreatePlaylistDialogContent(
-                data =
-                    CreatePlaylistUiData(
-                        name = "",
-                        allowSyncing = allowSyncing,
-                        isSignedIn = false,
-                        isSyncEnabled = false,
-                        syncRequested = false,
-                        isSubmitting = false,
-                    ),
-                isLoading = false,
-                errorMessageResId = null,
-                onNameChange = updateName,
-                onSyncRequestedChange = updateSyncRequested,
-                onSubmit = submit,
-                onDismiss = dismiss,
-            )
-        }
-
-        is CreatePlaylistScreenState.Error -> {
-            CreatePlaylistDialogContent(
-                data = state.data,
-                isLoading = false,
-                errorMessageResId = state.messageResId,
-                onNameChange = updateName,
-                onSyncRequestedChange = updateSyncRequested,
-                onSubmit = submit,
-                onDismiss = dismiss,
-            )
-        }
-    }
+    CreatePlaylistDialogContent(
+        data = resolvedData,
+        isLoading = screenState is CreatePlaylistScreenState.Loading,
+        errorMessageResId = resolvedErrorResId,
+        onNameChange = updateName,
+        onSyncRequestedChange = updateSyncRequested,
+        onSubmit = submit,
+        onDismiss = dismiss,
+    )
 }
 
 @Composable

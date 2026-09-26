@@ -13,7 +13,10 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.text.format.Formatter
 import android.widget.Toast
+import androidx.annotation.DrawableRes
+import androidx.annotation.StringRes
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.fadeIn
@@ -58,9 +61,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.ToggleButtonDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -72,98 +76,177 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.repeatOnLifecycle
 import coil3.compose.AsyncImage
-import com.google.common.collect.ImmutableList
-import kotlinx.coroutines.awaitCancellation
+import moe.rukamori.archivetune.LocalDatabase
 import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.R
-import moe.rukamori.archivetune.mediainfo.MediaInfoDetail
-import moe.rukamori.archivetune.mediainfo.MediaInfoEvent
-import moe.rukamori.archivetune.mediainfo.MediaInfoMetric
-import moe.rukamori.archivetune.mediainfo.MediaInfoState
-import moe.rukamori.archivetune.mediainfo.MediaInfoTab
-import moe.rukamori.archivetune.mediainfo.MediaInfoUiModel
+import moe.rukamori.archivetune.innertube.models.MediaInfo
 import moe.rukamori.archivetune.ui.component.LocalBottomSheetPageState
-import moe.rukamori.archivetune.viewmodels.MediaInfoViewModel
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+
+private enum class MediaInfoTab(
+    @StringRes val labelRes: Int,
+) {
+    Information(R.string.information),
+    Details(R.string.details),
+    Numbers(R.string.numbers),
+}
+
+private data class MediaInfoQuickFact(
+    @DrawableRes val iconRes: Int,
+    val text: String,
+)
+
+private data class MediaInfoDetail(
+    val label: String,
+    val value: String,
+    val multiline: Boolean = false,
+)
+
+private data class MediaInfoMetric(
+    @StringRes val labelRes: Int,
+    val value: String,
+)
 
 @Composable
 fun ShowMediaInfo(videoId: String) {
-    val viewModel: MediaInfoViewModel = hiltViewModel()
+    if (videoId.isBlank()) return
+
     val context = LocalContext.current
+    val database = LocalDatabase.current
     val bottomSheetPageState = LocalBottomSheetPageState.current
     val playerConnection = LocalPlayerConnection.current
-    val lifecycleOwner = LocalLifecycleOwner.current
-    val state by viewModel.state.collectAsStateWithLifecycle()
-    val selectedTab by viewModel.selectedTab.collectAsStateWithLifecycle()
-    val currentState = state
+    val song by database.song(videoId).collectAsStateWithLifecycle(initialValue = null)
+    val currentFormat by database.format(videoId).collectAsStateWithLifecycle(initialValue = null)
+    val info = rememberMediaInfo(videoId)
+    var selectedTab by rememberSaveable(videoId) { mutableStateOf(MediaInfoTab.Information) }
 
-    LaunchedEffect(videoId, viewModel) {
-        viewModel.open(videoId, playerConnection?.player?.volume)
-        try {
-            awaitCancellation()
-        } finally {
-            viewModel.release(videoId)
-        }
-    }
-    LaunchedEffect(viewModel, lifecycleOwner, context, bottomSheetPageState) {
-        lifecycleOwner.lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            viewModel.events.collect { event ->
-                when (event) {
-                    is MediaInfoEvent.Copy -> copyToClipboard(context, event.value)
-                    is MediaInfoEvent.Share -> shareMediaLink(context, event.url)
-                    MediaInfoEvent.Close -> bottomSheetPageState.dismiss()
-                }
-            }
-        }
-    }
-    MediaInfoContent(
-        state = if (currentState is MediaInfoState.Success && currentState.data.videoId != videoId) {
-            MediaInfoState.Loading
-        } else {
-            currentState
-        },
-        selectedTab = selectedTab,
-        onSelectTab = remember(viewModel) { viewModel::selectTab },
-        onCopy = remember(viewModel) { viewModel::copy },
-        onCopyId = remember(viewModel) { viewModel::copyId },
-        onShare = remember(viewModel) { viewModel::share },
-        onClose = remember(viewModel) { viewModel::close },
-    )
-}
-
-@Composable
-private fun MediaInfoContent(
-    state: MediaInfoState<MediaInfoUiModel>,
-    selectedTab: MediaInfoTab,
-    onSelectTab: (MediaInfoTab) -> Unit,
-    onCopy: (String) -> Unit,
-    onCopyId: () -> Unit,
-    onShare: () -> Unit,
-    onClose: () -> Unit,
-) {
-    val model = (state as? MediaInfoState.Success)?.data
-    if (model == null) {
-        MediaInfoStatusCard(title = stringResource(R.string.information), state = state)
-        return
-    }
     val unknownText = stringResource(R.string.unknown)
     val pleaseWaitText = stringResource(R.string.please_wait)
     val copyText = stringResource(R.string.copy)
     val shareText = stringResource(R.string.share)
     val closeText = stringResource(R.string.close)
+    val songTitleLabel = stringResource(R.string.song_title)
+    val songArtistsLabel = stringResource(R.string.song_artists)
+    val mediaIdLabel = stringResource(R.string.media_id)
+    val mimeTypeLabel = stringResource(R.string.mime_type)
+    val codecsLabel = stringResource(R.string.codecs)
+    val bitrateLabel = stringResource(R.string.bitrate)
+    val sampleRateLabel = stringResource(R.string.sample_rate)
+    val loudnessLabel = stringResource(R.string.loudness)
+    val volumeLabel = stringResource(R.string.volume)
+    val fileSizeLabel = stringResource(R.string.file_size)
     val descriptionLabel = stringResource(R.string.description)
     val detailsLabel = stringResource(R.string.details)
     val numbersLabel = stringResource(R.string.numbers)
     val informationLabel = stringResource(R.string.information)
-    val description = (model.descriptionState as? MediaInfoState.Success)?.data
-    val onCopyDescription: () -> Unit = remember(onCopy, description) {
-        { description?.let(onCopy) }
-    }
+
+    val mediaUrl = remember(videoId) { "https://music.youtube.com/watch?v=$videoId" }
+
+    val heroTitle = song?.title ?: info?.title ?: videoId
+    val heroSubtitle =
+        song
+            ?.artists
+            ?.takeIf { it.isNotEmpty() }
+            ?.joinToString { it.name }
+            ?: info?.author
+            ?: unknownText
+    val artworkModel = song?.thumbnailUrl ?: info?.authorThumbnail
+    val playbackVolume = playerConnection?.let { "${(it.player.volume * 100).toInt()}%" }
+
+    val overviewDetails =
+        buildList {
+            add(MediaInfoDetail(label = songTitleLabel, value = song?.title ?: info?.title ?: unknownText))
+            add(
+                MediaInfoDetail(
+                    label = songArtistsLabel,
+                    value =
+                        song
+                            ?.artists
+                            ?.takeIf { it.isNotEmpty() }
+                            ?.joinToString { it.name }
+                            ?: info?.author
+                            ?: unknownText,
+                ),
+            )
+            add(MediaInfoDetail(label = mediaIdLabel, value = videoId))
+        }
+
+    val technicalDetails =
+        buildList {
+
+            currentFormat?.itag?.takeIf { it > 0 }?.toString()?.let { add(MediaInfoDetail(label = "Itag", value = it)) }
+            currentFormat
+                ?.mimeType
+                ?.takeIf { it.isNotBlank() }
+                ?.let { add(MediaInfoDetail(label = mimeTypeLabel, value = it)) }
+            currentFormat
+                ?.codecs
+                ?.takeIf { it.isNotBlank() }
+                ?.let { add(MediaInfoDetail(label = codecsLabel, value = it)) }
+            currentFormat
+                ?.bitrate
+                ?.takeIf { it > 0 }
+                ?.let { add(MediaInfoDetail(label = bitrateLabel, value = "${it / 1000} Kbps")) }
+            currentFormat
+                ?.sampleRate
+                ?.takeIf { it > 0 }
+                ?.let { add(MediaInfoDetail(label = sampleRateLabel, value = "$it Hz")) }
+            currentFormat?.loudnessDb?.let { add(MediaInfoDetail(label = loudnessLabel, value = "$it dB")) }
+            playbackVolume?.let { add(MediaInfoDetail(label = volumeLabel, value = it)) }
+            currentFormat
+                ?.contentLength
+                ?.takeIf { it > 0 }
+                ?.let {
+                    add(
+                        MediaInfoDetail(
+                            label = fileSizeLabel,
+                            value = Formatter.formatShortFileSize(context, it),
+                        ),
+                    )
+                }
+        }
+
+    val quickFacts =
+        buildList {
+            currentFormat
+                ?.mimeType
+                ?.substringBefore(';')
+                ?.takeIf { it.isNotBlank() }
+                ?.let { add(MediaInfoQuickFact(iconRes = R.drawable.graphic_eq, text = it)) }
+            currentFormat
+                ?.bitrate
+                ?.takeIf { it > 0 }
+                ?.let { add(MediaInfoQuickFact(iconRes = R.drawable.waves, text = "${it / 1000} Kbps")) }
+            currentFormat
+                ?.contentLength
+                ?.takeIf { it > 0 }
+                ?.let {
+                    add(
+                        MediaInfoQuickFact(
+                            iconRes = R.drawable.storage,
+                            text = Formatter.formatShortFileSize(context, it),
+                        ),
+                    )
+                }
+            info
+                ?.subscribers
+                ?.takeIf { it.isNotBlank() }
+                ?.let { add(MediaInfoQuickFact(iconRes = R.drawable.person, text = it)) }
+        }
+
+    val metrics =
+        if (info != null) {
+            listOf(
+                MediaInfoMetric(R.string.subscribers, info?.subscribers ?: unknownText),
+                MediaInfoMetric(R.string.views, info?.viewCount?.let(::numberFormatter) ?: unknownText),
+                MediaInfoMetric(R.string.likes, info?.like?.let(::numberFormatter) ?: unknownText),
+                MediaInfoMetric(R.string.dislikes, info?.dislike?.let(::numberFormatter) ?: unknownText),
+            )
+        } else {
+            emptyList()
+        }
 
     LazyColumn(
         state = rememberLazyListState(),
@@ -171,26 +254,26 @@ private fun MediaInfoContent(
         contentPadding = PaddingValues(bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        item(key = "Hero", contentType = "Hero") {
+        item(contentType = "Hero") {
             MediaInfoHeroCard(
-                title = model.title,
-                subtitle = model.subtitle ?: unknownText,
-                artworkModel = model.artwork,
+                title = heroTitle,
+                subtitle = heroSubtitle,
+                artworkModel = artworkModel,
                 sectionLabel = informationLabel,
-                isLoading = model.metadata is MediaInfoState.Loading,
+                isLoading = info == null,
                 loadingText = pleaseWaitText,
                 closeText = closeText,
-                onClose = onClose,
+                onClose = bottomSheetPageState::dismiss,
             )
         }
 
-        item(key = "Actions", contentType = "Actions") {
+        item(contentType = "Actions") {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 FilledTonalButton(
-                    onClick = onCopyId,
+                    onClick = { copyToClipboard(context, videoId) },
                     modifier = Modifier.weight(1f),
                 ) {
                     Icon(
@@ -202,7 +285,7 @@ private fun MediaInfoContent(
                 }
 
                 OutlinedButton(
-                    onClick = onShare,
+                    onClick = { shareMediaLink(context, mediaUrl) },
                     modifier = Modifier.weight(1f),
                 ) {
                     Icon(
@@ -215,16 +298,16 @@ private fun MediaInfoContent(
             }
         }
 
-        if (model.quickFacts.isNotEmpty()) {
-            item(key = "QuickFacts", contentType = "QuickFacts") {
+        if (quickFacts.isNotEmpty()) {
+            item(contentType = "QuickFacts") {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    model.quickFacts.forEach { fact ->
+                    quickFacts.forEach { fact ->
                         AssistChip(
-                            onClick = remember(onCopy, fact.text) { { onCopy(fact.text) } },
+                            onClick = { copyToClipboard(context, fact.text) },
                             label = {
                                 Text(
                                     text = fact.text,
@@ -249,7 +332,7 @@ private fun MediaInfoContent(
             }
         }
 
-        item(key = "Tabs", contentType = "Tabs") {
+        item(contentType = "Tabs") {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
                 modifier = Modifier.fillMaxWidth(),
@@ -258,7 +341,11 @@ private fun MediaInfoContent(
                     val checked = selectedTab == tab
                     ToggleButton(
                         checked = checked,
-                        onCheckedChange = remember(onSelectTab, tab) { { onSelectTab(tab) } },
+                        onCheckedChange = {
+                            if (!checked) {
+                                selectedTab = tab
+                            }
+                        },
                         modifier =
                             Modifier
                                 .weight(1f)
@@ -287,7 +374,7 @@ private fun MediaInfoContent(
             }
         }
 
-        item(key = "SelectedContent", contentType = "SelectedContent") {
+        item(contentType = "SelectedContent") {
             AnimatedContent(
                 targetState = selectedTab,
                 transitionSpec = { fadeIn() togetherWith fadeOut() },
@@ -303,42 +390,54 @@ private fun MediaInfoContent(
                     when (tab) {
                         MediaInfoTab.Information -> {
                             MediaInfoDetailCard(
-                                items = model.overview,
+                                items = overviewDetails,
                                 copyContentDescription = copyText,
-                                onCopy = onCopy,
+                                onCopy = { copyToClipboard(context, it) },
                             )
 
-                            if (description != null) {
-                                MediaInfoNarrativeCard(
+                            if (info == null) {
+                                MediaInfoPendingCard(
                                     title = descriptionLabel,
-                                    body = description,
-                                    copyText = copyText,
-                                    onCopy = onCopyDescription,
+                                    message = pleaseWaitText,
                                 )
                             } else {
-                                MediaInfoStatusCard(
+                                MediaInfoNarrativeCard(
                                     title = descriptionLabel,
-                                    state = model.descriptionState,
+                                    body = info?.description?.takeIf { it.isNotBlank() } ?: unknownText,
+                                    copyText = copyText,
+                                    onCopy = {
+                                        info
+                                            ?.description
+                                            ?.takeIf { value -> value.isNotBlank() }
+                                            ?.let { copyToClipboard(context, it) }
+                                    },
                                 )
                             }
                         }
 
                         MediaInfoTab.Details -> {
-                            when (val details = model.technicalDetails) {
-                                is MediaInfoState.Success -> MediaInfoDetailCard(
-                                    items = details.data,
-                                    copyContentDescription = copyText,
-                                    onCopy = onCopy,
+                            if (technicalDetails.isEmpty()) {
+                                MediaInfoPendingCard(
+                                    title = detailsLabel,
+                                    message = pleaseWaitText,
                                 )
-                                else -> MediaInfoStatusCard(title = detailsLabel, state = details)
+                            } else {
+                                MediaInfoDetailCard(
+                                    items = technicalDetails,
+                                    copyContentDescription = copyText,
+                                    onCopy = { copyToClipboard(context, it) },
+                                )
                             }
                         }
 
                         MediaInfoTab.Numbers -> {
-                            if (model.statistics is MediaInfoState.Success) {
-                                MediaInfoMetricsGrid(metrics = model.metrics)
+                            if (metrics.isEmpty()) {
+                                MediaInfoPendingCard(
+                                    title = numbersLabel,
+                                    message = pleaseWaitText,
+                                )
                             } else {
-                                MediaInfoStatusCard(title = numbersLabel, state = model.statistics)
+                                MediaInfoMetricsGrid(metrics = metrics)
                             }
                         }
                     }
@@ -464,7 +563,7 @@ private fun MediaInfoHeroCard(
 
 @Composable
 private fun MediaInfoDetailCard(
-    items: ImmutableList<MediaInfoDetail>,
+    items: List<MediaInfoDetail>,
     copyContentDescription: String,
     onCopy: (String) -> Unit,
 ) {
@@ -479,14 +578,18 @@ private fun MediaInfoDetailCard(
             items.forEachIndexed { index, item ->
                 ListItem(
                     overlineContent = {
-                        Text(text = stringResource(item.labelRes))
+                        Text(text = item.label)
                     },
                     headlineContent = {
-                        Text(
-                            text = item.value ?: stringResource(R.string.unknown),
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        if (item.multiline) {
+                            Text(text = item.value)
+                        } else {
+                            Text(
+                                text = item.value,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     },
                     trailingContent = {
                         Icon(
@@ -495,10 +598,7 @@ private fun MediaInfoDetailCard(
                         )
                     },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
-                    modifier = Modifier.clickable(
-                        enabled = item.value != null,
-                        onClick = remember(onCopy, item.value) { { item.value?.let(onCopy) } },
-                    ),
+                    modifier = Modifier.clickable { onCopy(item.value) },
                 )
 
                 if (index != items.lastIndex) {
@@ -562,12 +662,12 @@ private fun MediaInfoNarrativeCard(
 }
 
 @Composable
-private fun MediaInfoMetricsGrid(metrics: ImmutableList<MediaInfoMetric>) {
+private fun MediaInfoMetricsGrid(metrics: List<MediaInfoMetric>) {
     Column(
         verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        remember(metrics) { metrics.chunked(2) }.forEach { rowMetrics ->
+        metrics.chunked(2).forEach { rowMetrics ->
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxWidth(),
@@ -593,7 +693,7 @@ private fun MediaInfoMetricsGrid(metrics: ImmutableList<MediaInfoMetric>) {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                             Text(
-                                text = metric.value ?: stringResource(R.string.unknown),
+                                text = metric.value,
                                 style = MaterialTheme.typography.headlineSmall,
                                 fontWeight = FontWeight.SemiBold,
                             )
@@ -610,17 +710,10 @@ private fun MediaInfoMetricsGrid(metrics: ImmutableList<MediaInfoMetric>) {
 }
 
 @Composable
-private fun MediaInfoStatusCard(
+private fun MediaInfoPendingCard(
     title: String,
-    state: MediaInfoState<*>,
+    message: String,
 ) {
-    val message = stringResource(
-        when (state) {
-            MediaInfoState.Loading -> R.string.please_wait
-            is MediaInfoState.Error -> R.string.media_info_load_error
-            MediaInfoState.Empty, is MediaInfoState.Success -> R.string.media_info_empty
-        },
-    )
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         colors =
@@ -636,9 +729,7 @@ private fun MediaInfoStatusCard(
                     .fillMaxWidth()
                     .padding(20.dp),
         ) {
-            if (state is MediaInfoState.Loading) {
-                LoadingIndicator(modifier = Modifier.size(40.dp))
-            }
+            LoadingIndicator(modifier = Modifier.size(40.dp))
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,

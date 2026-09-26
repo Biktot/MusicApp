@@ -12,17 +12,29 @@ package moe.rukamori.archivetune.ui.component
 import android.os.SystemClock
 import android.view.ViewConfiguration
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.EaseOut
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,50 +45,484 @@ import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.material3.ShortNavigationBar
 import androidx.compose.material3.ShortNavigationBarArrangement
 import androidx.compose.material3.ShortNavigationBarItem
+import androidx.compose.material3.ShortNavigationBarItemDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
+import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
+import android.graphics.Bitmap
+import android.os.Build
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.MotionDurationScale
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.BlurEffect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.layer.GraphicsLayer
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.fastCoerceIn
 import androidx.compose.ui.util.lerp
-import moe.rukamori.archivetune.constants.FloatingBarJunctionCornerRadius
-import moe.rukamori.archivetune.constants.FloatingBarOuterCornerRadius
-import moe.rukamori.archivetune.constants.FloatingBarStandaloneCornerRadius
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.drop
+import moe.rukamori.archivetune.utils.isLowEndDevice
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import moe.rukamori.archivetune.utils.ImageBlurUtils
+import moe.rukamori.archivetune.constants.DisableAnimationsKey
+import moe.rukamori.archivetune.constants.FloatingNavigationBarMaxWidth
+import moe.rukamori.archivetune.constants.HideNavigationBarLabelsKey
+import moe.rukamori.archivetune.constants.NAVIGATION_BAR_CORNER_RADIUS_DEFAULT
+import moe.rukamori.archivetune.constants.NAVIGATION_BAR_HEIGHT_DEFAULT
+import moe.rukamori.archivetune.constants.NAVIGATION_BAR_LABEL_SPACING_DEFAULT
+import moe.rukamori.archivetune.constants.NAVIGATION_BAR_OPACITY_DEFAULT
+import moe.rukamori.archivetune.constants.NAVIGATION_BAR_TRANSPARENCY_DEFAULT
+import moe.rukamori.archivetune.constants.NAVIGATION_BAR_WIDTH_DEFAULT
+import moe.rukamori.archivetune.constants.NavigationBarCornerRadiusKey
 import moe.rukamori.archivetune.constants.NavigationBarHeight
+import moe.rukamori.archivetune.constants.NavigationBarHeightKey
+import moe.rukamori.archivetune.constants.NavigationBarLabelSpacingKey
 import moe.rukamori.archivetune.constants.NavigationBarMaxWidth
+import moe.rukamori.archivetune.constants.NavigationBarOpacityKey
+import moe.rukamori.archivetune.constants.NavigationBarStyle
+import moe.rukamori.archivetune.constants.NavigationBarTransparencyKey
+import moe.rukamori.archivetune.constants.NavigationBarWidthKey
 import moe.rukamori.archivetune.ui.screens.Screens
+import moe.rukamori.archivetune.utils.rememberPreference
+import com.kyant.backdrop.backdrops.LayerBackdrop
+import com.kyant.backdrop.drawBackdrop
+import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.colorControls
+import com.kyant.backdrop.effects.lens
+import kotlin.math.abs
+import kotlin.math.roundToInt
+import kotlin.math.sign
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+
+class NavigationBarBackdrop(
+    val layer: GraphicsLayer,
+) {
+    var contentOffsetInRoot: Offset = Offset.Zero
+}
+
+val LocalNavigationBarBackdrop = compositionLocalOf<NavigationBarBackdrop?> { null }
 
 private val NavigationItemsMaxWidth = 360.dp
 private val NavigationItemVerticalPadding = 8.dp
+
+private val SukiSUBarHeight = 64.dp
+private val SukiSUItemPadding = 4.dp
+
+private const val FrostedNavBarBlurRadiusPx = 60f
+
+private const val FrostedNavBarOverlayAlpha = 0.30f
+
+/** Tinted bar in light mode: how far the white base is pulled toward the accent. */
+private const val TintFrostedLightBaseBlend = 0.26f
+
+/** Tinted bar in dark (and pure-black) schemes: how far the black base is pulled toward the accent. */
+private const val TintedDarkBaseBlend = 0.30f
+
+/** Tinted bar content in light mode: how far the accent is darkened. */
+private const val TintFrostedContentBlend = 0.55f
+
+/** Tinted bar content in dark mode: how far white is pulled toward the accent. */
+private const val TintedDarkContentBlend = 0.45f
+
+private val NavigationIndicatorWidth = 56.dp
+private val NavigationIndicatorHeight = 32.dp
+
+private val FloatingNavigationIndicatorWidth = 64.dp
+private val FloatingNavigationIndicatorHeight = 42.dp
+
+private object FullMotionDurationScale : MotionDurationScale {
+    override val scaleFactor: Float = 1f
+}
 
 @Composable
 fun FloatingNavigationToolbar(
     items: List<Screens>,
     pureBlack: Boolean,
     modifier: Modifier = Modifier,
-    miniPlayerProximityProvider: () -> Float = { 0f },
+    isPairedWithMiniPlayer: Boolean = false,
+    style: NavigationBarStyle = NavigationBarStyle.DEFAULT,
+    frostedBlur: Boolean = false,
+    tintFrostedBlur: Boolean = false,
+    frostedBackdrop: NavigationBarBackdrop? = null,
+    liquidGlass: Boolean = false,
+    liquidGlassBackdrop: LayerBackdrop? = null,
     isSelected: (Screens) -> Boolean,
     onItemClick: (Screens, Boolean) -> Unit,
     onSearchItemDoubleClick: (() -> Unit)? = null,
 ) {
-    val miniPlayerProximity = miniPlayerProximityProvider()
+    val isFloating = style == NavigationBarStyle.FLOATING
+
+    // Follows the APP theme (not the system setting) — derived from the active
+    // color scheme so the tinted bar and its icon polarity stay correct even
+    // when the in-app dark mode differs from the system one.
+    val isDarkScheme = MaterialTheme.colorScheme.background.luminance() < 0.5f
+
+    // The tinted bar follows the scheme: a light accent pastel in light mode,
+    // a deep accent-tinted dark bar in dark mode (what separates it from the
+    // neutral frosted bar is the visible accent tint in both). It is flat: no
+    // backdrop blur is drawn for it at all. Its content polarity flips with
+    // the scheme — dark accent shade on the light bar, light accent tint on
+    // the dark bar — readable in every mode and accent the dynamic themer can
+    // pick.
+    val tintedNavBarBaseColor =
+        if (isDarkScheme) {
+            lerp(Color.Black, MaterialTheme.colorScheme.primary, TintedDarkBaseBlend)
+        } else {
+            lerp(Color.White, MaterialTheme.colorScheme.primary, TintFrostedLightBaseBlend)
+        }
+    val tintedNavBarContentColor =
+        if (isDarkScheme) {
+            lerp(Color.White, MaterialTheme.colorScheme.primary, TintedDarkContentBlend)
+        } else {
+            lerp(MaterialTheme.colorScheme.primary, Color.Black, TintFrostedContentBlend)
+        }
+    val tintedNavBarUnselectedContentColor =
+        if (isDarkScheme) Color.White.copy(alpha = 0.62f) else Color.Black.copy(alpha = 0.62f)
+
+    val (navBarWidthFraction) =
+        rememberPreference(NavigationBarWidthKey, defaultValue = NAVIGATION_BAR_WIDTH_DEFAULT)
+    val (navBarHeightMultiplier) =
+        rememberPreference(NavigationBarHeightKey, defaultValue = NAVIGATION_BAR_HEIGHT_DEFAULT)
+    val (navBarOpacity) =
+        rememberPreference(NavigationBarOpacityKey, defaultValue = NAVIGATION_BAR_OPACITY_DEFAULT)
+    val (navBarTransparency) =
+        rememberPreference(NavigationBarTransparencyKey, defaultValue = NAVIGATION_BAR_TRANSPARENCY_DEFAULT)
+    val (navBarLabelSpacing) =
+        rememberPreference(NavigationBarLabelSpacingKey, defaultValue = NAVIGATION_BAR_LABEL_SPACING_DEFAULT)
+    val (navBarCornerRadius) =
+        rememberPreference(NavigationBarCornerRadiusKey, defaultValue = NAVIGATION_BAR_CORNER_RADIUS_DEFAULT)
+    val isPreS = Build.VERSION.SDK_INT < Build.VERSION_CODES.S
+
+    // Only the neutral frosted bar blurs its backdrop — the tinted bar is a
+    // flat solid colour in every scheme (tint wins if both flags are somehow
+    // stored on).
+    val canBlurBackdrop = frostedBlur && !tintFrostedBlur && frostedBackdrop != null && !isPreS
+
+    val canLiquidGlass = liquidGlass && liquidGlassBackdrop != null && !isPreS
+    val resolvedBarHeight =
+        if (canLiquidGlass) SukiSUBarHeight else NavigationBarHeight * navBarHeightMultiplier
+
+    val itemVerticalPadding =
+        if (canLiquidGlass) SukiSUItemPadding else NavigationItemVerticalPadding
+    val itemHorizontalPadding = if (canLiquidGlass) SukiSUItemPadding else 0.dp
     val navigationShape =
-        RoundedCornerShape(
-            topStart = lerp(FloatingBarStandaloneCornerRadius.value, FloatingBarJunctionCornerRadius.value, miniPlayerProximity).dp,
-            topEnd = lerp(FloatingBarStandaloneCornerRadius.value, FloatingBarJunctionCornerRadius.value, miniPlayerProximity).dp,
-            bottomStart = lerp(FloatingBarStandaloneCornerRadius.value, FloatingBarOuterCornerRadius.value, miniPlayerProximity).dp,
-            bottomEnd = lerp(FloatingBarStandaloneCornerRadius.value, FloatingBarOuterCornerRadius.value, miniPlayerProximity).dp,
-        )
+        if (canLiquidGlass) {
+            RoundedCornerShape(percent = 50)
+        } else {
+            remember(isPairedWithMiniPlayer, isFloating, navBarCornerRadius) {
+                when {
+
+                    isFloating -> RoundedCornerShape(navBarCornerRadius.dp)
+                    isPairedWithMiniPlayer ->
+                        RoundedCornerShape(
+                            topStart = 12.dp,
+                            topEnd = 12.dp,
+                            bottomStart = navBarCornerRadius.dp,
+                            bottomEnd = navBarCornerRadius.dp,
+                        )
+                    else -> null
+                }
+            } ?: MaterialTheme.shapes.extraLarge
+        }
     val navigationContainerColor =
-        if (pureBlack) Color.Black else MaterialTheme.colorScheme.surfaceContainer
+        if (canLiquidGlass) {
+
+            Color.Transparent
+        } else if (canBlurBackdrop) {
+
+            if (pureBlack) {
+                Color.Black.copy(alpha = 0.45f)
+            } else {
+                MaterialTheme.colorScheme.surfaceContainer
+            }
+        } else if (pureBlack) {
+            if (tintFrostedBlur) {
+                tintedNavBarBaseColor
+            } else {
+                Color.Black
+            }
+        } else if (tintFrostedBlur) {
+            tintedNavBarBaseColor
+        } else {
+
+            val baseColor = MaterialTheme.colorScheme.surfaceContainer
+            val effectiveAlpha =
+                navBarOpacity * (1f - navBarTransparency)
+            baseColor.copy(alpha = effectiveAlpha.coerceIn(0.05f, 1f))
+        }
     val motionScheme = MaterialTheme.motionScheme
+    val (disableAnimations) = rememberPreference(DisableAnimationsKey, defaultValue = false)
+    val (hideNavigationLabels) = rememberPreference(HideNavigationBarLabelsKey, defaultValue = false)
+    val density = LocalDensity.current
+
+    val indicatorColor =
+        when {
+
+            canLiquidGlass -> Color.Transparent
+
+            // Tint wins over pure black here too — the tinted bar's indicator is
+            // the scheme-opposite wash in every scheme (incl. AMOLED black).
+            tintFrostedBlur && !isFloating ->
+                // A subtle wash of the opposite polarity per scheme.
+                if (isDarkScheme) Color.White.copy(alpha = 0.14f) else Color.Black.copy(alpha = 0.12f)
+            isFloating -> MaterialTheme.colorScheme.primary.copy(alpha = 0.30f)
+            pureBlack -> Color.White.copy(alpha = 0.16f)
+            else -> MaterialTheme.colorScheme.secondaryContainer
+        }
+    val indicatorWidth = if (isFloating) FloatingNavigationIndicatorWidth else NavigationIndicatorWidth
+    val indicatorHeight = if (isFloating) FloatingNavigationIndicatorHeight else NavigationIndicatorHeight
+
+    val itemColors =
+        when {
+            canLiquidGlass -> {
+                val glassIsNight = isSystemInDarkTheme()
+                val glassSelectedColor =
+                    if (glassIsNight) Color.White else MaterialTheme.colorScheme.onSurface
+                val glassUnselectedColor =
+                    if (glassIsNight) {
+                        Color.White
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                ShortNavigationBarItemDefaults.colors(
+                    selectedIndicatorColor = Color.Transparent,
+                    selectedIconColor = glassSelectedColor,
+                    selectedTextColor = glassSelectedColor,
+                    unselectedIconColor = glassUnselectedColor,
+                    unselectedTextColor = glassUnselectedColor,
+                )
+            }
+            isFloating ->
+                ShortNavigationBarItemDefaults.colors(
+                    selectedIndicatorColor = Color.Transparent,
+                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                    unselectedIconColor =
+                        if (pureBlack) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    unselectedTextColor =
+                        if (pureBlack) Color.White.copy(alpha = 0.6f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            // The tinted bar keeps its tinted identity in EVERY scheme — including
+            // pure black. With the pureBlack branch first, a pure-black + tinted
+            // combination fell through to the plain white-on-black item set, which
+            // (together with the near-black 30%-tint base) made the bar read as the
+            // untinted pure-black navbar — "almost transparent". Tint wins here,
+            // matching the container color which already stays tinted in pure black.
+            tintFrostedBlur ->
+                // Selected = tinted content colour, unselected = the scheme's
+                // neutral at 62% — both readable on their scheme's tinted base.
+                ShortNavigationBarItemDefaults.colors(
+                    selectedIndicatorColor = Color.Transparent,
+                    selectedIconColor = tintedNavBarContentColor,
+                    selectedTextColor = tintedNavBarContentColor,
+                    unselectedIconColor = tintedNavBarUnselectedContentColor,
+                    unselectedTextColor = tintedNavBarUnselectedContentColor,
+                )
+            pureBlack ->
+                ShortNavigationBarItemDefaults.colors(
+                    selectedIndicatorColor = Color.Transparent,
+                    selectedIconColor = Color.White,
+                    selectedTextColor = Color.White,
+                    unselectedIconColor = Color.White.copy(alpha = 0.6f),
+                    unselectedTextColor = Color.White.copy(alpha = 0.6f),
+                )
+            else -> ShortNavigationBarItemDefaults.colors(selectedIndicatorColor = Color.Transparent)
+        }
+
+    val selectedIndex = items.indexOfFirst { isSelected(it) }
+
+    val liquidGlassTransparentColors =
+        ShortNavigationBarItemDefaults.colors(
+            selectedIndicatorColor = Color.Transparent,
+            selectedIconColor = Color.Transparent,
+            selectedTextColor = Color.Transparent,
+            unselectedIconColor = Color.Transparent,
+            unselectedTextColor = Color.Transparent,
+        )
+
+    val iconCenters = remember { mutableStateMapOf<Int, Offset>() }
+    val itemBounds = remember { mutableStateMapOf<Int, Rect>() }
+
+    val containerPosState = remember { mutableStateOf(Offset.Zero) }
+    var containerPos by containerPosState
+
+    val indicatorX = remember { Animatable(0f) }
+    var indicatorY by remember { mutableFloatStateOf(0f) }
+    var indicatorPlaced by remember { mutableStateOf(false) }
+
+    var liquidGlassPillWidth by remember { mutableStateOf(0.dp) }
+    var liquidGlassPillHeight by remember { mutableStateOf(0.dp) }
+
+    val animationScope = rememberCoroutineScope()
+    val isLtr = true
+
+    val tabWidthPxState = remember { mutableFloatStateOf(0f) }
+    val totalWidthPxState = remember { mutableFloatStateOf(0f) }
+    val itemsRowLeftInContainerState = remember { mutableFloatStateOf(0f) }
+    var tabWidthPx by tabWidthPxState
+    var totalWidthPx by totalWidthPxState
+
+    var itemsRowLeftInContainer by itemsRowLeftInContainerState
+    val rubberBandPx = with(density) { 4.dp.toPx() }
+
+    val rubberBandOffset = remember { Animatable(0f) }
+    val panelOffset by remember(rubberBandPx, totalWidthPx) {
+        derivedStateOf {
+            if (totalWidthPx == 0f) {
+                0f
+            } else {
+                val fraction = (rubberBandOffset.value / totalWidthPx).fastCoerceIn(-1f, 1f)
+                rubberBandPx * fraction.sign * EaseOut.transform(abs(fraction))
+            }
+        }
+    }
+
+    val tabsCount = items.size
+    val selectedIndexUpdated = rememberUpdatedState(selectedIndex)
+    val onItemClickUpdated = rememberUpdatedState(onItemClick)
+    val dampedDragAnimation =
+        remember(tabsCount, canLiquidGlass) {
+            if (canLiquidGlass && tabsCount > 0) {
+                LiquidGlassDragAnimation(
+                    animationScope = animationScope,
+                    initialValue = selectedIndex.coerceIn(0, tabsCount - 1).toFloat(),
+                    valueRange = 0f..(tabsCount - 1).toFloat(),
+                    visibilityThreshold = 0.001f,
+                    initialScale = 1f,
+                    pressedScale = 78f / 56f,
+                    canDrag = { offset ->
+
+                        if (totalWidthPx == 0f) return@LiquidGlassDragAnimation false
+                        offset.x in 0f..totalWidthPx && offset.y >= 0f
+                    },
+                    onDragStarted = {  },
+                    onDragStopped = {
+                        val targetIndex = targetValue.roundToInt().coerceIn(0, tabsCount - 1)
+                        animationScope.launch {
+                            rubberBandOffset.animateTo(0f, spring(1f, 300f, 0.5f))
+                        }
+
+                        if (targetIndex != selectedIndexUpdated.value) {
+                            onItemClickUpdated.value(items[targetIndex], false)
+                        }
+                        animateToValue(targetIndex.toFloat())
+                    },
+                    onDrag = { _, dragAmount ->
+                        if (tabWidthPx > 0f) {
+                            updateValue(
+                                (targetValue + dragAmount.x / tabWidthPx * if (isLtr) 1f else -1f)
+                                    .fastCoerceIn(0f, (tabsCount - 1).toFloat()),
+                            )
+                            animationScope.launch {
+                                rubberBandOffset.snapTo(rubberBandOffset.value + dragAmount.x)
+                            }
+                        }
+                    },
+                )
+            } else {
+                null
+            }
+        }
+
+    val displayIndex by remember(dampedDragAnimation) {
+        derivedStateOf {
+            dampedDragAnimation?.value?.roundToInt()?.coerceIn(0, items.lastIndex) ?: selectedIndex
+        }
+    }
+
+    val isSelectedTracker = rememberUpdatedState(isSelected)
+    val itemsTracker = rememberUpdatedState(items)
+    LaunchedEffect(dampedDragAnimation) {
+        val anim = dampedDragAnimation ?: return@LaunchedEffect
+        snapshotFlow {
+            val itemsList = itemsTracker.value
+            val sel = isSelectedTracker.value
+            itemsList.indexOfFirst { sel(it) }
+        }.drop(1).collect { idx ->
+
+            if (idx in 0..(items.size - 1)) {
+                anim.animateToValue(idx.toFloat())
+            }
+        }
+    }
+
+    val selectedCenter = if (selectedIndex >= 0) iconCenters[selectedIndex] else null
+    val selectedItemBounds = if (selectedIndex >= 0) itemBounds[selectedIndex] else null
+
+    val itemsRowTopInContainerState = remember { mutableFloatStateOf(0f) }
+    var itemsRowTopInContainer by itemsRowTopInContainerState
+    LaunchedEffect(selectedIndex, selectedCenter, selectedItemBounds, containerPos, disableAnimations, indicatorWidth, indicatorHeight, canLiquidGlass, tabWidthPx, itemsRowTopInContainer, itemVerticalPadding) {
+        if (canLiquidGlass) {
+            if (tabWidthPx <= 0f) return@LaunchedEffect
+            liquidGlassPillWidth = with(density) { tabWidthPx.toDp() }
+            liquidGlassPillHeight = SukiSUBarHeight - SukiSUItemPadding * 2
+
+            indicatorY = itemsRowTopInContainer + with(density) { itemVerticalPadding.toPx() }
+            indicatorPlaced = true
+        } else {
+
+            val center = selectedCenter ?: return@LaunchedEffect
+            val widthPx = with(density) { indicatorWidth.toPx() }
+            val heightPx = with(density) { indicatorHeight.toPx() }
+            val targetX = (center.x - containerPos.x) - widthPx / 2f
+            indicatorY = (center.y - containerPos.y) - heightPx / 2f
+            val firstPlacement = !indicatorPlaced
+            if (disableAnimations || firstPlacement) {
+                indicatorX.snapTo(targetX)
+                indicatorPlaced = true
+            } else {
+                withContext(FullMotionDurationScale) {
+                    indicatorX.animateTo(
+                        targetValue = targetX,
+                        animationSpec = spring(dampingRatio = 0.72f, stiffness = Spring.StiffnessMediumLow),
+                    )
+                }
+            }
+        }
+    }
+
     Box(
         modifier =
             modifier
@@ -84,39 +530,210 @@ fun FloatingNavigationToolbar(
                 .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Horizontal)),
         contentAlignment = Alignment.Center,
     ) {
+
+        val barPositionInRootState = remember { mutableStateOf(Offset.Zero) }
+        val barSizeState = remember { mutableStateOf(IntSize.Zero) }
+        val barPositionInRoot by barPositionInRootState
+        val barSize by barSizeState
+        Box(
+            modifier =
+                Modifier
+                    .widthIn(max = if (isFloating) FloatingNavigationBarMaxWidth else NavigationBarMaxWidth)
+                    .fillMaxWidth(if (isFloating) navBarWidthFraction.coerceIn(0.5f, 1f) else 1f)
+                    .height(resolvedBarHeight),
+            contentAlignment = Alignment.CenterStart,
+        ) {
         Surface(
             modifier =
                 Modifier
-                    .widthIn(max = NavigationBarMaxWidth)
-                    .fillMaxWidth()
-                    .height(NavigationBarHeight),
+                    .fillMaxSize()
+
+                    .onGloballyPositioned(
+                        remember(barPositionInRootState, barSizeState) {
+                            { coordinates ->
+                                barPositionInRootState.value = coordinates.positionInRoot()
+                                barSizeState.value = coordinates.size
+                            }
+                        },
+                    )
+                    .graphicsLayer {
+                        if (canLiquidGlass) {
+                            translationX = panelOffset
+                        }
+                    }
+                    .then(
+                        if (canLiquidGlass && liquidGlassBackdrop != null) {
+                            Modifier.liquidGlass(
+                                backdrop = liquidGlassBackdrop,
+                                shape = navigationShape,
+                                interactive = false,
+                                baseColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            )
+                        } else {
+                            Modifier
+                        },
+                    ),
             shape = navigationShape,
             color = navigationContainerColor,
-            tonalElevation = NavigationBarDefaults.Elevation,
-            shadowElevation = NavigationBarDefaults.Elevation,
+            tonalElevation = if (canLiquidGlass) 0.dp else NavigationBarDefaults.Elevation,
+            shadowElevation = if (canLiquidGlass) 0.dp else if (isFloating) 8.dp else NavigationBarDefaults.Elevation,
         ) {
-            ShortNavigationBar(
-                modifier = Modifier.fillMaxSize(),
-                containerColor = Color.Transparent,
-                contentColor = if (pureBlack) Color.White else MaterialTheme.colorScheme.onSurface,
-                windowInsets = WindowInsets(0, 0, 0, 0),
-                arrangement = ShortNavigationBarArrangement.EqualWeight,
+            if (canBlurBackdrop && frostedBackdrop != null) {
+                if (isPreS) {
+                    val blurredBitmap = rememberPreSFrostedBitmap(
+                        backdrop = frostedBackdrop,
+                        barPositionInRoot = barPositionInRoot,
+                        barSize = barSize,
+                        blurRadiusPx = FrostedNavBarBlurRadiusPx,
+                        updateIntervalMs = if (LocalContext.current.isLowEndDevice()) 160L else 80L,
+                    )
+                    if (blurredBitmap != null) {
+
+                        Box(
+                            modifier =
+                                Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer {
+                                        alpha = FrostedNavBarOverlayAlpha
+                                        clip = true
+                                    }.drawBehind {
+                                        drawImage(blurredBitmap)
+                                    },
+                        )
+                    }
+                } else {
+                    Box(
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .graphicsLayer {
+                                    renderEffect =
+                                        BlurEffect(
+                                            radiusX = FrostedNavBarBlurRadiusPx,
+                                            radiusY = FrostedNavBarBlurRadiusPx,
+                                            edgeTreatment = TileMode.Clamp,
+                                        )
+                                    alpha = FrostedNavBarOverlayAlpha
+                                    clip = true
+                                }.drawBehind {
+                                    val offset = frostedBackdrop.contentOffsetInRoot - barPositionInRoot
+                                    translate(offset.x, offset.y) {
+                                        drawLayer(frostedBackdrop.layer)
+                                    }
+                                },
+                    )
+                }
+            }
+            val transparentRipple = remember { ripple(color = Color.Transparent) }
+            androidx.compose.runtime.CompositionLocalProvider(
+                LocalIndication provides transparentRipple,
             ) {
-                Box(
+                ShortNavigationBar(
                     modifier = Modifier.fillMaxSize(),
+                    containerColor = Color.Transparent,
+                    contentColor =
+                        when {
+                            // Tint wins over pure black so the bar keeps its tinted
+                            // identity in the AMOLED scheme too (see itemColors).
+                            tintFrostedBlur -> tintedNavBarContentColor
+                            pureBlack -> Color.White
+                            else -> MaterialTheme.colorScheme.onSurface
+                        },
+                    windowInsets = WindowInsets(0, 0, 0, 0),
+                    arrangement = ShortNavigationBarArrangement.EqualWeight,
+                ) {
+                Box(
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .onGloballyPositioned(
+
+                        remember(containerPosState) {
+                            { coordinates -> containerPosState.value = coordinates.positionInRoot() }
+                        },
+                    ),
                     contentAlignment = Alignment.Center,
                 ) {
+                    if (selectedIndex >= 0 && indicatorPlaced && !canLiquidGlass) {
+                        val pillWidth = indicatorWidth
+                        val pillHeight = indicatorHeight
+                        if (pillWidth > 0.dp && pillHeight > 0.dp) {
+                            val pillShape = RoundedCornerShape(percent = 50)
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .align(Alignment.TopStart)
+                                        .offset {
+                                            IntOffset(
+                                                indicatorX.value.roundToInt(),
+                                                indicatorY.roundToInt(),
+                                            )
+                                        }
+                                        .width(pillWidth)
+                                        .height(pillHeight)
+                                        .clip(pillShape)
+                                        .background(indicatorColor),
+                            )
+                        }
+                    }
+
                     Row(
                         modifier =
                             Modifier
                                 .widthIn(max = NavigationItemsMaxWidth)
                                 .fillMaxWidth()
                                 .fillMaxHeight()
-                                .padding(vertical = NavigationItemVerticalPadding),
+                                .padding(
+                                    vertical = itemVerticalPadding,
+                                    horizontal = itemHorizontalPadding,
+                                )
+                                .onGloballyPositioned(
+
+                                    remember(itemsRowLeftInContainerState, itemsRowTopInContainerState, totalWidthPxState, tabWidthPxState, containerPosState, density, itemHorizontalPadding, tabsCount) {
+                                        { coordinates ->
+                                            val rowPosInRoot = coordinates.positionInRoot()
+                                            itemsRowLeftInContainerState.value = rowPosInRoot.x - containerPosState.value.x
+                                            itemsRowTopInContainerState.value = rowPosInRoot.y - containerPosState.value.y
+                                            totalWidthPxState.value = coordinates.size.width.toFloat()
+                                            val horizontalPaddingPx = with(density) { itemHorizontalPadding.toPx() }
+                                            val contentWidthPx = (totalWidthPxState.value - 2f * horizontalPaddingPx).coerceAtLeast(0f)
+                                            tabWidthPxState.value = if (tabsCount > 0) (contentWidthPx / tabsCount).coerceAtLeast(0f) else 0f
+                                        }
+                                    },
+                                )
+                                .then(
+                                    if (canLiquidGlass && dampedDragAnimation != null) {
+                                        dampedDragAnimation.modifier
+                                    } else {
+                                        Modifier
+                                    },
+                                ),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        items.forEach { screen ->
+                        items.forEachIndexed { index, screen ->
                             val selected = isSelected(screen)
+
+                            val iconScale = remember(screen) { Animatable(1f) }
+                            LaunchedEffect(selected, disableAnimations) {
+                                if (disableAnimations) {
+                                    iconScale.snapTo(1f)
+                                } else if (selected) {
+                                    iconScale.snapTo(0.8f)
+
+                                    withContext(FullMotionDurationScale) {
+                                        iconScale.animateTo(
+                                            targetValue = 1f,
+                                            animationSpec =
+                                                spring(
+                                                    dampingRatio = Spring.DampingRatioMediumBouncy,
+                                                    stiffness = Spring.StiffnessMediumLow,
+                                                ),
+                                        )
+                                    }
+                                } else {
+                                    iconScale.snapTo(1f)
+                                }
+                            }
                             val onDoubleClick =
                                 remember(screen, onSearchItemDoubleClick) {
                                     if (screen == Screens.Search) onSearchItemDoubleClick else null
@@ -142,33 +759,340 @@ fun FloatingNavigationToolbar(
                             ShortNavigationBarItem(
                                 selected = selected,
                                 onClick = onClick,
-                                modifier = Modifier.weight(1f),
+                                colors = if (canLiquidGlass && index == displayIndex) liquidGlassTransparentColors else itemColors,
+                                modifier =
+                                    Modifier
+                                        .weight(1f)
+                                        .onGloballyPositioned(
+
+                                            remember(itemBounds, index) {
+                                                { coordinates ->
+
+                                                    val pos = coordinates.positionInRoot()
+                                                    itemBounds[index] =
+                                                        Rect(
+                                                            pos.x,
+                                                            pos.y,
+                                                            pos.x + coordinates.size.width,
+                                                            pos.y + coordinates.size.height,
+                                                        )
+                                                }
+                                            },
+                                        ),
                                 icon = {
-                                    Crossfade(
-                                        targetState = selected,
-                                        animationSpec = motionScheme.fastEffectsSpec(),
-                                        label = "navigationItemIcon",
-                                    ) { isSelected ->
-                                        Icon(
-                                            painter =
-                                                painterResource(
-                                                    if (isSelected) screen.iconIdActive else screen.iconIdInactive,
-                                                ),
-                                            contentDescription = null,
-                                        )
+
+                                    Box(
+                                        modifier =
+                                            Modifier.onGloballyPositioned(
+
+                                                remember(iconCenters, index) {
+                                                    { coordinates ->
+                                                        val pos = coordinates.positionInRoot()
+                                                        iconCenters[index] =
+                                                            Offset(
+                                                                pos.x + coordinates.size.width / 2f,
+                                                                pos.y + coordinates.size.height / 2f,
+                                                            )
+                                                    }
+                                                },
+                                            ),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Crossfade(
+                                            targetState = selected,
+                                            animationSpec = motionScheme.fastEffectsSpec(),
+                                            label = "navigationItemIcon",
+                                        ) { isSelected ->
+                                            Icon(
+                                                painter =
+                                                    painterResource(
+                                                        if (isSelected) screen.iconIdActive else screen.iconIdInactive,
+                                                    ),
+                                                contentDescription = null,
+                                                modifier =
+                                                    Modifier.graphicsLayer {
+                                                        scaleX = iconScale.value
+                                                        scaleY = iconScale.value
+                                                    },
+                                            )
+                                        }
                                     }
                                 },
-                                label = {
-                                    Text(
-                                        text = stringResource(screen.titleId),
-                                        maxLines = 1,
-                                    )
+                                label = if (hideNavigationLabels) {
+                                    null
+                                } else {
+                                    {
+                                        if (canLiquidGlass) {
+                                            val nightGlassLabelStyle =
+                                                if (isSystemInDarkTheme()) {
+                                                    LocalTextStyle.current.copy(
+                                                        shadow =
+                                                            Shadow(
+                                                                color = Color.Black.copy(alpha = 0.8f),
+                                                                blurRadius = 10f,
+                                                            ),
+                                                    )
+                                                } else {
+                                                    LocalTextStyle.current
+                                                }
+                                            Text(
+                                                text = stringResource(screen.titleId),
+                                                maxLines = 1,
+                                                modifier = Modifier.offset(y = (-4).dp),
+
+                                                fontWeight = FontWeight.Normal,
+                                                style = nightGlassLabelStyle,
+                                            )
+                                        } else {
+                                            Spacer(Modifier.height(navBarLabelSpacing.dp))
+                                            Text(
+                                                text = stringResource(screen.titleId),
+                                                maxLines = 1,
+                                            )
+                                        }
+                                    }
                                 },
                             )
                         }
                     }
                 }
             }
+            }
+
+        }
+
+        if (canLiquidGlass && selectedIndex >= 0 && indicatorPlaced && liquidGlassBackdrop != null) {
+            val pillWidth = liquidGlassPillWidth
+            val pillHeight = liquidGlassPillHeight
+            val dragAnim = dampedDragAnimation
+            if (pillWidth > 0.dp && pillHeight > 0.dp && dragAnim != null && tabWidthPx > 0f) {
+                val pillShape = RoundedCornerShape(percent = 50)
+                val isDark = isSystemInDarkTheme()
+
+                val pillFallbackColor = MaterialTheme.colorScheme.surfaceContainerHigh
+                Box(
+                    modifier =
+                        Modifier
+                            .offset {
+                                val pillWidthPx = pillWidth.toPx()
+                                val hPaddingPx = itemHorizontalPadding.toPx()
+
+                                val tabSlotCenterForSelected =
+                                    containerPos.x +
+                                        itemsRowLeftInContainer +
+                                        hPaddingPx +
+                                        selectedIndex * tabWidthPx +
+                                        tabWidthPx / 2f
+                                val iconOffsetX =
+                                    selectedCenter?.let { it.x - tabSlotCenterForSelected } ?: 0f
+                                val xInRoot =
+                                    containerPos.x +
+                                        itemsRowLeftInContainer +
+                                        hPaddingPx +
+                                        dragAnim.value * tabWidthPx +
+                                        (tabWidthPx - pillWidthPx) / 2f +
+                                        panelOffset +
+                                        iconOffsetX
+
+                                val xRelativeToWrapper = xInRoot - barPositionInRoot.x
+                                IntOffset(xRelativeToWrapper.roundToInt(), 0)
+                            }
+                            .width(pillWidth)
+                            .height(pillHeight)
+                            .graphicsLayer {
+
+                                val pressScale = lerp(1f, 78f / 56f, dragAnim.pressProgress)
+                                val velocityStretch = (dragAnim.velocity / 10f).fastCoerceIn(-0.2f, 0.2f)
+                                scaleX = pressScale / (1f - velocityStretch * 0.75f)
+                                scaleY = pressScale * (1f - velocityStretch * 0.25f)
+                            }
+                            .drawBackdrop(
+                                backdrop = liquidGlassBackdrop,
+                                effects = {
+                                    colorControls(saturation = 1.7f)
+                                    blur(4f.dp.toPx())
+                                    lens(
+                                        refractionHeight = 28f.dp.toPx(),
+                                        refractionAmount = size.minDimension / 3.2f,
+                                        depthEffect = true,
+                                        chromaticAberration = false,
+                                    )
+                                },
+                                onDrawBackdrop = { drawBackdrop -> drawBackdrop() },
+                                shape = { pillShape },
+
+                                onDrawBehind = {
+                                    drawRect(pillFallbackColor)
+                                },
+                                onDrawSurface = {
+                                    val progress = dragAnim.pressProgress
+
+                                    val tintColor = if (isDark) Color.Black else Color.White
+                                    val restAlpha = if (isDark) 0.28f else 0.1f
+                                    drawRect(
+                                        color = tintColor,
+                                        alpha = restAlpha * (1f - progress),
+                                    )
+                                    drawRect(
+                                        color = Color.Black,
+                                        alpha = 0.03f * progress,
+                                    )
+                                },
+                            )
+
+                            .innerShadow(
+                                shape = pillShape,
+                                shadow = remember(dragAnim, pillShape) {
+                                    {
+
+                                        if (dragAnim.pressProgress > 0f) {
+                                            InnerShadow(
+                                                radius = 8.dp * dragAnim.pressProgress,
+                                                color = Color.Black.copy(alpha = 0.15f),
+                                                alpha = dragAnim.pressProgress,
+                                            )
+                                        } else {
+                                            null
+                                        }
+                                    }
+                                },
+                            ),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    val displayScreen = items[displayIndex]
+                    val pillContentColor =
+                        if (isDark) Color.White else MaterialTheme.colorScheme.onSurface
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically),
+                    ) {
+                        Icon(
+                            painter = painterResource(displayScreen.iconIdActive),
+                            contentDescription = null,
+
+                            tint = pillContentColor,
+                            modifier =
+                                Modifier.graphicsLayer {
+
+                                    val scale = lerp(1f, 1.2f, dragAnim.pressProgress)
+                                    scaleX = scale
+                                    scaleY = scale
+                                },
+                        )
+                        if (!hideNavigationLabels) {
+                            Text(
+                                text = stringResource(displayScreen.titleId),
+
+                                color = pillContentColor,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                style =
+                                    if (isDark) {
+                                        LocalTextStyle.current.copy(
+                                            shadow =
+                                                Shadow(
+                                                    color = Color.Black.copy(alpha = 0.9f),
+                                                    blurRadius = 12f,
+                                                ),
+                                        )
+                                    } else {
+                                        LocalTextStyle.current
+                                    },
+                            )
+                        }
+                    }
+                }
+            }
+        }
         }
     }
+}
+
+@Composable
+internal fun rememberPreSFrostedBitmap(
+    backdrop: NavigationBarBackdrop?,
+    barPositionInRoot: Offset,
+    barSize: IntSize,
+    blurRadiusPx: Float,
+    updateIntervalMs: Long = 80L,
+): ImageBitmap? {
+    if (backdrop == null) return null
+    var blurred by remember(backdrop, blurRadiusPx, updateIntervalMs) {
+        mutableStateOf<ImageBitmap?>(null)
+    }
+
+    val barPositionState = rememberUpdatedState(barPositionInRoot)
+    val barSizeState = rememberUpdatedState(barSize)
+
+    LaunchedEffect(backdrop, blurRadiusPx, updateIntervalMs) {
+        while (isActive) {
+            val layer = backdrop.layer
+            val layerW = layer.size.width
+            val layerH = layer.size.height
+            if (layerW > 0 && layerH > 0) {
+                try {
+                    val next = withContext(Dispatchers.Default) {
+
+                        val pos = barPositionState.value
+                        val size = barSizeState.value
+                        if (size.width <= 0 || size.height <= 0) return@withContext null
+
+                        val contentOffset = backdrop.contentOffsetInRoot
+                        val rawX = (pos.x - contentOffset.x).toInt()
+                        val rawY = (pos.y - contentOffset.y).toInt()
+
+                        val pad = blurRadiusPx.toInt().coerceIn(8, 64)
+
+                        val paddedX = rawX - pad
+                        val paddedY = rawY - pad
+                        val paddedW = size.width + 2 * pad
+                        val paddedH = size.height + 2 * pad
+                        val clampedX = paddedX.coerceIn(0, layerW - 1)
+                        val clampedY = paddedY.coerceIn(0, layerH - 1)
+                        val clampedRight = (paddedX + paddedW).coerceIn(1, layerW)
+                        val clampedBottom = (paddedY + paddedH).coerceIn(1, layerH)
+                        val clampedW = clampedRight - clampedX
+                        val clampedH = clampedBottom - clampedY
+                        if (clampedW <= 0 || clampedH <= 0) return@withContext null
+
+                        val imageBitmap = layer.toImageBitmap()
+                        val fullBitmap = imageBitmap.asAndroidBitmap()
+
+                        val sliceBitmap = Bitmap.createBitmap(
+                            fullBitmap,
+                            clampedX,
+                            clampedY,
+                            clampedW,
+                            clampedH,
+                        )
+
+                        val blurredSlice = ImageBlurUtils.blur(sliceBitmap, blurRadiusPx)
+
+                        val barXInSlice = (rawX - clampedX).coerceIn(0, blurredSlice.width - 1)
+                        val barYInSlice = (rawY - clampedY).coerceIn(0, blurredSlice.height - 1)
+                        val barW = size.width.coerceAtMost(blurredSlice.width - barXInSlice)
+                        val barH = size.height.coerceAtMost(blurredSlice.height - barYInSlice)
+                        if (barW <= 0 || barH <= 0) {
+
+                            blurredSlice.asImageBitmap()
+                        } else if (barXInSlice == 0 && barYInSlice == 0 &&
+                            blurredSlice.width == size.width && blurredSlice.height == size.height
+                        ) {
+
+                            blurredSlice.asImageBitmap()
+                        } else {
+                            Bitmap.createBitmap(blurredSlice, barXInSlice, barYInSlice, barW, barH)
+                                .asImageBitmap()
+                        }
+                    }
+                    if (next != null) blurred = next
+                } catch (_: Throwable) {
+
+                }
+            }
+            delay(updateIntervalMs)
+        }
+    }
+    return blurred
 }

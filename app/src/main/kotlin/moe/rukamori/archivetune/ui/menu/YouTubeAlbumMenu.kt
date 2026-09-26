@@ -20,12 +20,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.CircularWavyProgressIndicator
@@ -41,14 +38,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -87,6 +82,7 @@ import moe.rukamori.archivetune.ui.component.NewAction
 import moe.rukamori.archivetune.ui.component.NewActionGrid
 import moe.rukamori.archivetune.ui.component.SongListItem
 import moe.rukamori.archivetune.ui.component.YouTubeListItem
+import moe.rukamori.archivetune.ui.component.MenuSectionDivider
 import moe.rukamori.archivetune.ui.utils.HeaderDownloadItem
 import moe.rukamori.archivetune.ui.utils.sendAddMissingDownloads
 import moe.rukamori.archivetune.utils.SpeedDialPin
@@ -96,6 +92,8 @@ import moe.rukamori.archivetune.utils.rememberPreference
 import moe.rukamori.archivetune.utils.reportException
 import moe.rukamori.archivetune.utils.serializeSpeedDialPins
 import moe.rukamori.archivetune.utils.toggleSpeedDialPin
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @OptIn(ExperimentalMaterial3Api::class)
 @SuppressLint("MutableCollectionMutableState")
@@ -109,7 +107,7 @@ fun YouTubeAlbumMenu(
     val database = LocalDatabase.current
     val downloadUtil = LocalDownloadUtil.current
     val playerConnection = LocalPlayerConnection.current ?: return
-    val album by database.albumWithSongs(albumItem.id).collectAsState(initial = null)
+    val album by database.albumWithSongs(albumItem.id).collectAsStateWithLifecycle(initialValue = null)
     val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) {
@@ -160,7 +158,6 @@ fun YouTubeAlbumMenu(
             speedDialPins.any { it.type == albumPin.type && it.id == albumPin.id }
         }
 
-    // Split artists by configured separators
     data class SplitArtist(
         val name: String,
         val originalArtist: moe.rukamori.archivetune.db.entities.ArtistEntity?,
@@ -257,7 +254,7 @@ fun YouTubeAlbumMenu(
                 )
             }
 
-            items(notAddedList) { song ->
+            items(notAddedList, key = { it.id }) { song ->
                 SongListItem(song = song)
             }
         }
@@ -329,13 +326,17 @@ fun YouTubeAlbumMenu(
         },
     )
 
-    HorizontalDivider()
+    HorizontalDivider(
+        modifier = Modifier.padding(horizontal = 16.dp),
+        color = MaterialTheme.colorScheme.outlineVariant,
+        thickness = 0.5.dp,
+    )
 
-    Spacer(modifier = Modifier.height(12.dp))
+    Spacer(modifier = Modifier.height(4.dp))
 
     val configuration = LocalConfiguration.current
     val isPortrait = configuration.orientation == Configuration.ORIENTATION_PORTRAIT
-    val dividerModifier = Modifier.padding(start = 56.dp)
+    val dividerModifier = Modifier.padding(horizontal = 16.dp)
 
     LazyColumn(
         userScrollEnabled = true,
@@ -344,11 +345,11 @@ fun YouTubeAlbumMenu(
                 start = 0.dp,
                 top = 0.dp,
                 end = 0.dp,
-                bottom = 8.dp + WindowInsets.systemBars.asPaddingValues().calculateBottomPadding(),
+                bottom = 12.dp,
             ),
     ) {
         item {
-            MenuSurfaceSection(modifier = Modifier.padding(vertical = 6.dp)) {
+            MenuSurfaceSection {
                 NewActionGrid(
                     actions =
                         listOf(
@@ -418,11 +419,11 @@ fun YouTubeAlbumMenu(
         }
 
         item {
-            Spacer(modifier = Modifier.height(12.dp))
+            MenuSectionDivider()
         }
 
         item {
-            MenuSurfaceSection(modifier = Modifier.padding(vertical = 6.dp)) {
+            MenuSurfaceSection {
                 Column {
                     ListItem(
                         headlineContent = { Text(text = stringResource(R.string.play_next)) },
@@ -446,6 +447,7 @@ fun YouTubeAlbumMenu(
                     HorizontalDivider(
                         modifier = dividerModifier,
                         color = MaterialTheme.colorScheme.outlineVariant,
+                        thickness = 0.5.dp,
                     )
 
                     ListItem(
@@ -470,6 +472,7 @@ fun YouTubeAlbumMenu(
                     HorizontalDivider(
                         modifier = dividerModifier,
                         color = MaterialTheme.colorScheme.outlineVariant,
+                        thickness = 0.5.dp,
                     )
 
                     ListItem(
@@ -490,6 +493,7 @@ fun YouTubeAlbumMenu(
                     HorizontalDivider(
                         modifier = dividerModifier,
                         color = MaterialTheme.colorScheme.outlineVariant,
+                        thickness = 0.5.dp,
                     )
 
                     ListItem(
@@ -548,11 +552,11 @@ fun YouTubeAlbumMenu(
         }
 
         item {
-            Spacer(modifier = Modifier.height(12.dp))
+            MenuSectionDivider()
         }
 
         item {
-            MenuSurfaceSection(modifier = Modifier.padding(vertical = 6.dp)) {
+            MenuSurfaceSection {
                 when (downloadState) {
                     Download.STATE_COMPLETED -> {
                         ListItem(
@@ -629,6 +633,7 @@ fun YouTubeAlbumMenu(
                                                     )
                                                 },
                                             downloads = downloadUtil.downloads.value,
+                                            downloadUtil = downloadUtil,
                                         )
                                     }
                                 },
@@ -641,11 +646,11 @@ fun YouTubeAlbumMenu(
 
         if (albumItem.artists != null) {
             item {
-                Spacer(modifier = Modifier.height(12.dp))
+                MenuSectionDivider()
             }
 
             item {
-                MenuSurfaceSection(modifier = Modifier.padding(vertical = 6.dp)) {
+                MenuSurfaceSection {
                     ListItem(
                         headlineContent = { Text(text = stringResource(R.string.view_artist)) },
                         leadingContent = {

@@ -22,12 +22,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -43,13 +40,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -65,12 +61,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.datastore.preferences.core.edit
 import androidx.media3.exoplayer.offline.Download.STATE_COMPLETED
 import androidx.media3.exoplayer.offline.Download.STATE_DOWNLOADING
 import androidx.media3.exoplayer.offline.Download.STATE_QUEUED
 import androidx.media3.exoplayer.offline.Download.STATE_STOPPED
 import androidx.media3.exoplayer.offline.DownloadService
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
@@ -80,6 +76,7 @@ import moe.rukamori.archivetune.LocalDownloadUtil
 import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.R
 import moe.rukamori.archivetune.constants.ArtistSeparatorsKey
+import moe.rukamori.archivetune.constants.HiddenHomeItemsKey
 import moe.rukamori.archivetune.constants.ListItemHeight
 import moe.rukamori.archivetune.constants.ListThumbnailSize
 import moe.rukamori.archivetune.constants.SpeedDialSongIdsKey
@@ -96,16 +93,20 @@ import moe.rukamori.archivetune.ui.component.MenuSurfaceSection
 import moe.rukamori.archivetune.ui.component.NewAction
 import moe.rukamori.archivetune.ui.component.NewActionGrid
 import moe.rukamori.archivetune.ui.component.SongListItem
+import moe.rukamori.archivetune.ui.component.MenuSectionDivider
 import moe.rukamori.archivetune.ui.utils.HeaderDownloadItem
 import moe.rukamori.archivetune.ui.utils.YtimgResizePolicy
 import moe.rukamori.archivetune.ui.utils.resize
 import moe.rukamori.archivetune.ui.utils.sendAddMissingDownloads
 import moe.rukamori.archivetune.utils.SpeedDialPin
 import moe.rukamori.archivetune.utils.SpeedDialPinType
+import moe.rukamori.archivetune.utils.dataStore
 import moe.rukamori.archivetune.utils.parseSpeedDialPins
 import moe.rukamori.archivetune.utils.rememberPreference
 import moe.rukamori.archivetune.utils.serializeSpeedDialPins
 import moe.rukamori.archivetune.utils.toggleSpeedDialPin
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @SuppressLint("MutableCollectionMutableState")
 @Composable
@@ -127,7 +128,7 @@ fun AlbumMenu(
 
     val coroutineScope = rememberCoroutineScope()
 
-    LaunchedEffect(album.id) {
+    LaunchedEffect(Unit) {
         database.albumSongs(album.id).collect {
             songs = it
         }
@@ -137,15 +138,13 @@ fun AlbumMenu(
         mutableStateOf(STATE_STOPPED)
     }
 
-    val remoteSongs = remember(songs) { songs.filterNot { it.song.isLocal } }
-
-    LaunchedEffect(remoteSongs, album.album.isLocal) {
-        if (album.album.isLocal || remoteSongs.isEmpty()) return@LaunchedEffect
+    LaunchedEffect(songs) {
+        if (songs.isEmpty()) return@LaunchedEffect
         downloadUtil.downloads.collect { downloads ->
             downloadState =
-                if (remoteSongs.all { downloads[it.id]?.state == STATE_COMPLETED }) {
+                if (songs.all { downloads[it.id]?.state == STATE_COMPLETED }) {
                     STATE_COMPLETED
-                } else if (remoteSongs.all {
+                } else if (songs.all {
                         downloads[it.id]?.state == STATE_QUEUED ||
                             downloads[it.id]?.state == STATE_DOWNLOADING ||
                             downloads[it.id]?.state == STATE_COMPLETED
@@ -166,7 +165,6 @@ fun AlbumMenu(
         label = "",
     )
 
-    // Artist separators for splitting artist names
     val (artistSeparators) = rememberPreference(ArtistSeparatorsKey, defaultValue = ",;/&")
     val (speedDialSongIds, onSpeedDialSongIdsChange) = rememberPreference(SpeedDialSongIdsKey, "")
     val speedDialPins = remember(speedDialSongIds) { parseSpeedDialPins(speedDialSongIds) }
@@ -177,15 +175,14 @@ fun AlbumMenu(
         }
     val isLocalAlbum = album.album.isLocal
 
-    // Split artists by configured separators
     data class SplitArtist(
         val name: String,
         val originalArtist: moe.rukamori.archivetune.db.entities.ArtistEntity?,
     )
 
     val splitArtists =
-        remember(album.artists, artistSeparators, isLocalAlbum) {
-            if (isLocalAlbum || artistSeparators.isEmpty()) {
+        remember(album.artists, artistSeparators) {
+            if (artistSeparators.isEmpty()) {
                 album.artists.map { SplitArtist(it.name, it) }
             } else {
                 val separatorRegex = "[${Regex.escape(artistSeparators)}]".toRegex()
@@ -281,7 +278,7 @@ fun AlbumMenu(
                 )
             }
 
-            items(notAddedList) { song ->
+            items(notAddedList, key = { it.id }) { song ->
                 SongListItem(song = song)
             }
         }
@@ -364,13 +361,17 @@ fun AlbumMenu(
         },
     )
 
-    HorizontalDivider()
+    HorizontalDivider(
+        modifier = Modifier.padding(horizontal = 16.dp),
+        color = MaterialTheme.colorScheme.outlineVariant,
+        thickness = 0.5.dp,
+    )
 
-    Spacer(modifier = Modifier.height(12.dp))
+    Spacer(modifier = Modifier.height(4.dp))
 
     val configuration = LocalConfiguration.current
     val isPortrait = configuration.orientation == Configuration.ORIENTATION_PORTRAIT
-    val dividerModifier = Modifier.padding(start = 56.dp)
+    val dividerModifier = Modifier.padding(horizontal = 16.dp)
 
     LazyColumn(
         userScrollEnabled = true,
@@ -379,11 +380,11 @@ fun AlbumMenu(
                 start = 0.dp,
                 top = 0.dp,
                 end = 0.dp,
-                bottom = 8.dp + WindowInsets.systemBars.asPaddingValues().calculateBottomPadding(),
+                bottom = 12.dp,
             ),
     ) {
         item {
-            MenuSurfaceSection(modifier = Modifier.padding(vertical = 6.dp)) {
+            MenuSurfaceSection {
                 NewActionGrid(
                     actions =
                         buildList {
@@ -470,11 +471,11 @@ fun AlbumMenu(
         }
 
         item {
-            Spacer(modifier = Modifier.height(12.dp))
+            MenuSectionDivider()
         }
 
         item {
-            MenuSurfaceSection(modifier = Modifier.padding(vertical = 6.dp)) {
+            MenuSurfaceSection {
                 Column {
                     ListItem(
                         headlineContent = { Text(text = stringResource(R.string.play_next)) },
@@ -495,6 +496,7 @@ fun AlbumMenu(
                     HorizontalDivider(
                         modifier = dividerModifier,
                         color = MaterialTheme.colorScheme.outlineVariant,
+                        thickness = 0.5.dp,
                     )
 
                     ListItem(
@@ -516,6 +518,7 @@ fun AlbumMenu(
                     HorizontalDivider(
                         modifier = dividerModifier,
                         color = MaterialTheme.colorScheme.outlineVariant,
+                        thickness = 0.5.dp,
                     )
 
                     ListItem(
@@ -536,6 +539,7 @@ fun AlbumMenu(
                     HorizontalDivider(
                         modifier = dividerModifier,
                         color = MaterialTheme.colorScheme.outlineVariant,
+                        thickness = 0.5.dp,
                     )
 
                     ListItem(
@@ -569,13 +573,13 @@ fun AlbumMenu(
             }
         }
 
-        if (!isLocalAlbum && remoteSongs.isNotEmpty()) {
+        if (!isLocalAlbum) {
             item {
-                Spacer(modifier = Modifier.height(12.dp))
+                MenuSectionDivider()
             }
 
             item {
-                MenuSurfaceSection(modifier = Modifier.padding(vertical = 6.dp)) {
+                MenuSurfaceSection {
                     when (downloadState) {
                         STATE_COMPLETED -> {
                             ListItem(
@@ -594,7 +598,7 @@ fun AlbumMenu(
                                 },
                                 modifier =
                                     Modifier.clickable {
-                                        remoteSongs.forEach { song ->
+                                        songs.forEach { song ->
                                             DownloadService.sendRemoveDownload(
                                                 context,
                                                 ExoDownloadService::class.java,
@@ -617,7 +621,7 @@ fun AlbumMenu(
                                 },
                                 modifier =
                                     Modifier.clickable {
-                                        remoteSongs.forEach { song ->
+                                        songs.forEach { song ->
                                             DownloadService.sendRemoveDownload(
                                                 context,
                                                 ExoDownloadService::class.java,
@@ -644,13 +648,14 @@ fun AlbumMenu(
                                         sendAddMissingDownloads(
                                             context = context,
                                             songs =
-                                                remoteSongs.map { song ->
+                                                songs.map { song ->
                                                     HeaderDownloadItem(
                                                         id = song.id,
                                                         title = song.song.title,
                                                     )
                                                 },
                                             downloads = downloadUtil.downloads.value,
+                                            downloadUtil = downloadUtil,
                                         )
                                     },
                                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
@@ -662,11 +667,11 @@ fun AlbumMenu(
         }
 
         item {
-            Spacer(modifier = Modifier.height(12.dp))
+            MenuSectionDivider()
         }
 
         item {
-            MenuSurfaceSection(modifier = Modifier.padding(vertical = 6.dp)) {
+            MenuSurfaceSection {
                 Column {
                     ListItem(
                         headlineContent = { Text(text = stringResource(R.string.view_artist)) },
@@ -692,6 +697,7 @@ fun AlbumMenu(
                         HorizontalDivider(
                             modifier = dividerModifier,
                             color = MaterialTheme.colorScheme.outlineVariant,
+                            thickness = 0.5.dp,
                         )
 
                         ListItem(
@@ -717,6 +723,33 @@ fun AlbumMenu(
                             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
                         )
                     }
+
+                    HorizontalDivider(
+                        modifier = dividerModifier,
+                        color = MaterialTheme.colorScheme.outlineVariant,
+                        thickness = 0.5.dp,
+                    )
+
+                    ListItem(
+                        headlineContent = { Text(text = stringResource(R.string.hide_from_home)) },
+                        leadingContent = {
+                            Icon(
+                                painter = painterResource(R.drawable.visibility_off),
+                                contentDescription = null,
+                            )
+                        },
+                        modifier =
+                            Modifier.clickable {
+                                coroutineScope.launch {
+                                    context.dataStore.edit { preferences ->
+                                        val current = preferences[HiddenHomeItemsKey] ?: emptySet()
+                                        preferences[HiddenHomeItemsKey] = current + album.id
+                                    }
+                                    onDismiss()
+                                }
+                            },
+                        colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    )
                 }
             }
         }

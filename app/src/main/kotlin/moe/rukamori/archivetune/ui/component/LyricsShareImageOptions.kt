@@ -44,6 +44,8 @@ data class LyricsShareImageOptions(
     val blurRadius: Float = 24f,
     val dimAmount: Float = 1f,
     val showArtwork: Boolean = true,
+
+    val vinylMode: Boolean = false,
 ) {
     val sanitizedBlurRadius: Float
         get() = blurRadius.coerceIn(0f, 48f)

@@ -38,10 +38,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,6 +50,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import moe.rukamori.archivetune.R
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -86,6 +86,7 @@ fun ArtistSeparatorsDialog(
                 )
             },
             confirmButton = {
+                KeepStatusBarHiddenInDialog()
                 Button(
                     onClick = {
                         if (newSymbolInput.isNotEmpty() && !separatorsList.contains(newSymbolInput)) {
@@ -115,6 +116,7 @@ fun ArtistSeparatorsDialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
+        KeepStatusBarHiddenInDialog()
         Surface(
             modifier =
                 Modifier
@@ -147,7 +149,6 @@ fun ArtistSeparatorsDialog(
                         )
                     }
 
-                    // Add button chip
                     Surface(
                         modifier =
                             Modifier

@@ -11,6 +11,7 @@ package moe.rukamori.archivetune.ui.screens.playlist
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -20,7 +21,9 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -37,6 +40,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
@@ -52,14 +57,14 @@ import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.toMutableStateList
+import androidx.compose.runtime.withFrameNanos
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -76,6 +81,7 @@ import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastAny
@@ -87,12 +93,12 @@ import com.valentinilk.shimmer.shimmer
 import moe.rukamori.archivetune.LocalDatabase
 import moe.rukamori.archivetune.LocalDownloadUtil
 import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
+import moe.rukamori.archivetune.LocalStableSystemBarsTopPadding
 import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.R
-import moe.rukamori.archivetune.constants.AppBarHeight
+import android.os.Build
 import moe.rukamori.archivetune.constants.HideExplicitKey
-import moe.rukamori.archivetune.db.entities.PlaylistEntity
-import moe.rukamori.archivetune.db.entities.PlaylistSongMap
+import moe.rukamori.archivetune.constants.LiquidGlassEnabledKey
 import moe.rukamori.archivetune.extensions.metadata
 import moe.rukamori.archivetune.extensions.toMediaItem
 import moe.rukamori.archivetune.extensions.togglePlayPause
@@ -103,16 +109,20 @@ import moe.rukamori.archivetune.playback.queues.YouTubeQueue
 import moe.rukamori.archivetune.ui.component.DraggableScrollbar
 import moe.rukamori.archivetune.ui.component.ExpressivePullToRefreshBox
 import moe.rukamori.archivetune.ui.component.IconButton
+import moe.rukamori.archivetune.ui.component.LiquidGlassActionPill
+import moe.rukamori.archivetune.ui.component.GlassPillTitleText
 import moe.rukamori.archivetune.ui.component.LocalMenuState
 import moe.rukamori.archivetune.ui.component.MediaDetailAction
 import moe.rukamori.archivetune.ui.component.MediaDetailHero
-import moe.rukamori.archivetune.ui.component.MediaDetailIconAction
-import moe.rukamori.archivetune.ui.component.MediaDetailStatePanel
 import moe.rukamori.archivetune.ui.component.YouTubeListItem
+import moe.rukamori.archivetune.ui.component.layerBackdrop
+import moe.rukamori.archivetune.ui.component.liquidGlassContentColor
+import moe.rukamori.archivetune.ui.component.rememberBackdrop
 import moe.rukamori.archivetune.ui.component.shimmer.ButtonPlaceholder
 import moe.rukamori.archivetune.ui.component.shimmer.ListItemPlaceHolder
 import moe.rukamori.archivetune.ui.component.shimmer.ShimmerHost
 import moe.rukamori.archivetune.ui.component.shimmer.TextPlaceholder
+import moe.rukamori.archivetune.ui.component.rememberLayerBackdropSettled
 import moe.rukamori.archivetune.ui.menu.SelectionMediaMetadataMenu
 import moe.rukamori.archivetune.ui.menu.YouTubePlaylistMenu
 import moe.rukamori.archivetune.ui.menu.YouTubeSongMenu
@@ -125,8 +135,17 @@ import moe.rukamori.archivetune.ui.utils.formatCompactCount
 import moe.rukamori.archivetune.ui.utils.headerDownloadState
 import moe.rukamori.archivetune.ui.utils.sendAddMissingDownloads
 import moe.rukamori.archivetune.ui.utils.sendRemoveDownloads
+import moe.rukamori.archivetune.ui.utils.sendPauseRunningDownloads
+import moe.rukamori.archivetune.ui.utils.sendResumePausedDownloads
+import moe.rukamori.archivetune.constants.AlbumCanvasEnabledKey
 import moe.rukamori.archivetune.utils.rememberPreference
 import moe.rukamori.archivetune.viewmodels.OnlinePlaylistViewModel
+import moe.rukamori.archivetune.ui.player.LocalPlayerLyricsFullScreen
+import dev.chrisbanes.haze.hazeSource
+import moe.rukamori.archivetune.ui.screens.ScreenHeaderHaze
+import moe.rukamori.archivetune.ui.screens.rememberScreenHeaderHaze
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -146,6 +165,8 @@ fun OnlinePlaylistScreen(
     val playlist by viewModel.playlist.collectAsStateWithLifecycle()
     val songs by viewModel.playlistSongs.collectAsStateWithLifecycle()
     val viewCounts by viewModel.viewCounts.collectAsStateWithLifecycle()
+    val canvasArtwork by viewModel.canvasArtwork.collectAsStateWithLifecycle()
+    val pageCanvasEnabled by rememberPreference(key = AlbumCanvasEnabledKey, defaultValue = true)
     val dbPlaylist by viewModel.dbPlaylist.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val isLoadingMore by viewModel.isLoadingMore.collectAsStateWithLifecycle()
@@ -186,13 +207,20 @@ fun OnlinePlaylistScreen(
     var selection by remember { mutableStateOf(false) }
     val hideExplicit by rememberPreference(key = HideExplicitKey, defaultValue = false)
 
-    // System bars padding
-    val systemBarsTopPadding = WindowInsets.systemBars.asPaddingValues().calculateTopPadding()
+    val liquidGlassEnabled by rememberPreference(LiquidGlassEnabledKey, defaultValue = false)
+    val liquidGlassHeaderActive =
+        liquidGlassEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val lyricsFullScreen = LocalPlayerLyricsFullScreen.current
+
+    val screenSettled = rememberLayerBackdropSettled()
+
+    val layerBackdropActive = liquidGlassHeaderActive && !lyricsFullScreen && screenSettled
+
+    val systemBarsTopPadding = LocalStableSystemBarsTopPadding.current
 
     val lazyListState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
-    val retry = remember(viewModel) { viewModel::retry }
 
     var isSearching by rememberSaveable { mutableStateOf(false) }
     var query by
@@ -213,9 +241,18 @@ fun OnlinePlaylistScreen(
         }
 
     val focusRequester = remember { FocusRequester() }
+
+    var savedScrollIndex by remember { mutableIntStateOf(0) }
+    var savedScrollOffset by remember { mutableIntStateOf(0) }
     LaunchedEffect(isSearching) {
         if (isSearching) {
+            savedScrollIndex = lazyListState.firstVisibleItemIndex
+            savedScrollOffset = lazyListState.firstVisibleItemScrollOffset
             focusRequester.requestFocus()
+        } else {
+
+            withFrameNanos {}
+            lazyListState.scrollToItem(savedScrollIndex, savedScrollOffset)
         }
     }
 
@@ -226,11 +263,39 @@ fun OnlinePlaylistScreen(
         }
     } else if (selection) {
         BackHandler { selection = false }
+    } else {
+
+        BackHandler {
+            try {
+                if (!navController.popBackStack()) {
+                    navController.navigate("library") {
+                        launchSingleTop = true
+                    }
+                }
+            } catch (_: Exception) {
+                try {
+                    if (!navController.navigateUp()) {
+                        navController.navigate("library") { launchSingleTop = true }
+                    }
+                } catch (_: Exception) {
+
+                }
+            }
+        }
     }
 
     val wrappedSongs =
-        remember(filteredSongs) { filteredSongs.map { item -> ItemWrapper(item) } }
-            .toMutableStateList()
+        // The MutableStateList must be created INSIDE remember: calling
+        // toMutableStateList() on the remembered result rebuilt a fresh list
+        // instance on every recomposition of this screen (playback state,
+        // view counts and download maps all recompose it constantly while a
+        // song plays), which re-invalidated the LazyColumn's items block and
+        // churned allocations every frame — one of the causes of laggy
+        // playlist scrolling. Selection stays observable: ItemWrapper.isSelected
+        // is itself a mutableStateOf.
+        remember(filteredSongs) {
+            filteredSongs.map { item -> ItemWrapper(item) }.toMutableStateList()
+        }
 
     LaunchedEffect(songs) {
         val songIds = songs.map { it.id }
@@ -276,6 +341,9 @@ fun OnlinePlaylistScreen(
         }
     }
 
+    val artworkBackdrop = rememberBackdrop(surfaceColor)
+
+    val headerHaze = rememberScreenHeaderHaze()
     ExpressivePullToRefreshBox(
         isRefreshing = isRefreshing,
         onRefresh = viewModel::refresh,
@@ -289,11 +357,18 @@ fun OnlinePlaylistScreen(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .padding(
-                        top = if (isSearching) systemBarsTopPadding + AppBarHeight else 0.dp,
-                    ),
+                    .then(
+                        if (layerBackdropActive) {
+                            Modifier.layerBackdrop(artworkBackdrop)
+                        } else {
+                            Modifier
+                        },
+                    )
+                    .hazeSource(headerHaze),
             contentPadding =
                 PaddingValues(
+
+                    top = if (isSearching) systemBarsTopPadding + 64.dp else 0.dp,
                     bottom =
                         LocalPlayerAwareWindowInsets.current
                             .union(WindowInsets.ime)
@@ -301,7 +376,7 @@ fun OnlinePlaylistScreen(
                             .calculateBottomPadding(),
                 ),
         ) {
-            playlist.let { playlist ->
+            playlist.let { playlistSnapshot ->
                 if (isLoading) {
                     item(key = "shimmer") {
                         ShimmerHost {
@@ -371,9 +446,11 @@ fun OnlinePlaylistScreen(
                             repeat(6) { ListItemPlaceHolder() }
                         }
                     }
-                } else if (playlist != null) {
-                    if (!isSearching) {
-                        item(key = "header") {
+                } else if (playlistSnapshot != null) {
+
+                    val playlist = playlistSnapshot
+                    item(key = "header") {
+                        if (!isSearching) {
                             val author =
                                 playlist.author?.let { artist ->
                                     remember(artist) {
@@ -408,6 +485,12 @@ fun OnlinePlaylistScreen(
                                 isAdded = isBookmarked,
                                 addContentDescription = R.string.add_to_library,
                                 removeContentDescription = R.string.remove_from_library,
+                                canvasPrimaryUrl =
+                                    (canvasArtwork?.animated ?: canvasArtwork?.videoUrl)
+                                        ?.takeIf { pageCanvasEnabled },
+                                canvasFallbackUrl = canvasArtwork?.videoUrl?.takeIf { pageCanvasEnabled },
+                                canvasIsPlaying = true,
+                                canvasVisible = !lyricsFullScreen,
                                 onShuffle =
                                     playlist.shuffleEndpoint?.let { shuffleEndpoint ->
                                         {
@@ -437,80 +520,7 @@ fun OnlinePlaylistScreen(
                                             )
                                         }
                                     },
-                                onToggleAdd =
-                                    if (playlist.id == "LM") {
-                                        null
-                                    } else {
-                                        {
-                                            if (dbPlaylist?.playlist == null) {
-                                                database.transaction {
-                                                    val existingPlaylist =
-                                                        playlistEntityByBrowseId(playlist.id)
-                                                    val targetPlaylistId =
-                                                        if (existingPlaylist == null) {
-                                                            val playlistEntity =
-                                                                PlaylistEntity(
-                                                                    name = playlist.title,
-                                                                    browseId = playlist.id,
-                                                                    thumbnailUrl = playlist.thumbnail,
-                                                                    isEditable = playlist.isEditable,
-                                                                    playEndpointParams =
-                                                                        playlist.playEndpoint?.params,
-                                                                    shuffleEndpointParams =
-                                                                        playlist.shuffleEndpoint?.params,
-                                                                    radioEndpointParams =
-                                                                        playlist.radioEndpoint?.params,
-                                                                ).toggleLike()
-                                                            insert(playlistEntity)
-                                                            playlistEntityByBrowseId(playlist.id)?.id
-                                                                ?: playlistEntity.id
-                                                        } else {
-                                                            val refreshedPlaylist =
-                                                                existingPlaylist.copy(
-                                                                    name = playlist.title,
-                                                                    browseId = playlist.id,
-                                                                    thumbnailUrl = playlist.thumbnail,
-                                                                    isEditable = playlist.isEditable,
-                                                                    playEndpointParams =
-                                                                        playlist.playEndpoint?.params,
-                                                                    shuffleEndpointParams =
-                                                                        playlist.shuffleEndpoint?.params,
-                                                                    radioEndpointParams =
-                                                                        playlist.radioEndpoint?.params,
-                                                                )
-                                                            update(
-                                                                if (existingPlaylist.bookmarkedAt == null) {
-                                                                    refreshedPlaylist.toggleLike()
-                                                                } else {
-                                                                    refreshedPlaylist
-                                                                },
-                                                            )
-                                                            existingPlaylist.id
-                                                        }
-                                                    if (songs.isNotEmpty()) {
-                                                        clearPlaylist(targetPlaylistId)
-                                                        songs
-                                                            .onEach { song ->
-                                                                insert(song.toMediaMetadata())
-                                                            }.mapIndexed { index, song ->
-                                                                PlaylistSongMap(
-                                                                    songId = song.id,
-                                                                    playlistId = targetPlaylistId,
-                                                                    position = index,
-                                                                    setVideoId = song.setVideoId,
-                                                                )
-                                                            }.forEach(::insert)
-                                                    }
-                                                }
-                                            } else {
-                                                database.transaction {
-                                                    val currentPlaylist = dbPlaylist!!.playlist
-                                                    update(currentPlaylist, playlist)
-                                                    update(currentPlaylist.toggleLike())
-                                                }
-                                            }
-                                        }
-                                    },
+                                onToggleAdd = null,
                                 additionalPrimaryActions = { contentColor ->
                                     if (songs.isNotEmpty()) {
                                         MediaDetailAction(
@@ -522,7 +532,8 @@ fun OnlinePlaylistScreen(
                                                 },
                                             contentColor = contentColor,
                                             onClick = {
-                                                when (downloadState) {
+                                                val headerState = downloadState
+                                                when (headerState) {
                                                     HeaderDownloadState.Completed -> {
                                                         sendRemoveDownloads(
                                                             context = context,
@@ -531,11 +542,20 @@ fun OnlinePlaylistScreen(
                                                     }
 
                                                     is HeaderDownloadState.Partial -> {
-                                                        sendRemoveDownloads(
-                                                            context = context,
-                                                            songIds = songs.map { it.id },
-                                                            downloads = downloads,
-                                                        )
+
+                                                        if (headerState.paused) {
+                                                            sendResumePausedDownloads(
+                                                                context = context,
+                                                                songIds = songs.map { it.id },
+                                                                downloads = downloads,
+                                                            )
+                                                        } else {
+                                                            sendPauseRunningDownloads(
+                                                                context = context,
+                                                                songIds = songs.map { it.id },
+                                                                downloads = downloads,
+                                                            )
+                                                        }
                                                     }
 
                                                     HeaderDownloadState.None -> {
@@ -549,6 +569,7 @@ fun OnlinePlaylistScreen(
                                                                     )
                                                                 },
                                                             downloads = downloads,
+                                                            downloadUtil = downloadUtil,
                                                         )
                                                         navController.navigate(
                                                             "auto_playlist/downloaded?tab=progress",
@@ -581,71 +602,36 @@ fun OnlinePlaylistScreen(
                                                         modifier = Modifier.size(22.dp),
                                                     )
                                                 }
+                                            }
                                         }
                                     }
-
-                                    MediaDetailAction(
-                                        contentDescription = R.string.download,
-                                        contentColor = contentColor,
-                                        onClick = {
-                                            navController.navigate(
-                                                "auto_playlist/downloaded?tab=progress",
-                                            )
-                                        },
-                                    ) {
-                                        val globalProgress = (globalDownloadState as? HeaderDownloadState.Partial)?.progress ?: 0f
-                                        val globalPaused = (globalDownloadState as? HeaderDownloadState.Partial)?.paused ?: false
-                                        HeaderDownloadProgressIndicator(
-                                            progress = globalProgress,
-                                            paused = globalPaused,
-                                            icon = R.drawable.list,
-                                        )
-                                    }
-                                }
-
-                                    playlist.shuffleEndpoint?.let { mixEndpoint ->
-                                        MediaDetailIconAction(
-                                            icon = R.drawable.mix,
-                                            contentDescription = R.string.start_mix,
-                                            contentColor = contentColor,
-                                            onClick = {
-                                                playerConnection.playQueue(
-                                                    YouTubeQueue.playlist(mixEndpoint),
-                                                )
-                                            },
-                                        )
-                                    }
-
-                                    playlist.radioEndpoint?.let { radioEndpoint ->
-                                        MediaDetailIconAction(
-                                            icon = R.drawable.radio,
-                                            contentDescription = R.string.start_radio,
-                                            contentColor = contentColor,
-                                            onClick = {
-                                                playerConnection.playQueue(
-                                                    YouTubeQueue(radioEndpoint),
-                                                )
-                                            },
-                                        )
-                                    }
                                 },
-                                modifier = Modifier.animateItem(),
+
+                                useBlurredPlayButton = true,
                             )
                         }
                     }
 
                     if (songs.isEmpty() && !isLoading && error == null) {
                         item(key = "empty") {
-                            MediaDetailStatePanel(
-                                title = stringResource(R.string.empty_playlist),
-                                description = stringResource(R.string.empty_playlist_desc),
-                                iconRes = R.drawable.playlist_online,
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 32.dp),
-                            )
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(32.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.empty_playlist),
+                                    style = MaterialTheme.typography.titleLarge,
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = stringResource(R.string.empty_playlist_desc),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
 
-                    // Songs List
                     items(
                         items = wrappedSongs,
                         key = { it.item.second.setVideoId ?: "${it.item.second.id}-${it.item.first}" },
@@ -653,7 +639,6 @@ fun OnlinePlaylistScreen(
                     ) { song ->
                         YouTubeListItem(
                             item = song.item.second,
-                            showSourceIcon = true,
                             viewCountText =
                                 viewCounts[song.item.second.id]?.let { count ->
                                     formatCompactCount(count.toLong())
@@ -729,30 +714,64 @@ fun OnlinePlaylistScreen(
                 } else {
                     val isPrivatePlaylist = error?.contains("PLAYLIST_PRIVATE") == true
                     item(key = "error") {
-                        MediaDetailStatePanel(
-                            title =
-                                stringResource(
-                                    when {
-                                        isPrivatePlaylist -> R.string.playlist_private_title
-                                        error != null -> R.string.error_unknown
-                                        else -> R.string.playlist_not_found
-                                    },
-                                ),
-                            description =
-                                if (isPrivatePlaylist) {
-                                    stringResource(R.string.playlist_private_desc)
-                                } else {
-                                    error ?: stringResource(R.string.playlist_not_found_desc)
-                                },
-                            iconRes = if (isPrivatePlaylist) null else R.drawable.error,
-                            imageRes = if (isPrivatePlaylist) R.drawable.anime_blank else null,
-                            actionLabel = if (error != null && !isPrivatePlaylist) stringResource(R.string.retry) else null,
-                            onAction = if (error != null && !isPrivatePlaylist) retry else null,
-                            modifier =
-                                Modifier
-                                    .fillParentMaxSize()
-                                    .padding(top = systemBarsTopPadding + AppBarHeight),
-                        )
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            if (isPrivatePlaylist) {
+                                Image(
+                                    painter = painterResource(R.drawable.anime_blank),
+                                    contentDescription = null,
+                                    modifier = Modifier.size(120.dp),
+                                )
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Text(
+                                    text = stringResource(R.string.playlist_private_title),
+                                    style = MaterialTheme.typography.titleLarge,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = stringResource(R.string.playlist_private_desc),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                )
+                            } else {
+                                Text(
+                                    text =
+                                        if (error != null) {
+                                            stringResource(R.string.error_unknown)
+                                        } else {
+                                            stringResource(R.string.playlist_not_found)
+                                        },
+                                    style = MaterialTheme.typography.titleLarge,
+                                    color =
+                                        if (error != null) {
+                                            MaterialTheme.colorScheme.error
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface
+                                        },
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text =
+                                        if (error != null) {
+                                            error!!
+                                        } else {
+                                            stringResource(R.string.playlist_not_found_desc)
+                                        },
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                if (error != null) {
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Button(onClick = { viewModel.retry() }, shapes = ButtonDefaults.shapes()) {
+                                        Text(stringResource(R.string.retry))
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -770,25 +789,176 @@ fun OnlinePlaylistScreen(
             headerItems = headerItems,
         )
 
-        // Top App Bar
-        val topAppBarColors =
-            if (transparentAppBar) {
-                TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                    scrolledContainerColor = Color.Transparent,
-                    navigationIconContentColor = Color.White,
-                    titleContentColor = Color.White,
-                    actionIconContentColor = Color.White,
-                )
-            } else {
-                TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    scrolledContainerColor = MaterialTheme.colorScheme.surface,
+        ScreenHeaderHaze(
+            hazeState = headerHaze,
+            systemBarsTopPadding = systemBarsTopPadding,
+        )
+
+        val currentPlaylistForGlass = playlist
+        if (layerBackdropActive && !isSearching && currentPlaylistForGlass != null) {
+            LiquidGlassActionPill(
+                backdrop = artworkBackdrop,
+                interactive = true,
+                modifier =
+                    Modifier
+                        .align(Alignment.TopStart)
+                        .padding(start = 12.dp, top = systemBarsTopPadding + 12.dp),
+            ) {
+                IconButton(
+                    onClick = {
+                        if (selection) {
+                            selection = false
+                        } else {
+                            navController.navigateUp()
+                        }
+                    },
+                    onLongClick = {
+                        if (!selection) {
+                            navController.backToMain()
+                        }
+                    },
+                    modifier = Modifier.size(48.dp),
+                ) {
+                    Icon(
+                        painter =
+                            painterResource(
+                                if (selection) R.drawable.close else R.drawable.arrow_back,
+                            ),
+                        contentDescription = stringResource(R.string.back_button_desc),
+                        tint = liquidGlassContentColor(),
+                    )
+                }
+                GlassPillTitleText(
+                    text =
+                        if (selection) {
+                            val count = wrappedSongs.count { it.isSelected }
+                            pluralStringResource(R.plurals.n_song, count, count)
+                        } else {
+                            currentPlaylistForGlass.title
+                        },
                 )
             }
+            LiquidGlassActionPill(
+                backdrop = artworkBackdrop,
+                modifier =
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(end = 12.dp, top = systemBarsTopPadding + 12.dp),
+            ) {
+                if (selection) {
+
+                    val selectedCount = wrappedSongs.count { it.isSelected }
+                    Box(
+                        modifier = Modifier.size(48.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        androidx.compose.material3.IconButton(
+                            onClick = {
+                                if (selectedCount == wrappedSongs.size) {
+                                    wrappedSongs.forEach { it.isSelected = false }
+                                } else {
+                                    wrappedSongs.forEach { it.isSelected = true }
+                                }
+                            },
+                        ) {
+                            Icon(
+                                painter =
+                                    painterResource(
+                                        if (selectedCount == wrappedSongs.size) R.drawable.deselect else R.drawable.select_all,
+                                    ),
+                                contentDescription = null,
+                                tint = liquidGlassContentColor(),
+                            )
+                        }
+                    }
+                    androidx.compose.material3.IconButton(onClick = {
+                        menuState.show {
+                            SelectionMediaMetadataMenu(
+                                songSelection =
+                                    wrappedSongs
+                                        .filter { it.isSelected }
+                                        .map {
+                                            it.item.second
+                                                .toMediaItem()
+                                                .metadata!!
+                                        },
+                                onDismiss = menuState::dismiss,
+                                clearAction = { selection = false },
+                                currentItems = emptyList(),
+                            )
+                        }
+                    }) {
+                        Icon(
+                            painter = painterResource(R.drawable.more_vert),
+                            contentDescription = null,
+                            tint = liquidGlassContentColor(),
+                        )
+                    }
+                } else {
+
+                Box(
+                    modifier = Modifier.size(48.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    androidx.compose.material3.IconButton(onClick = { isSearching = true }) {
+                        Icon(
+                            painter = painterResource(R.drawable.search),
+                            contentDescription = null,
+                            tint = liquidGlassContentColor(),
+                        )
+                    }
+                }
+
+                Box(
+                    modifier = Modifier.size(48.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    androidx.compose.material3.IconButton(onClick = {
+                        menuState.show {
+                            YouTubePlaylistMenu(
+                                playlist = currentPlaylistForGlass,
+                                songs = songs,
+                                coroutineScope = coroutineScope,
+                                onDismiss = menuState::dismiss,
+                                selectAction = { selection = true },
+                                canSelect = true,
+                                snackbarHostState = snackbarHostState,
+                            )
+                        }
+                    }) {
+                        Icon(
+                            painter = painterResource(R.drawable.more_horiz),
+                            contentDescription = null,
+                            tint = liquidGlassContentColor(),
+                        )
+                    }
+                }
+                }
+            }
+        }
+
+        if (isSearching) {
+            val topAppBarColors =
+                if (transparentAppBar) {
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        scrolledContainerColor = Color.Transparent,
+                        navigationIconContentColor = Color.White,
+                        titleContentColor = Color.White,
+                        actionIconContentColor = Color.White,
+                    )
+                } else {
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        scrolledContainerColor = Color.Transparent,
+                    )
+                }
 
         TopAppBar(
             colors = topAppBarColors,
+            windowInsets =
+                WindowInsets(top = systemBarsTopPadding)
+                    .union(WindowInsets.systemBars.only(WindowInsetsSides.Horizontal)),
             title = {
                 if (selection) {
                     val count = wrappedSongs.count { it.isSelected }
@@ -824,20 +994,22 @@ fun OnlinePlaylistScreen(
                 }
             },
             navigationIcon = {
-                IconButton(
-                    onClick = {
-                        if (isSearching) {
-                            isSearching = false
-                            query = TextFieldValue()
-                        } else if (selection) {
-                            selection = false
-                        } else {
-                            navController.navigateUp()
-                        }
-                    },
-                    onLongClick = {
-                        if (!isSearching && !selection) {
-                            navController.backToMain()
+
+                if (isSearching || selection || showTopBarTitle) {
+                    IconButton(
+                        onClick = {
+                            if (isSearching) {
+                                isSearching = false
+                                query = TextFieldValue()
+                            } else if (selection) {
+                                selection = false
+                            } else {
+                                navController.navigateUp()
+                            }
+                        },
+                        onLongClick = {
+                            if (!isSearching && !selection) {
+                                navController.backToMain()
                         }
                     },
                 ) {
@@ -848,6 +1020,7 @@ fun OnlinePlaylistScreen(
                             ),
                         contentDescription = null,
                     )
+                }
                 }
             },
             actions = {
@@ -901,38 +1074,42 @@ fun OnlinePlaylistScreen(
                         )
                     }
                 } else if (!isSearching) {
-                    IconButton(onClick = { isSearching = true }, onLongClick = {}) {
-                        Icon(
-                            painter = painterResource(R.drawable.search),
-                            contentDescription = null,
-                        )
-                    }
-                    playlist?.let { currentPlaylist ->
-                        IconButton(
-                            onClick = {
-                                menuState.show {
-                                    YouTubePlaylistMenu(
-                                        playlist = currentPlaylist,
-                                        songs = songs,
-                                        coroutineScope = coroutineScope,
-                                        onDismiss = menuState::dismiss,
-                                        selectAction = { selection = true },
-                                        canSelect = true,
-                                        snackbarHostState = snackbarHostState,
-                                    )
-                                }
-                            },
-                            onLongClick = {},
-                        ) {
+
+                    if (showTopBarTitle) {
+                        IconButton(onClick = { isSearching = true }, onLongClick = {}) {
                             Icon(
-                                painter = painterResource(R.drawable.more_horiz),
-                                contentDescription = stringResource(R.string.more_options),
+                                painter = painterResource(R.drawable.search),
+                                contentDescription = null,
                             )
+                        }
+                        playlist?.let { currentPlaylist ->
+                            IconButton(
+                                onClick = {
+                                    menuState.show {
+                                        YouTubePlaylistMenu(
+                                            playlist = currentPlaylist,
+                                            songs = songs,
+                                            coroutineScope = coroutineScope,
+                                            onDismiss = menuState::dismiss,
+                                            selectAction = { selection = true },
+                                            canSelect = true,
+                                            snackbarHostState = snackbarHostState,
+                                        )
+                                    }
+                                },
+                                onLongClick = {},
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.more_horiz),
+                                    contentDescription = stringResource(R.string.more_options),
+                                )
+                            }
                         }
                     }
                 }
             },
         )
+        }
 
         SnackbarHost(
             hostState = snackbarHostState,

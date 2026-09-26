@@ -20,6 +20,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.border
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -51,18 +52,22 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalView
+import moe.rukamori.archivetune.ui.player.PlayerFadeConfig
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -72,8 +77,12 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.Player
 import coil3.compose.AsyncImage
+import coil3.compose.AsyncImagePainter
+import coil3.request.CachePolicy
+import coil3.request.ImageRequest
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+
 import moe.rukamori.archivetune.R
 import moe.rukamori.archivetune.constants.EnableHapticFeedbackKey
 import moe.rukamori.archivetune.constants.MiniPlayerHeight
@@ -82,10 +91,14 @@ import moe.rukamori.archivetune.extensions.togglePlayPause
 import moe.rukamori.archivetune.models.MediaMetadata
 import moe.rukamori.archivetune.playback.PlayerConnection
 import moe.rukamori.archivetune.together.isConnectedToSession
+import moe.rukamori.archivetune.ui.utils.getNextFallbackUrl
 import moe.rukamori.archivetune.utils.rememberLowDataModeActive
 import moe.rukamori.archivetune.utils.rememberPreference
 import kotlin.math.absoluteValue
 import kotlin.math.roundToInt
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 
 private val MiniPlayerTransportButtonSpacing = 4.dp
 
@@ -120,7 +133,7 @@ fun SwipeableMiniPlayerBox(
     content: @Composable (Float) -> Unit,
 ) {
     val offsetXAnimatable = remember { Animatable(0f) }
-    var dragStartTime by remember { mutableStateOf(0L) }
+    var dragStartTime by remember { mutableLongStateOf(0L) }
     var totalDragDistance by remember { mutableFloatStateOf(0f) }
 
     val view = LocalView.current
@@ -270,7 +283,7 @@ fun SwipeableMiniPlayerBox(
                     Icon(
                         painter =
                             painterResource(
-                                if (offsetXAnimatable.value > 0) R.drawable.skip_previous else R.drawable.skip_next,
+                                if (offsetXAnimatable.value > 0) R.drawable.player_skip_previous else R.drawable.player_skip_next,
                             ),
                         contentDescription = null,
                         tint =
@@ -290,41 +303,73 @@ fun RowScope.MiniPlayerInfo(
     mediaMetadata: MediaMetadata,
     colors: MiniPlayerContentColors,
 ) {
-    Column(
+    PlayerTextBackdrop(
+        textColor = colors.title,
         modifier =
             Modifier
                 .weight(1f)
                 .padding(horizontal = 10.dp),
-        verticalArrangement = Arrangement.Center,
     ) {
-        AnimatedContent(
-            targetState = mediaMetadata.title,
-            transitionSpec = { fadeIn() togetherWith fadeOut() },
-            label = "title",
-        ) { title ->
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMediumEmphasized,
-                color = colors.title,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.basicMarquee(),
-            )
-        }
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.Center,
+        ) {
+            AnimatedContent(
+                targetState = mediaMetadata.title,
+                transitionSpec = { fadeIn() togetherWith fadeOut() },
+                label = "title",
+            ) { title ->
+                val titleLayout = remember { mutableStateOf<TextLayoutResult?>(null) }
+                val titleViewport = remember { mutableStateOf(0) }
+                val titleShouldFade =
+                    titleViewport.value > 0 &&
+                        (titleLayout.value?.size?.width ?: 0) > titleViewport.value
+                Box(
+                    modifier =
+                        (if (titleShouldFade) Modifier.fillMaxWidth().viewportEdgeFade(PlayerFadeConfig.miniPlayer.fadeWidth) else Modifier.fillMaxWidth())
+                            .clipToBounds()
+                            .onSizeChanged { titleViewport.value = it.width },
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMediumEmphasized,
+                        color = colors.title,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        onTextLayout = { titleLayout.value = it },
+                        modifier = Modifier.fillMaxWidth().basicMarquee(iterations = Int.MAX_VALUE),
+                    )
+                }
+            }
 
-        AnimatedContent(
-            targetState = mediaMetadata.artists,
-            transitionSpec = { fadeIn() togetherWith fadeOut() },
-            label = "artist",
-        ) { artists ->
-            Text(
-                text = artists.joinToString { it.name },
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.secondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.basicMarquee(),
-            )
+            AnimatedContent(
+                targetState = mediaMetadata.artists,
+                transitionSpec = { fadeIn() togetherWith fadeOut() },
+                label = "artist",
+            ) { artists ->
+                val artistText = artists.joinToString { it.name }
+                val artistLayout = remember { mutableStateOf<TextLayoutResult?>(null) }
+                val artistViewport = remember { mutableStateOf(0) }
+                val artistShouldFade =
+                    artistViewport.value > 0 &&
+                        (artistLayout.value?.size?.width ?: 0) > artistViewport.value
+                Box(
+                    modifier =
+                        (if (artistShouldFade) Modifier.fillMaxWidth().viewportEdgeFade(PlayerFadeConfig.miniPlayer.fadeWidth) else Modifier.fillMaxWidth())
+                            .clipToBounds()
+                            .onSizeChanged { artistViewport.value = it.width },
+                ) {
+                    Text(
+                        text = artistText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.secondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        onTextLayout = { artistLayout.value = it },
+                        modifier = Modifier.fillMaxWidth().basicMarquee(iterations = Int.MAX_VALUE),
+                    )
+                }
+            }
         }
     }
 }
@@ -335,11 +380,29 @@ private fun MiniPlayerArtwork(
     progress: () -> Float,
     isLoading: Boolean,
     colors: MiniPlayerContentColors,
+    onArtworkSlotPositioned: ((androidx.compose.ui.geometry.Rect) -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     Box(
         contentAlignment = Alignment.Center,
-        modifier = modifier.size(52.dp),
+        modifier =
+            modifier
+                .size(52.dp)
+                .onGloballyPositioned { coordinates ->
+                    if (onArtworkSlotPositioned != null) {
+                        onArtworkSlotPositioned(
+                            androidx.compose.ui.geometry.Rect(
+                                offset = coordinates.positionInRoot(),
+                                size =
+                                    androidx.compose.ui.geometry.Size(
+                                        width = coordinates.size.width.toFloat(),
+                                        height = coordinates.size.height.toFloat(),
+                                    ),
+                            ),
+                        )
+                    }
+                },
     ) {
         if (isLoading) {
             CircularWavyProgressIndicator(
@@ -369,6 +432,16 @@ private fun MiniPlayerArtwork(
                         shape = CircleShape,
                     ),
         ) {
+            // The artwork always renders here, even when the SpatialFlow
+            // morph layer is expected to draw over this slot (canvas songs,
+            // plain songs). The floating layer sits at a higher z-index and
+            // shows the exact same image, so covering it is invisible — and if
+            // that layer ever fails to draw (rects not yet measured, artwork
+            // inactive, canvas URL blank) the thumbnail is still on screen
+            // instead of an empty ring. This is the fix for the
+            // "thumbnail doesn't load in mini player in spatialflow style"
+            // report: the placeholder-only path had no artwork of its own and
+            // no fallback when the shared layer could not draw.
             val baseThumbnailUrl = mediaMetadata?.thumbnailUrl
             if (baseThumbnailUrl != null) {
                 val thumbnailSwapState =
@@ -378,10 +451,33 @@ private fun MiniPlayerArtwork(
                         lowDataMode = rememberLowDataModeActive(),
                         isMusicVideo = mediaMetadata.isMusicVideo,
                     )
+                // Same hardening as every other artwork surface: a
+                // disk-cache-backed request plus the maxres -> hq720 -> mq
+                // fallback chain, so a single failed ytimg request can never
+                // park the 42dp slot empty for the rest of the session.
+                var displayUrl by remember(thumbnailSwapState.displayUrl) {
+                    mutableStateOf(thumbnailSwapState.displayUrl)
+                }
+                val artworkRequest =
+                    remember(displayUrl) {
+                        ImageRequest
+                            .Builder(context)
+                            .data(displayUrl)
+                            .memoryCacheKey(displayUrl)
+                            .diskCacheKey(displayUrl)
+                            .diskCachePolicy(CachePolicy.ENABLED)
+                            .networkCachePolicy(CachePolicy.ENABLED)
+                            .build()
+                    }
                 AsyncImage(
-                    model = thumbnailSwapState.displayUrl,
+                    model = artworkRequest,
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
+                    onState = { state ->
+                        if (state is AsyncImagePainter.State.Error) {
+                            getNextFallbackUrl(displayUrl)?.let { displayUrl = it }
+                        }
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
             } else {
@@ -489,7 +585,7 @@ private fun MiniPlayerTransportControls(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         MiniPlayerTransportButton(
-            iconResId = R.drawable.skip_previous,
+            iconResId = R.drawable.player_skip_previous,
             contentDescription = stringResource(R.string.widget_previous),
             onClick = onPrevious,
             enabled = canSkipPrevious,
@@ -499,9 +595,9 @@ private fun MiniPlayerTransportControls(
         MiniPlayerTransportButton(
             iconResId =
                 when {
-                    playbackState == Player.STATE_ENDED -> R.drawable.replay
-                    isPlaying -> R.drawable.pause
-                    else -> R.drawable.play
+                    playbackState == Player.STATE_ENDED -> R.drawable.player_replay
+                    isPlaying -> R.drawable.player_pause
+                    else -> R.drawable.player_play
                 },
             contentDescription =
                 stringResource(
@@ -513,7 +609,7 @@ private fun MiniPlayerTransportControls(
         )
 
         MiniPlayerTransportButton(
-            iconResId = R.drawable.skip_next,
+            iconResId = R.drawable.player_skip_next,
             contentDescription = stringResource(R.string.next),
             onClick = onNext,
             enabled = canSkipNext,
@@ -524,10 +620,11 @@ private fun MiniPlayerTransportControls(
 
 @Composable
 fun NewMiniPlayerContent(
-    position: Long,
-    duration: Long,
+    positionProvider: () -> Long,
+    durationProvider: () -> Long,
     playerConnection: PlayerConnection,
     colors: MiniPlayerContentColors,
+    onArtworkSlotPositioned: ((androidx.compose.ui.geometry.Rect) -> Unit)? = null,
 ) {
     val isPlaying by playerConnection.isPlaying.collectAsStateWithLifecycle()
     val playbackState by playerConnection.playbackState.collectAsStateWithLifecycle()
@@ -537,9 +634,17 @@ fun NewMiniPlayerContent(
     val canSkipNext by playerConnection.canSkipNext.collectAsStateWithLifecycle()
 
     val isLoading = playbackState == Player.STATE_BUFFERING
+
     val progressProvider =
-        remember(position, duration) {
-            { if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f }
+        remember(positionProvider, durationProvider) {
+            {
+                val duration = durationProvider()
+                if (duration > 0) {
+                    (positionProvider().toFloat() / duration).coerceIn(0f, 1f)
+                } else {
+                    0f
+                }
+            }
         }
 
     Row(
@@ -554,6 +659,7 @@ fun NewMiniPlayerContent(
             progress = progressProvider,
             isLoading = isLoading,
             colors = colors,
+            onArtworkSlotPositioned = onArtworkSlotPositioned,
         )
 
         mediaMetadata?.let {
@@ -569,7 +675,7 @@ fun NewMiniPlayerContent(
                 color = colors.togetherContainer,
             ) {
                 Icon(
-                    painter = painterResource(R.drawable.all_inclusive),
+                    painter = painterResource(R.drawable.player_all_inclusive),
                     contentDescription = stringResource(R.string.music_together),
                     tint = colors.togetherContent,
                     modifier =

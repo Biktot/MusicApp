@@ -23,7 +23,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -42,7 +42,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.snapshotFlow
@@ -63,25 +62,25 @@ import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
 import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.R
 import moe.rukamori.archivetune.constants.AppBarHeight
+import moe.rukamori.archivetune.constants.SearchProvider
 import moe.rukamori.archivetune.extensions.togglePlayPause
 import moe.rukamori.archivetune.innertube.YouTube.SearchFilter.Companion.FILTER_ALBUM
 import moe.rukamori.archivetune.innertube.YouTube.SearchFilter.Companion.FILTER_ARTIST
 import moe.rukamori.archivetune.innertube.YouTube.SearchFilter.Companion.FILTER_COMMUNITY_PLAYLIST
 import moe.rukamori.archivetune.innertube.YouTube.SearchFilter.Companion.FILTER_FEATURED_PLAYLIST
-import moe.rukamori.archivetune.innertube.YouTube.SearchFilter.Companion.FILTER_PODCAST
 import moe.rukamori.archivetune.innertube.YouTube.SearchFilter.Companion.FILTER_SONG
 import moe.rukamori.archivetune.innertube.YouTube.SearchFilter.Companion.FILTER_VIDEO
 import moe.rukamori.archivetune.innertube.models.AlbumItem
 import moe.rukamori.archivetune.innertube.models.ArtistItem
-import moe.rukamori.archivetune.innertube.models.EpisodeItem
 import moe.rukamori.archivetune.innertube.models.PlaylistItem
-import moe.rukamori.archivetune.innertube.models.PodcastItem
 import moe.rukamori.archivetune.innertube.models.SongItem
+import moe.rukamori.archivetune.innertube.models.EpisodeItem
+import moe.rukamori.archivetune.innertube.models.PodcastItem
 import moe.rukamori.archivetune.innertube.models.WatchEndpoint
 import moe.rukamori.archivetune.innertube.models.YTItem
 import moe.rukamori.archivetune.innertube.pages.SearchSummary
-import moe.rukamori.archivetune.models.toMediaMetadata
 import moe.rukamori.archivetune.extensions.toMediaItem
+import moe.rukamori.archivetune.models.toMediaMetadata
 import moe.rukamori.archivetune.playback.queues.ListQueue
 import moe.rukamori.archivetune.playback.queues.YouTubeQueue
 import moe.rukamori.archivetune.ui.component.ChipsRow
@@ -96,6 +95,7 @@ import moe.rukamori.archivetune.ui.menu.YouTubePlaylistMenu
 import moe.rukamori.archivetune.ui.menu.YouTubeSongMenu
 import moe.rukamori.archivetune.viewmodels.OnlineSearchSort
 import moe.rukamori.archivetune.viewmodels.OnlineSearchViewModel
+import androidx.compose.runtime.getValue
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -109,6 +109,18 @@ fun OnlineSearchResult(
     val haptic = LocalHapticFeedback.current
     val isPlaying by playerConnection.isPlaying.collectAsStateWithLifecycle()
     val mediaMetadata by playerConnection.mediaMetadata.collectAsStateWithLifecycle()
+    if (viewModel.searchProvider == SearchProvider.SPOTIFY) {
+        SpotifyOnlineSearchResult(navController = navController)
+        return
+    }
+    if (viewModel.searchProvider == SearchProvider.APPLE_MUSIC) {
+        AppleMusicOnlineSearchResult(navController = navController)
+        return
+    }
+    if (viewModel.searchProvider == SearchProvider.AMAZON) {
+        AmazonOnlineSearchResult(navController = navController)
+        return
+    }
 
     val coroutineScope = rememberCoroutineScope()
     val lazyListState = rememberLazyListState()
@@ -135,7 +147,6 @@ fun OnlineSearchResult(
                 FILTER_VIDEO to stringResource(R.string.filter_videos),
                 FILTER_ALBUM to stringResource(R.string.filter_albums),
                 FILTER_ARTIST to stringResource(R.string.filter_artists),
-                FILTER_PODCAST to stringResource(R.string.podcast),
                 FILTER_COMMUNITY_PLAYLIST to stringResource(R.string.filter_community_playlists),
                 FILTER_FEATURED_PLAYLIST to stringResource(R.string.filter_featured_playlists),
             ).forEach { (sectionFilter, sectionTitle) ->
@@ -154,7 +165,6 @@ fun OnlineSearchResult(
                 FILTER_VIDEO,
                 FILTER_ALBUM,
                 FILTER_ARTIST,
-                FILTER_PODCAST,
                 FILTER_COMMUNITY_PLAYLIST,
                 FILTER_FEATURED_PLAYLIST,
             ).all { viewModel.viewStateMap.containsKey(it.value) }
@@ -225,7 +235,9 @@ fun OnlineSearchResult(
             isPlaying = isPlaying,
             trailingContent = {
                 if (longClick != null) {
-                    IconButton(onClick = longClick) {
+                    IconButton(
+                        onClick = longClick,
+                    ) {
                         Icon(
                             painter = painterResource(R.drawable.more_vert),
                             contentDescription = null,
@@ -239,13 +251,24 @@ fun OnlineSearchResult(
                         onClick = {
                             when (item) {
                                 is SongItem -> {
-                                    if (item.id == mediaMetadata?.id) {
+                                    val playAsVideo = searchFilter == FILTER_VIDEO
+                                    val sameTrack = item.id == mediaMetadata?.id
+                                    val currentIsVideo = sameTrack && mediaMetadata?.isMusicVideo == true
+                                    if (sameTrack && (!playAsVideo || currentIsVideo)) {
                                         playerConnection.player.togglePlayPause()
                                     } else {
+                                        val seedMetadata =
+                                            item.toMediaMetadata().let { metadata ->
+                                                if (playAsVideo && !metadata.isMusicVideo) {
+                                                    metadata.copy(isMusicVideo = true)
+                                                } else {
+                                                    metadata
+                                                }
+                                            }
                                         playerConnection.playQueue(
                                             YouTubeQueue(
                                                 WatchEndpoint(videoId = item.id),
-                                                item.toMediaMetadata(),
+                                                seedMetadata,
                                             ),
                                         )
                                     }
@@ -294,7 +317,8 @@ fun OnlineSearchResult(
             shadowElevation = 1.dp,
             modifier =
                 Modifier
-                    .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top).add(WindowInsets(top = AppBarHeight)))
+
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top).add(WindowInsets(top = AppBarHeight)))
                     .fillMaxWidth(),
         ) {
             ChipsRow(
@@ -305,7 +329,6 @@ fun OnlineSearchResult(
                         FILTER_VIDEO to stringResource(R.string.filter_videos),
                         FILTER_ALBUM to stringResource(R.string.filter_albums),
                         FILTER_ARTIST to stringResource(R.string.filter_artists),
-                        FILTER_PODCAST to stringResource(R.string.podcast),
                         FILTER_COMMUNITY_PLAYLIST to stringResource(R.string.filter_community_playlists),
                         FILTER_FEATURED_PLAYLIST to stringResource(R.string.filter_featured_playlists),
                     ),
@@ -325,7 +348,6 @@ fun OnlineSearchResult(
                         FILTER_VIDEO to R.drawable.slow_motion_video,
                         FILTER_ALBUM to R.drawable.album,
                         FILTER_ARTIST to R.drawable.person,
-                        FILTER_PODCAST to R.drawable.mic,
                         FILTER_COMMUNITY_PLAYLIST to R.drawable.queue_music,
                         FILTER_FEATURED_PLAYLIST to R.drawable.playlist_play,
                     ),

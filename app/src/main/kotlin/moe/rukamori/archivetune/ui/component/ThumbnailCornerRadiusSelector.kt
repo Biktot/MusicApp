@@ -110,6 +110,7 @@ fun ThumbnailCornerRadiusModal(
                 usePlatformDefaultWidth = false,
             ),
     ) {
+        KeepStatusBarHiddenInDialog()
         BoxWithConstraints {
             val screenWidth = maxWidth
             val dialogWidth =

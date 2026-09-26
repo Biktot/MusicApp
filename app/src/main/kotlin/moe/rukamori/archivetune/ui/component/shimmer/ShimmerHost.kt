@@ -25,6 +25,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import com.valentinilk.shimmer.defaultShimmerTheme
 import com.valentinilk.shimmer.shimmer
 
+private val ShimmerFadeBrush =
+    Brush.verticalGradient(listOf(Color.Black, Color.Transparent))
+
 @Composable
 fun ShimmerHost(
     modifier: Modifier = Modifier,
@@ -42,7 +45,7 @@ fun ShimmerHost(
                 .drawWithContent {
                     drawContent()
                     drawRect(
-                        brush = Brush.verticalGradient(listOf(Color.Black, Color.Transparent)),
+                        brush = ShimmerFadeBrush,
                         blendMode = BlendMode.DstIn,
                     )
                 },

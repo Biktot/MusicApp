@@ -14,7 +14,9 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -28,6 +30,8 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -36,6 +40,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -64,12 +69,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -96,6 +99,7 @@ import com.valentinilk.shimmer.shimmer
 import kotlinx.coroutines.flow.collect
 import moe.rukamori.archivetune.LocalDatabase
 import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
+import moe.rukamori.archivetune.LocalStableSystemBarsTopPadding
 import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.R
 import moe.rukamori.archivetune.constants.AppBarHeight
@@ -106,14 +110,18 @@ import moe.rukamori.archivetune.constants.CONTENT_TYPE_LIST
 import moe.rukamori.archivetune.constants.CONTENT_TYPE_PLAYLIST
 import moe.rukamori.archivetune.constants.CONTENT_TYPE_SONG
 import moe.rukamori.archivetune.constants.HideExplicitKey
+import moe.rukamori.archivetune.constants.LiquidGlassEnabledKey
+import moe.rukamori.archivetune.ui.player.LocalPlayerLyricsFullScreen
 import moe.rukamori.archivetune.db.entities.ArtistEntity
 import moe.rukamori.archivetune.extensions.toMediaItem
 import moe.rukamori.archivetune.extensions.togglePlayPause
 import moe.rukamori.archivetune.innertube.models.AlbumItem
+import moe.rukamori.archivetune.innertube.models.EpisodeItem
 import moe.rukamori.archivetune.innertube.models.AlbumReleaseType
 import moe.rukamori.archivetune.innertube.models.ArtistItem
 import moe.rukamori.archivetune.innertube.models.BrowseEndpoint
 import moe.rukamori.archivetune.innertube.models.PlaylistItem
+import moe.rukamori.archivetune.innertube.models.PodcastItem
 import moe.rukamori.archivetune.innertube.models.SongItem
 import moe.rukamori.archivetune.innertube.models.WatchEndpoint
 import moe.rukamori.archivetune.innertube.pages.ArtistPage
@@ -122,8 +130,11 @@ import moe.rukamori.archivetune.models.toMediaMetadata
 import moe.rukamori.archivetune.playback.queues.ListQueue
 import moe.rukamori.archivetune.playback.queues.YouTubeQueue
 import moe.rukamori.archivetune.ui.component.AlbumGridItem
+import moe.rukamori.archivetune.ui.component.ExpressivePullToRefreshBox
 import moe.rukamori.archivetune.ui.component.HideOnScrollFAB
 import moe.rukamori.archivetune.ui.component.IconButton
+import moe.rukamori.archivetune.ui.component.LiquidGlassActionPill
+import moe.rukamori.archivetune.ui.component.LiquidGlassIconButton
 import moe.rukamori.archivetune.ui.component.LocalMenuState
 import moe.rukamori.archivetune.ui.component.MediaDetailIconAction
 import moe.rukamori.archivetune.ui.component.MediaDetailPrimaryActions
@@ -131,10 +142,14 @@ import moe.rukamori.archivetune.ui.component.NavigationTitle
 import moe.rukamori.archivetune.ui.component.SongListItem
 import moe.rukamori.archivetune.ui.component.YouTubeGridItem
 import moe.rukamori.archivetune.ui.component.YouTubeListItem
+import moe.rukamori.archivetune.ui.component.layerBackdrop
+import moe.rukamori.archivetune.ui.component.liquidGlassContentColor
+import moe.rukamori.archivetune.ui.component.rememberBackdrop
 import moe.rukamori.archivetune.ui.component.shimmer.ButtonPlaceholder
 import moe.rukamori.archivetune.ui.component.shimmer.ListItemPlaceHolder
 import moe.rukamori.archivetune.ui.component.shimmer.ShimmerHost
 import moe.rukamori.archivetune.ui.component.shimmer.TextPlaceholder
+import moe.rukamori.archivetune.ui.component.rememberLayerBackdropSettled
 import moe.rukamori.archivetune.ui.menu.AlbumMenu
 import moe.rukamori.archivetune.ui.menu.SongMenu
 import moe.rukamori.archivetune.ui.menu.YouTubeAlbumMenu
@@ -151,6 +166,8 @@ import moe.rukamori.archivetune.viewmodels.ArtistBlockState
 import moe.rukamori.archivetune.viewmodels.ArtistEvent
 import moe.rukamori.archivetune.viewmodels.ArtistViewModel
 import java.util.Locale
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -167,13 +184,40 @@ fun ArtistScreen(
     val playerConnection = LocalPlayerConnection.current ?: return
     val isPlaying by playerConnection.isPlaying.collectAsStateWithLifecycle()
     val mediaMetadata by playerConnection.mediaMetadata.collectAsStateWithLifecycle()
-    val loadedArtistPage = viewModel.artistPage.collectAsStateWithLifecycle().value
+    val loadedArtistPage = viewModel.artistPage
     val libraryArtist by viewModel.libraryArtist.collectAsStateWithLifecycle()
     val loadedLibrarySongs by viewModel.librarySongs.collectAsStateWithLifecycle()
     val loadedLibraryAlbums by viewModel.libraryAlbums.collectAsStateWithLifecycle()
     val blockState by viewModel.blockState.collectAsStateWithLifecycle()
     val hideExplicit by rememberPreference(key = HideExplicitKey, defaultValue = false)
+
+    val liquidGlassEnabled by rememberPreference(LiquidGlassEnabledKey, defaultValue = false)
+    val liquidGlassHeaderActive =
+        liquidGlassEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+
+    val lyricsFullScreen = LocalPlayerLyricsFullScreen.current
+
+    val screenSettled = rememberLayerBackdropSettled()
+
+    val layerBackdropActive = liquidGlassHeaderActive && !lyricsFullScreen && screenSettled
     val isArtistBlocked = (blockState as? ArtistBlockState.Success)?.isBlocked == true
+
+    BackHandler {
+        try {
+            if (!navController.popBackStack()) {
+                navController.navigate("library") { launchSingleTop = true }
+            }
+        } catch (_: Exception) {
+            try {
+                if (!navController.navigateUp()) {
+                    navController.navigate("library") { launchSingleTop = true }
+                }
+            } catch (_: Exception) {
+
+            }
+        }
+    }
+
     val artistPage =
         remember(loadedArtistPage, isArtistBlocked) {
             if (isArtistBlocked) {
@@ -195,7 +239,7 @@ fun ArtistScreen(
 
     val lazyListState = rememberLazyListState()
     val snackbarHostState = remember { SnackbarHostState() }
-    val showLocal by viewModel.showLocal.collectAsStateWithLifecycle()
+    var showLocal by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(viewModel) {
         viewModel.events.collect { event ->
@@ -222,7 +266,7 @@ fun ArtistScreen(
         }
     }
 
-    val systemBarsTopPadding = WindowInsets.systemBars.asPaddingValues().calculateTopPadding()
+    val systemBarsTopPadding = LocalStableSystemBarsTopPadding.current
     val surfaceColor = MaterialTheme.colorScheme.surface
     val heroContentColor =
         if (surfaceColor.luminance() > 0.5f) {
@@ -236,6 +280,10 @@ fun ArtistScreen(
         derivedStateOf {
             lazyListState.firstVisibleItemIndex == 0 && lazyListState.firstVisibleItemScrollOffset < 100
         }
+    }
+
+    LaunchedEffect(libraryArtist) {
+        showLocal = libraryArtist?.artist?.isLocal == true
     }
 
     val latestRelease =
@@ -279,7 +327,6 @@ fun ArtistScreen(
     val showArtistOverflowMenu: () -> Unit = {
         menuState.show {
             ArtistOverflowMenu(
-                canShare = libraryArtist?.artist?.let { !it.isLocal && it.isYouTubeArtist } ?: (artistPage != null),
                 isBlocked = isArtistBlocked,
                 blockActionEnabled =
                     blockState !is ArtistBlockState.Loading &&
@@ -303,20 +350,36 @@ fun ArtistScreen(
         }
     }
 
+    val artworkBackdrop = rememberBackdrop(surfaceColor)
+
+    val isManuallyRefreshing = viewModel.isManuallyRefreshing
+
     Box(
         modifier =
             Modifier
                 .fillMaxSize()
                 .background(surfaceColor),
     ) {
+        ExpressivePullToRefreshBox(
+            isRefreshing = isManuallyRefreshing,
+            onRefresh = viewModel::manualRefresh,
+            modifier = Modifier.fillMaxSize(),
+        ) {
         LazyColumn(
+            modifier =
+                if (layerBackdropActive) {
+                    Modifier.layerBackdrop(artworkBackdrop)
+                } else {
+                    Modifier
+                },
             state = lazyListState,
             contentPadding =
                 PaddingValues(
                     bottom = LocalPlayerAwareWindowInsets.current.asPaddingValues().calculateBottomPadding(),
                 ),
         ) {
-            if (artistPage == null && !showLocal) {
+            if (isManuallyRefreshing && artistPage == null && !showLocal) {
+
                 item(key = "shimmer") {
                     ShimmerHost {
                         Box(
@@ -502,7 +565,6 @@ fun ArtistScreen(
                             }
 
                             ArtistPrimaryActions(
-                                isLocalArtist = libraryArtist?.artist?.isLocal == true,
                                 isSubscribed = isSubscribed,
                                 contentColor = heroContentColor,
                                 contrastingColor = surfaceColor,
@@ -582,6 +644,8 @@ fun ArtistScreen(
                                         }
                                     },
                                 modifier = Modifier.padding(top = 12.dp),
+                                useBlurredPlayButton = liquidGlassHeaderActive,
+                                thumbnailUrl = thumbnail,
                             )
                         }
                     }
@@ -628,9 +692,54 @@ fun ArtistScreen(
                     }
                 }
 
-                // Content sections
-                if (showLocal) {
-                    // Local Songs Section
+                if (!showLocal && artistPage == null && !isManuallyRefreshing) {
+                    item(key = "auto_fetch_shimmer") {
+                        ShimmerHost {
+                            Column(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                            ) {
+
+                                TextPlaceholder(
+                                    height = 18.dp,
+                                    modifier = Modifier.fillMaxWidth(0.35f),
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                repeat(5) {
+                                    ListItemPlaceHolder()
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                }
+                                Spacer(modifier = Modifier.height(16.dp))
+
+                                TextPlaceholder(
+                                    height = 18.dp,
+                                    modifier = Modifier.fillMaxWidth(0.30f),
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    repeat(3) {
+                                        Box(
+                                            modifier =
+                                                Modifier
+                                                    .size(width = 120.dp, height = 144.dp)
+                                                    .clip(RoundedCornerShape(8.dp))
+                                                    .shimmer()
+                                                    .background(MaterialTheme.colorScheme.surfaceContainerLow),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else if (showLocal) {
+
                     if (librarySongs.isNotEmpty()) {
                         item {
                             NavigationTitle(
@@ -708,7 +817,6 @@ fun ArtistScreen(
                             )
                         }
 
-                        // Show "View All" if more songs available
                         if (filteredLibrarySongs.size > 5) {
                             item {
                                 Surface(
@@ -737,7 +845,6 @@ fun ArtistScreen(
                         }
                     }
 
-                    // Local Albums Section
                     if (libraryAlbums.isNotEmpty()) {
                         item {
                             NavigationTitle(
@@ -793,7 +900,7 @@ fun ArtistScreen(
                         }
                     }
                 } else {
-                    // YouTube/Remote content sections
+
                     orderedRemoteSections.fastForEach { section ->
                         if (section.items.isNotEmpty()) {
                             item(
@@ -937,7 +1044,18 @@ fun ArtistScreen(
                                                                     navController.navigate("online_playlist/${item.id}")
                                                                 }
 
-                                                                else -> Unit
+                                                                is PodcastItem -> {
+                                                                    navController.navigate("podcast/${android.net.Uri.encode(item.browseId)}")
+                                                                }
+
+                                                                is EpisodeItem -> {
+                                                                    playerConnection.playQueue(
+                                                                        YouTubeQueue(
+                                                                            item.endpoint,
+                                                                            item.toMediaMetadata(),
+                                                                        ),
+                                                                    )
+                                                                }
                                                             }
                                                         },
                                                         onLongClick = {
@@ -975,7 +1093,7 @@ fun ArtistScreen(
                                                                         )
                                                                     }
 
-                                                                    else -> Unit
+                                                                    is PodcastItem, is EpisodeItem -> Unit
                                                                 }
                                                             }
                                                         },
@@ -988,25 +1106,24 @@ fun ArtistScreen(
                     }
                 }
 
-                // Bottom spacing
                 item {
                     Spacer(modifier = Modifier.height(16.dp))
                 }
             }
         }
+        }
 
-        // FAB for switching between local/remote view
         HideOnScrollFAB(
             visible = librarySongs.isNotEmpty() && libraryArtist?.artist?.isLocal != true,
             lazyListState = lazyListState,
             icon = if (showLocal) R.drawable.language else R.drawable.library_music,
             label = if (showLocal) stringResource(R.string.together_online) else stringResource(R.string.filter_library),
             onClick = {
-                viewModel.toggleLibrary()
+                showLocal = showLocal.not()
+                if (!showLocal && artistPage == null) viewModel.fetchArtistsFromYTM()
             },
         )
 
-        // Snackbar
         SnackbarHost(
             hostState = snackbarHostState,
             modifier =
@@ -1014,10 +1131,49 @@ fun ArtistScreen(
                     .windowInsetsPadding(LocalPlayerAwareWindowInsets.current)
                     .align(Alignment.BottomCenter),
         )
+
+        if (layerBackdropActive && (artistPage != null || showLocal)) {
+            LiquidGlassIconButton(
+                backdrop = artworkBackdrop,
+                painter = painterResource(R.drawable.arrow_back),
+                contentDescription = null,
+                modifier =
+                    Modifier
+                        .align(Alignment.TopStart)
+                        .padding(start = 12.dp, top = systemBarsTopPadding + 12.dp)
+                        .size(48.dp),
+                onClick = { navController.navigateUp() },
+            )
+            LiquidGlassActionPill(
+                backdrop = artworkBackdrop,
+                modifier =
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(end = 12.dp, top = systemBarsTopPadding + 12.dp),
+            ) {
+
+                Box(
+                    modifier = Modifier.size(48.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    androidx.compose.material3.IconButton(onClick = showArtistOverflowMenu) {
+                        Icon(
+                            painter = painterResource(R.drawable.more_horiz),
+                            contentDescription = null,
+                            tint = liquidGlassContentColor(),
+                        )
+                    }
+                }
+            }
+        }
     }
 
-    // Top App Bar
+    if (!liquidGlassHeaderActive) {
+
     TopAppBar(
+        windowInsets =
+            WindowInsets(top = systemBarsTopPadding)
+                .union(WindowInsets.systemBars.only(WindowInsetsSides.Horizontal)),
         title = {
             val animatedAlpha by animateFloatAsState(
                 targetValue = if (!transparentAppBar) 1f else 0f,
@@ -1032,6 +1188,7 @@ fun ArtistScreen(
             )
         },
         navigationIcon = {
+
             IconButton(
                 onClick = navController::navigateUp,
                 onLongClick = navController::backToMain,
@@ -1043,6 +1200,7 @@ fun ArtistScreen(
             }
         },
         actions = {
+
             IconButton(
                 onClick = showArtistOverflowMenu,
                 onLongClick = {},
@@ -1070,11 +1228,11 @@ fun ArtistScreen(
                 )
             },
     )
+    }
 }
 
 @Composable
 private fun ArtistOverflowMenu(
-    canShare: Boolean,
     isBlocked: Boolean,
     blockActionEnabled: Boolean,
     onAction: (ArtistAction) -> Unit,
@@ -1087,27 +1245,25 @@ private fun ArtistOverflowMenu(
                 .padding(bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        if (canShare) {
-            ArtistOverflowMenuItem(
-                text = stringResource(R.string.share),
-                iconRes = R.drawable.share,
-                index = 0,
-                count = ArtistOverflowMenuItemCount,
-                onClick = { onAction(ArtistAction.Share) },
-            )
-            ArtistOverflowMenuItem(
-                text = stringResource(R.string.copy_link),
-                iconRes = R.drawable.copy,
-                index = 1,
-                count = ArtistOverflowMenuItemCount,
-                onClick = { onAction(ArtistAction.CopyLink) },
-            )
-        }
+        ArtistOverflowMenuItem(
+            text = stringResource(R.string.share),
+            iconRes = R.drawable.share,
+            index = 0,
+            count = ArtistOverflowMenuItemCount,
+            onClick = { onAction(ArtistAction.Share) },
+        )
+        ArtistOverflowMenuItem(
+            text = stringResource(R.string.copy_link),
+            iconRes = R.drawable.copy,
+            index = 1,
+            count = ArtistOverflowMenuItemCount,
+            onClick = { onAction(ArtistAction.CopyLink) },
+        )
         ArtistOverflowMenuItem(
             text = stringResource(if (isBlocked) R.string.unblock_artist else R.string.block_artist),
             iconRes = R.drawable.block,
-            index = if (canShare) 2 else 0,
-            count = if (canShare) ArtistOverflowMenuItemCount else 1,
+            index = 2,
+            count = ArtistOverflowMenuItemCount,
             enabled = blockActionEnabled,
             onClick = { onAction(ArtistAction.ToggleBlock) },
         )
@@ -1175,7 +1331,6 @@ private data class ArtistReleaseUiModel(
 
 @Composable
 private fun ArtistPrimaryActions(
-    isLocalArtist: Boolean,
     isSubscribed: Boolean,
     contentColor: Color,
     contrastingColor: Color,
@@ -1186,13 +1341,15 @@ private fun ArtistPrimaryActions(
     onToggleSubscription: () -> Unit,
     onRadio: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    useBlurredPlayButton: Boolean = false,
+    thumbnailUrl: String? = null,
 ) {
     MediaDetailPrimaryActions(
         isAdded = isSubscribed,
         contentColor = contentColor,
         contrastingColor = contrastingColor,
-        addContentDescription = if (isLocalArtist) R.string.add_to_library else R.string.subscribe,
-        removeContentDescription = if (isLocalArtist) R.string.remove_from_library else R.string.subscribed,
+        addContentDescription = R.string.subscribe,
+        removeContentDescription = R.string.subscribed,
         onShuffle = if (canShuffle) onShuffle else null,
         onPlay = if (canPlay) onPlay else null,
         onToggleAdd = onToggleSubscription,
@@ -1207,6 +1364,8 @@ private fun ArtistPrimaryActions(
             }
         },
         modifier = modifier,
+        thumbnailUrl = thumbnailUrl,
+        useBlurredPlayButton = useBlurredPlayButton,
     )
 }
 

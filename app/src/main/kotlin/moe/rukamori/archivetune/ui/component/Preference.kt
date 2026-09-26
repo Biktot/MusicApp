@@ -19,6 +19,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -38,13 +39,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.HorizontalDivider
@@ -62,6 +61,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -70,12 +70,10 @@ import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -93,12 +91,13 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.google.common.collect.ImmutableList
 import kotlinx.coroutines.launch
 import moe.rukamori.archivetune.R
 import moe.rukamori.archivetune.constants.HISTORY_DURATION_DEFAULT
 import moe.rukamori.archivetune.constants.HISTORY_DURATION_RANGE
 import kotlin.math.roundToInt
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 val LocalPreferenceInGroup = compositionLocalOf { false }
 
@@ -178,11 +177,11 @@ fun PreferenceEntry(
 ) {
     val inGroup = LocalPreferenceInGroup.current
     val groupPosition = LocalPreferenceGroupPosition.current
-    val preferenceIconShape = rememberPreferenceIconShape()
     val preferenceItemShape =
         remember(groupPosition) {
             preferenceItemShapeForPosition(groupPosition)
         }
+    val preferenceIconShape = rememberPreferenceIconShape()
     val resolvedShape = shape ?: preferenceItemShape
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -419,13 +418,40 @@ fun <T> ListPreference(
 }
 
 @Composable
+inline fun <reified T : Enum<T>> EnumListPreference(
+    modifier: Modifier = Modifier,
+    noinline title: @Composable () -> Unit,
+    description: String? = null,
+    noinline icon: (@Composable () -> Unit)?,
+    selectedValue: T,
+    noinline valueText: @Composable (T) -> String,
+    noinline onValueSelected: (T) -> Unit,
+    isEnabled: Boolean = true,
+) {
+    val values = remember { enumValues<T>().toList() }
+
+    ListPreference(
+        modifier = modifier,
+        title = title,
+        description = description,
+        icon = icon,
+        selectedValue = selectedValue,
+        values = values,
+        valueText = valueText,
+        onValueSelected = onValueSelected,
+        isEnabled = isEnabled,
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 fun <T : Any> MultiSelectListPreference(
     modifier: Modifier = Modifier,
     title: @Composable () -> Unit,
     description: String? = null,
     icon: (@Composable () -> Unit)? = null,
-    values: ImmutableList<T>,
-    checkedValues: ImmutableList<T>,
+    values: List<T>,
+    checkedValues: List<T>,
     selectionText: String,
     valueText: @Composable (T) -> String,
     isBottomSheetVisible: Boolean,
@@ -488,8 +514,8 @@ fun <T : Any> MultiSelectListPreference(
 @Composable
 private fun <T : Any> MultiSelectPreferenceBottomSheet(
     title: @Composable () -> Unit,
-    values: ImmutableList<T>,
-    checkedValues: ImmutableList<T>,
+    values: List<T>,
+    checkedValues: List<T>,
     valueText: @Composable (T) -> String,
     sheetState: SheetState,
     onDismiss: () -> Unit,
@@ -512,6 +538,7 @@ private fun <T : Any> MultiSelectPreferenceBottomSheet(
             )
         },
     ) {
+        KeepStatusBarHiddenInDialog()
         Column(
             modifier =
                 Modifier
@@ -619,32 +646,6 @@ private fun MultiSelectPreferenceOption(
     }
 }
 
-@Composable
-inline fun <reified T : Enum<T>> EnumListPreference(
-    modifier: Modifier = Modifier,
-    noinline title: @Composable () -> Unit,
-    description: String? = null,
-    noinline icon: (@Composable () -> Unit)?,
-    selectedValue: T,
-    noinline valueText: @Composable (T) -> String,
-    noinline onValueSelected: (T) -> Unit,
-    isEnabled: Boolean = true,
-) {
-    val values = remember { enumValues<T>().toList() }
-
-    ListPreference(
-        modifier = modifier,
-        title = title,
-        description = description,
-        icon = icon,
-        selectedValue = selectedValue,
-        values = values,
-        valueText = valueText,
-        onValueSelected = onValueSelected,
-        isEnabled = isEnabled,
-    )
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun <T> PreferenceSelectionBottomSheet(
@@ -673,6 +674,7 @@ private fun <T> PreferenceSelectionBottomSheet(
             )
         },
     ) {
+        KeepStatusBarHiddenInDialog()
         Column(
             modifier =
                 Modifier
@@ -1205,7 +1207,7 @@ fun NumberPickerPreference(
         mutableStateOf(false)
     }
 
-    var sliderValue by remember {
+    var sliderValue by remember(value) {
         mutableFloatStateOf(value.toFloat())
     }
 
@@ -1222,7 +1224,6 @@ fun NumberPickerPreference(
             onDismiss = { showDialog = false },
             onConfirm = {
                 val rounded = sliderValue.roundToInt().coerceIn(minValue, maxValue)
-                sliderValue = rounded.toFloat()
                 showDialog = false
                 onValueChange.invoke(rounded)
             },
@@ -1253,7 +1254,6 @@ fun NumberPickerPreference(
                     pickerSliderState.onValueChange = {
                         sliderValue = it.coerceIn(minValue.toFloat(), maxValue.toFloat())
                     }
-                    pickerSliderState.value = sliderValue
 
                     Slider(
                         state = pickerSliderState,

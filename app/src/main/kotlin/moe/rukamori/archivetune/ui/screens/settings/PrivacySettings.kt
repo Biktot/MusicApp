@@ -9,7 +9,15 @@
 
 package moe.rukamori.archivetune.ui.screens.settings
 
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
+import android.widget.Toast
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
@@ -22,50 +30,61 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import moe.rukamori.archivetune.LocalDatabase
 import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
 import moe.rukamori.archivetune.R
 import moe.rukamori.archivetune.constants.DisableScreenshotKey
 import moe.rukamori.archivetune.constants.EnableHapticFeedbackKey
+import moe.rukamori.archivetune.constants.ForceHighRefreshRateKey
+import moe.rukamori.archivetune.constants.LowDataModeKey
 import moe.rukamori.archivetune.constants.PauseListenHistoryKey
 import moe.rukamori.archivetune.constants.PauseSearchHistoryKey
 import moe.rukamori.archivetune.ui.component.DefaultDialog
+import moe.rukamori.archivetune.ui.component.FrostedHeaderPill
 import moe.rukamori.archivetune.ui.component.IconButton
+import moe.rukamori.archivetune.playback.MusicHapticsSettings
 import moe.rukamori.archivetune.ui.component.PreferenceEntry
+import kotlin.math.roundToInt
 import moe.rukamori.archivetune.ui.component.PreferenceGroup
 import moe.rukamori.archivetune.ui.component.SwitchPreference
 import moe.rukamori.archivetune.ui.utils.backToMain
 import moe.rukamori.archivetune.utils.rememberPreference
-import moe.rukamori.archivetune.viewmodels.ResetListeningStatsState
-import moe.rukamori.archivetune.viewmodels.ResetListeningStatsViewModel
+import androidx.compose.foundation.layout.asPaddingValues
+import moe.rukamori.archivetune.ui.screens.ScreenHeaderHaze
+import moe.rukamori.archivetune.ui.screens.rememberScreenHeaderHaze
+import moe.rukamori.archivetune.LocalStableSystemBarsTopPadding
+import dev.chrisbanes.haze.hazeSource
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PrivacySettings(
     navController: NavController,
-    resetStatsViewModel: ResetListeningStatsViewModel = hiltViewModel(),
+    scrollTo: String? = null,
 ) {
-    val resetStatsState by resetStatsViewModel.state.collectAsStateWithLifecycle()
-    val onRequestStatsReset = remember(resetStatsViewModel) { resetStatsViewModel::requestReset }
-    val onDismissStatsReset = remember(resetStatsViewModel) { resetStatsViewModel::dismissDialog }
-    val onConfirmStatsReset = remember(resetStatsViewModel) { resetStatsViewModel::confirmReset }
-
     val database = LocalDatabase.current
+    val context = LocalContext.current
+    val isAndroid12OrLater = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S
     val (pauseListenHistory, onPauseListenHistoryChange) =
         rememberPreference(
             key = PauseListenHistoryKey,
@@ -85,6 +104,19 @@ fun PrivacySettings(
         rememberPreference(
             key = EnableHapticFeedbackKey,
             defaultValue = true,
+        )
+
+    var musicHapticsEnabled by remember { mutableStateOf(MusicHapticsSettings.isEnabled(context)) }
+    var musicHapticsStrength by remember { mutableStateOf(MusicHapticsSettings.strengthPercent(context)) }
+    val (lowDataMode, onLowDataModeChange) =
+        rememberPreference(
+            key = LowDataModeKey,
+            defaultValue = true,
+        )
+    val (forceHighRefreshRate, onForceHighRefreshRateChange) =
+        rememberPreference(
+            key = ForceHighRefreshRateKey,
+            defaultValue = false,
         )
 
     var showClearListenHistoryDialog by remember {
@@ -161,34 +193,68 @@ fun PrivacySettings(
         )
     }
 
+    val headerHaze = rememberScreenHeaderHaze()
+    val systemBarsTopPadding = LocalStableSystemBarsTopPadding.current
+
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.settings_behavior_title)) },
+                title = {},
                 navigationIcon = {
-                    IconButton(
-                        onClick = navController::navigateUp,
-                        onLongClick = navController::backToMain,
-                    ) {
-                        Icon(
-                            painterResource(R.drawable.arrow_back),
-                            contentDescription = null,
+                    FrostedHeaderPill(plain = true) {
+                        IconButton(
+                            onClick = navController::navigateUp,
+                            onLongClick = navController::backToMain,
+                        ) {
+                            Icon(
+                                painterResource(R.drawable.arrow_back),
+                                contentDescription = null,
+                            )
+                        }
+                        Text(
+                            text = stringResource(R.string.settings_behavior_title),
+                            color = MaterialTheme.colorScheme.onBackground,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            modifier = Modifier.padding(end = 4.dp),
                         )
                     }
                 },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
+                    scrolledContainerColor = Color.Transparent,
+                ),
             )
         },
     ) { innerPadding ->
+        Box(modifier = Modifier.fillMaxSize()) {
+
+        val playerAwareBottomPadding =
+            LocalPlayerAwareWindowInsets.current
+                .only(WindowInsetsSides.Bottom)
+                .asPaddingValues()
+                .calculateBottomPadding()
         val topPadding = innerPadding.calculateTopPadding()
+        val scrollState = rememberScrollState()
+        val positions = rememberPreferencePositions()
+
+        LaunchedEffect(scrollTo) { positions.scrollToKey(scrollTo, scrollState) }
 
         Column(
             Modifier
+                .windowInsetsPadding(LocalPlayerAwareWindowInsets.current.only(WindowInsetsSides.Horizontal))
+
+                .then(positions.containerModifier())
+                .verticalScroll(scrollState)
+                .hazeSource(headerHaze)
                 .padding(top = topPadding)
-                .windowInsetsPadding(LocalPlayerAwareWindowInsets.current.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
-                .verticalScroll(rememberScrollState())
-                .padding(bottom = SettingsDimensions.ScreenBottomPadding),
+                .padding(bottom = playerAwareBottomPadding + SettingsDimensions.ScreenBottomPadding),
         ) {
-            PreferenceGroup(title = stringResource(R.string.listen_history)) {
+            PreferenceGroup(
+                modifier = positions.modifierFor("pause_listen_history"),
+                title = stringResource(R.string.listen_history),
+            ) {
                 item {
                     SwitchPreference(
                         title = { Text(stringResource(R.string.pause_listen_history)) },
@@ -200,22 +266,18 @@ fun PrivacySettings(
 
                 item {
                     PreferenceEntry(
+                        modifier = positions.modifierFor("clear_listen_history"),
                         title = { Text(stringResource(R.string.clear_listen_history)) },
                         icon = { Icon(painterResource(R.drawable.delete_history), null) },
                         onClick = { showClearListenHistoryDialog = true },
                     )
                 }
-                item {
-                    ResetListeningStatsPreference(
-                        state = resetStatsState,
-                        onRequestReset = onRequestStatsReset,
-                        onDismiss = onDismissStatsReset,
-                        onConfirm = onConfirmStatsReset,
-                    )
-                }
             }
 
-            PreferenceGroup(title = stringResource(R.string.search_history)) {
+            PreferenceGroup(
+                modifier = positions.modifierFor("pause_search_history"),
+                title = stringResource(R.string.search_history),
+            ) {
                 item {
                     SwitchPreference(
                         title = { Text(stringResource(R.string.pause_search_history)) },
@@ -227,6 +289,7 @@ fun PrivacySettings(
 
                 item {
                     PreferenceEntry(
+                        modifier = positions.modifierFor("clear_search_history"),
                         title = { Text(stringResource(R.string.clear_search_history)) },
                         icon = { Icon(painterResource(R.drawable.clear_all), null) },
                         onClick = { showClearSearchHistoryDialog = true },
@@ -234,7 +297,31 @@ fun PrivacySettings(
                 }
             }
 
-            PreferenceGroup(title = stringResource(R.string.misc)) {
+            PreferenceGroup(
+                modifier = positions.modifierFor("haptics"),
+                title = stringResource(R.string.misc),
+            ) {
+                item {
+                    SwitchPreference(
+                        modifier = positions.modifierFor("low_data_mode"),
+                        title = { Text(stringResource(R.string.low_data_mode_title)) },
+                        description = stringResource(R.string.low_data_mode_description),
+                        icon = { Icon(painterResource(R.drawable.android_cell), null) },
+                        checked = lowDataMode,
+                        onCheckedChange = onLowDataModeChange,
+                    )
+                }
+
+                item {
+                    SwitchPreference(
+                        modifier = positions.modifierFor("force_high_refresh_rate"),
+                        title = { Text(stringResource(R.string.force_high_refresh_rate)) },
+                        icon = { Icon(painterResource(R.drawable.speed), null) },
+                        checked = forceHighRefreshRate,
+                        onCheckedChange = onForceHighRefreshRateChange,
+                    )
+                }
+
                 item {
                     SwitchPreference(
                         title = { Text(stringResource(R.string.haptics)) },
@@ -247,6 +334,43 @@ fun PrivacySettings(
 
                 item {
                     SwitchPreference(
+                        title = { Text(stringResource(R.string.music_haptics)) },
+                        description = stringResource(R.string.music_haptics_desc),
+                        icon = { Icon(painterResource(R.drawable.vibration), null) },
+                        checked = musicHapticsEnabled,
+                        onCheckedChange = { next ->
+                            MusicHapticsSettings.setEnabled(context, next)
+                            musicHapticsEnabled = next
+                        },
+                    )
+                }
+
+                item {
+                    PreferenceEntry(
+                        title = { Text(stringResource(R.string.music_haptics_strength)) },
+                        description = stringResource(R.string.music_haptics_strength_value, musicHapticsStrength),
+                        icon = { Icon(painterResource(R.drawable.vibration), null) },
+                        isEnabled = musicHapticsEnabled,
+                        content = {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Slider(
+                                value = musicHapticsStrength.toFloat(),
+                                onValueChange = { musicHapticsStrength = it.roundToInt() },
+                                onValueChangeFinished = {
+                                    MusicHapticsSettings.setStrengthPercent(context, musicHapticsStrength)
+                                },
+                                valueRange = 0f..100f,
+                                steps = 19,
+                                enabled = musicHapticsEnabled,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        },
+                    )
+                }
+
+                item {
+                    SwitchPreference(
+                        modifier = positions.modifierFor("disable_screenshot"),
                         title = { Text(stringResource(R.string.disable_screenshot)) },
                         description = stringResource(R.string.disable_screenshot_desc),
                         icon = { Icon(painterResource(R.drawable.screenshot), null) },
@@ -254,76 +378,43 @@ fun PrivacySettings(
                         onCheckedChange = onDisableScreenshotChange,
                     )
                 }
-            }
-        }
-    }
-}
 
-@Composable
-private fun ResetListeningStatsPreference(
-    state: ResetListeningStatsState,
-    onRequestReset: () -> Unit,
-    onDismiss: () -> Unit,
-    onConfirm: () -> Unit,
-) {
-    val isResetting = state == ResetListeningStatsState.Loading
-    val showConfirmation = (state as? ResetListeningStatsState.Success)?.showConfirmation == true
-    val description = when {
-        isResetting -> stringResource(R.string.reset_listening_stats_progress)
-        state is ResetListeningStatsState.Success && !state.showConfirmation ->
-            stringResource(R.string.reset_listening_stats_success)
-        else -> null
-    }
-
-    PreferenceEntry(
-        title = { Text(stringResource(R.string.reset_listening_stats)) },
-        description = description,
-        icon = { Icon(painterResource(R.drawable.delete_history), contentDescription = null) },
-        isEnabled = !isResetting,
-        onClick = onRequestReset,
-    )
-
-    if (showConfirmation || isResetting || state is ResetListeningStatsState.Error) {
-        DefaultDialog(
-            onDismiss = onDismiss,
-            title = { Text(stringResource(R.string.reset_listening_stats)) },
-            content = {
-                Text(
-                    text = stringResource(
-                        when {
-                            isResetting -> R.string.reset_listening_stats_progress
-                            state is ResetListeningStatsState.Error -> state.messageRes
-                            else -> R.string.reset_listening_stats_confirm
-                        },
-                    ),
-                    style = MaterialTheme.typography.bodyLarge,
-                )
-            },
-            buttons = {
-                if (state is ResetListeningStatsState.Error) {
-                    TextButton(
-                        onClick = onDismiss,
-                        shapes = ButtonDefaults.shapes(),
-                    ) {
-                        Text(stringResource(android.R.string.ok))
-                    }
-                } else {
-                    TextButton(
-                        onClick = onDismiss,
-                        enabled = !isResetting,
-                        shapes = ButtonDefaults.shapes(),
-                    ) {
-                        Text(stringResource(android.R.string.cancel))
-                    }
-                    TextButton(
-                        onClick = onConfirm,
-                        enabled = !isResetting,
-                        shapes = ButtonDefaults.shapes(),
-                    ) {
-                        Text(stringResource(R.string.reset))
+                if (isAndroid12OrLater) {
+                    item {
+                        PreferenceEntry(
+                            modifier = positions.modifierFor("open_supported_links"),
+                            title = { Text(stringResource(R.string.open_supported_links)) },
+                            description = stringResource(R.string.default_links),
+                            icon = { Icon(painterResource(R.drawable.link), null) },
+                            onClick = {
+                                try {
+                                    val intent =
+                                        Intent(
+                                            Settings.ACTION_APP_OPEN_BY_DEFAULT_SETTINGS,
+                                            Uri.parse("package:${context.packageName}"),
+                                        ).apply {
+                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        }
+                                    context.startActivity(intent)
+                                } catch (e: Exception) {
+                                    Toast
+                                        .makeText(
+                                            context,
+                                            R.string.open_app_settings_error,
+                                            Toast.LENGTH_LONG,
+                                        ).show()
+                                }
+                            },
+                        )
                     }
                 }
-            },
+            }
+        }
+
+        ScreenHeaderHaze(
+            hazeState = headerHaze,
+            systemBarsTopPadding = systemBarsTopPadding,
         )
-    }
+        }
+}
 }

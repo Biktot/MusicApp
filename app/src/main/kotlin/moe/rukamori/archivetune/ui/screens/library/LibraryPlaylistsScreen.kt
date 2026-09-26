@@ -7,6 +7,8 @@
 
 package moe.rukamori.archivetune.ui.screens.library
 
+import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -21,7 +23,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
@@ -35,7 +36,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -44,6 +44,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
@@ -51,13 +52,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -69,6 +68,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -89,36 +89,55 @@ import kotlinx.coroutines.withContext
 import moe.rukamori.archivetune.LocalDatabase
 import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
 import moe.rukamori.archivetune.LocalPlayerConnection
+import moe.rukamori.archivetune.LocalStableSystemBarsTopPadding
 import moe.rukamori.archivetune.R
+import moe.rukamori.archivetune.constants.ListThumbnailSize
+import moe.rukamori.archivetune.constants.LiquidGlassEnabledKey
 import moe.rukamori.archivetune.constants.PlaylistEditLockKey
 import moe.rukamori.archivetune.constants.PlaylistSortDescendingKey
 import moe.rukamori.archivetune.constants.PlaylistSortType
 import moe.rukamori.archivetune.constants.PlaylistSortTypeKey
+import moe.rukamori.archivetune.constants.ThumbnailCornerRadius
 import moe.rukamori.archivetune.constants.PureBlackKey
+import moe.rukamori.archivetune.constants.ShowTagsInLibraryKey
 import moe.rukamori.archivetune.db.entities.Playlist
 import moe.rukamori.archivetune.extensions.move
 import moe.rukamori.archivetune.extensions.toMediaItem
 import moe.rukamori.archivetune.innertube.models.PlaylistItem
 import moe.rukamori.archivetune.innertube.models.WatchEndpoint
 import moe.rukamori.archivetune.playback.queues.ListQueue
+import moe.rukamori.archivetune.ui.component.AppleMusicStyleAccentColor
 import moe.rukamori.archivetune.ui.component.CreatePlaylistDialog
+import moe.rukamori.archivetune.ui.component.ExpressivePullToRefreshBox
+import moe.rukamori.archivetune.ui.component.FrostedHeaderPill
+import moe.rukamori.archivetune.ui.component.IconButton
 import moe.rukamori.archivetune.ui.component.ItemThumbnail
+import moe.rukamori.archivetune.ui.component.ListItem
+import moe.rukamori.archivetune.ui.component.LiquidGlassActionPill
 import moe.rukamori.archivetune.ui.component.LocalMenuState
+import moe.rukamori.archivetune.ui.component.PlaylistThumbnail
+import moe.rukamori.archivetune.ui.component.TagsManagementDialog
+import moe.rukamori.archivetune.ui.component.layerBackdrop
+import moe.rukamori.archivetune.ui.component.liquidGlassContentColor
+import moe.rukamori.archivetune.ui.component.rememberBackdrop
+import moe.rukamori.archivetune.ui.component.rememberLayerBackdropSettled
 import moe.rukamori.archivetune.ui.menu.PlaylistMenu
 import moe.rukamori.archivetune.ui.menu.YouTubePlaylistMenu
+import moe.rukamori.archivetune.ui.player.LocalPlayerLyricsFullScreen
 import moe.rukamori.archivetune.ui.theme.PlayerColorExtractor
+import moe.rukamori.archivetune.ui.utils.backToMain
 import moe.rukamori.archivetune.utils.rememberEnumPreference
 import moe.rukamori.archivetune.utils.rememberPreference
 import moe.rukamori.archivetune.viewmodels.LibraryPlaylistsViewModel
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun LibraryPlaylistsScreen(
     navController: NavController,
-    filterContent: (@Composable () -> Unit)?,
-    selectedTagIds: Set<String>,
     viewModel: LibraryPlaylistsViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -127,6 +146,47 @@ fun LibraryPlaylistsScreen(
     val database = LocalDatabase.current
     val playerConnection = LocalPlayerConnection.current
     val haptic = LocalHapticFeedback.current
+
+    val (selectedTagIds, onSelectedTagIdsChange) = rememberPlaylistTagFilterState(database)
+    val allTags by database.allTags().collectAsStateWithLifecycle(initialValue = emptyList())
+    val (showTagsInLibrary) = rememberPreference(ShowTagsInLibraryKey, defaultValue = true)
+    val activeSelectedTagIds = if (showTagsInLibrary) selectedTagIds else emptySet()
+    var showTagsManagementDialog by rememberSaveable { mutableStateOf(false) }
+
+    val liquidGlassEnabled by rememberPreference(LiquidGlassEnabledKey, defaultValue = false)
+    val liquidGlassHeaderActive =
+        liquidGlassEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val lyricsFullScreen = LocalPlayerLyricsFullScreen.current
+
+    val screenSettled = rememberLayerBackdropSettled()
+
+    val layerBackdropActive = liquidGlassHeaderActive && !lyricsFullScreen && screenSettled
+    val surfaceColor = MaterialTheme.colorScheme.surface
+    val artworkBackdrop = rememberBackdrop(surfaceColor)
+
+    val systemBarsTopPadding = LocalStableSystemBarsTopPadding.current
+
+    BackHandler {
+        try {
+            if (!navController.popBackStack()) {
+                navController.navigate("library") { launchSingleTop = true }
+            }
+        } catch (_: Exception) {
+            try {
+                if (!navController.navigateUp()) {
+                    navController.navigate("library") { launchSingleTop = true }
+                }
+            } catch (_: Exception) {
+
+            }
+        }
+    }
+
+    if (showTagsManagementDialog) {
+        TagsManagementDialog(
+            onDismiss = { showTagsManagementDialog = false },
+        )
+    }
 
     val (sortType, onSortTypeChange) =
         rememberEnumPreference(
@@ -155,11 +215,9 @@ fun LibraryPlaylistsScreen(
         }
     val mutablePlaylists = remember { mutableStateListOf<Playlist>() }
 
-    var isGridView by rememberSaveable { mutableStateOf(false) }
+    @Suppress("UnusedVariable") val isGridView = false
     var showCreatePlaylistDialog by rememberSaveable { mutableStateOf(false) }
-    val refreshState by viewModel.refreshState.collectAsStateWithLifecycle()
-    val refreshLibrary = remember(viewModel) { { viewModel.sync() } }
-    val onRefreshErrorShown = remember(viewModel) { { viewModel.onRefreshErrorShown() } }
+    val isRefreshing by viewModel.isRefreshing.collectAsStateWithLifecycle()
     val lazyListState = rememberLazyListState()
     var pendingPlaylistOrderUpdate by remember { mutableStateOf(false) }
     val reorderableState =
@@ -190,34 +248,61 @@ fun LibraryPlaylistsScreen(
         }
     }
 
-    // Dialog launcher
     if (showCreatePlaylistDialog) {
         CreatePlaylistDialog(
             onDismiss = { showCreatePlaylistDialog = false },
         )
     }
 
-    // Issue 2: player-aware bottom padding
     val playerAwareBottomPadding =
         LocalPlayerAwareWindowInsets.current
             .only(WindowInsetsSides.Bottom)
             .asPaddingValues()
             .calculateBottomPadding() + 12.dp
 
-    LibraryRefreshContainer(
-        state = refreshState,
-        onRefresh = refreshLibrary,
-        onErrorShown = onRefreshErrorShown,
-        modifier = Modifier.fillMaxSize(),
-        indicatorOffset = LibraryPullToRefreshIndicatorOffset,
-    ) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(top = LibraryHeaderContentPadding),
+    Box(modifier = Modifier.fillMaxSize()) {
+        ExpressivePullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = { viewModel.sync() },
+            modifier = Modifier.fillMaxSize(),
+            indicatorOffset = LibraryPullToRefreshIndicatorOffset,
         ) {
-            // Control row (Sort dropdown, grid/list layout toggle, + add button)
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+
+                        .then(
+                            if (layerBackdropActive) {
+                                Modifier.layerBackdrop(artworkBackdrop)
+                            } else {
+                                Modifier
+                            },
+                        )
+
+                        .padding(top = systemBarsTopPadding + 64.dp),
+            ) {
+                Column(
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+                ) {
+                    Text(
+                        text = "LIST",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = AppleMusicStyleAccentColor,
+                    )
+                    Text(
+                        text = stringResource(R.string.playlists),
+                        style = MaterialTheme.typography.headlineLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Text(
+                        text = pluralStringResource(R.plurals.n_playlist, visiblePlaylists.size, visiblePlaylists.size),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                    )
+                }
+
             Row(
                 modifier =
                     Modifier
@@ -226,7 +311,7 @@ fun LibraryPlaylistsScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                // Left: Sort dropdown
+
                 var showSortMenu by remember { mutableStateOf(false) }
                 val currentSortLabel =
                     when (sortType) {
@@ -267,16 +352,16 @@ fun LibraryPlaylistsScreen(
                             modifier =
                                 Modifier
                                     .clip(CircleShape)
-                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                    .background(AppleMusicStyleAccentColor.copy(alpha = 0.12f))
                                     .clickable { showSortMenu = true }
-                                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                                    .padding(horizontal = 18.dp, vertical = 11.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
                                 text = currentSortLabel,
                                 modifier = Modifier.weight(1f, fill = false),
                                 style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = AppleMusicStyleAccentColor,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
@@ -284,7 +369,7 @@ fun LibraryPlaylistsScreen(
                             Icon(
                                 painter = painterResource(id = R.drawable.expand_more),
                                 contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = AppleMusicStyleAccentColor,
                                 modifier = Modifier.size(16.dp),
                             )
                         }
@@ -367,9 +452,8 @@ fun LibraryPlaylistsScreen(
                     }
                 }
 
-                // Right: list/grid toggle & add button
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (sortType == PlaylistSortType.CUSTOM) {
+                    if (sortType == PlaylistSortType.CUSTOM && !layerBackdropActive) {
                         IconButton(
                             onClick = { locked = !locked },
                             modifier = Modifier.size(40.dp),
@@ -383,79 +467,40 @@ fun LibraryPlaylistsScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                     }
 
-                    // List/Grid Toggle
-                    Row(
-                        modifier =
-                            Modifier
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                .padding(horizontal = 4.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Box(
-                            modifier =
-                                Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(if (!isGridView) MaterialTheme.colorScheme.primary else Color.Transparent)
-                                    .clickable { isGridView = false },
-                            contentAlignment = Alignment.Center,
+                    if (!layerBackdropActive) {
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        IconButton(
+                            onClick = { showCreatePlaylistDialog = true },
+                            colors =
+                                IconButtonDefaults.iconButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary,
+                                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                                ),
+                            modifier = Modifier.size(40.dp),
                         ) {
                             Icon(
-                                painter = painterResource(id = R.drawable.queue_music),
-                                contentDescription = stringResource(R.string.list_view),
-                                tint = if (!isGridView) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(16.dp),
-                            )
-                        }
-                        Box(
-                            modifier =
-                                Modifier
-                                    .size(32.dp)
-                                    .clip(CircleShape)
-                                    .background(if (isGridView) MaterialTheme.colorScheme.primary else Color.Transparent)
-                                    .clickable { isGridView = true },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.album),
-                                contentDescription = stringResource(R.string.grid_view),
-                                tint = if (isGridView) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(16.dp),
+                                painter = painterResource(id = R.drawable.add),
+                                contentDescription = stringResource(R.string.create_playlist),
+                                modifier = Modifier.size(18.dp),
                             )
                         }
                     }
 
-                    Spacer(modifier = Modifier.width(12.dp))
-
-                    IconButton(
-                        onClick = { showCreatePlaylistDialog = true },
-                        colors =
-                            IconButtonDefaults.iconButtonColors(
-                                containerColor = MaterialTheme.colorScheme.primary,
-                                contentColor = MaterialTheme.colorScheme.onPrimary,
-                            ),
-                        modifier = Modifier.size(40.dp),
-                    ) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.add),
-                            contentDescription = stringResource(R.string.create_playlist),
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
                 }
             }
 
-            val playlistTagFilterContent = filterContent
-            if (playlistTagFilterContent != null) {
-                playlistTagFilterContent()
+            if (showTagsInLibrary) {
+                PlaylistTagFilterRow(
+                    tags = allTags,
+                    selectedTagIds = selectedTagIds,
+                    onSelectedTagIdsChange = onSelectedTagIdsChange,
+                    onManageTagsClick = { showTagsManagementDialog = true },
+                )
             }
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            val createPlaylist = remember { { showCreatePlaylistDialog = true } }
-
-            // Main Content
             if (isGridView) {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
@@ -464,20 +509,6 @@ fun LibraryPlaylistsScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    if (visiblePlaylists.isEmpty()) {
-                        item(
-                            span = { GridItemSpan(2) },
-                            key = "playlists_empty",
-                            contentType = "library_empty_state",
-                        ) {
-                            LibraryEmptyState(
-                                iconRes = R.drawable.playlist_add,
-                                actionLabelRes = R.string.create_playlist,
-                                onAction = createPlaylist,
-                            )
-                        }
-                    }
-
                     items(
                         items = visiblePlaylists,
                         key = { playlist -> playlist.id },
@@ -513,20 +544,11 @@ fun LibraryPlaylistsScreen(
                 val showDragHandles = sortType == PlaylistSortType.CUSTOM && !locked
                 LazyColumn(
                     state = lazyListState,
-                    contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = playerAwareBottomPadding),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+
+                    contentPadding = PaddingValues(bottom = playerAwareBottomPadding),
+                    verticalArrangement = Arrangement.spacedBy(0.dp),
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    if (listPlaylists.isEmpty()) {
-                        item(key = "playlists_empty", contentType = "library_empty_state") {
-                            LibraryEmptyState(
-                                iconRes = R.drawable.playlist_add,
-                                actionLabelRes = R.string.create_playlist,
-                                onAction = createPlaylist,
-                            )
-                        }
-                    }
-
                     itemsIndexed(
                         items = listPlaylists,
                         key = { _, playlist -> playlist.id },
@@ -568,6 +590,118 @@ fun LibraryPlaylistsScreen(
                                         .graphicsLayer { alpha = 0.99f },
                             )
                         }
+                    }
+                }
+            }
+        }
+        }
+
+        if (layerBackdropActive) {
+            LiquidGlassActionPill(
+                backdrop = artworkBackdrop,
+                interactive = true,
+                modifier =
+                    Modifier
+                        .align(Alignment.TopStart)
+                        .padding(start = 12.dp, top = systemBarsTopPadding + 12.dp),
+            ) {
+                IconButton(
+                    onClick = {
+                        if (!navController.navigateUp()) {
+                            navController.navigate("library") {
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    },
+                    onLongClick = { navController.backToMain() },
+                    modifier = Modifier.size(48.dp),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.arrow_back),
+                        contentDescription = stringResource(R.string.back_button_desc),
+                        tint = liquidGlassContentColor(),
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.playlists),
+                    color = liquidGlassContentColor(),
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(end = 12.dp),
+                )
+            }
+        } else {
+            FrostedHeaderPill(
+                modifier =
+                    Modifier
+                        .align(Alignment.TopStart)
+                        .padding(start = 12.dp, top = systemBarsTopPadding + 12.dp),
+            ) {
+                IconButton(
+                    onClick = {
+                        if (!navController.navigateUp()) {
+                            navController.navigate("library") {
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    },
+                    onLongClick = { navController.backToMain() },
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.arrow_back),
+                        contentDescription = stringResource(R.string.back_button_desc),
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.playlists),
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(end = 12.dp),
+                )
+            }
+        }
+
+        if (layerBackdropActive) {
+            LiquidGlassActionPill(
+                backdrop = artworkBackdrop,
+                modifier =
+                    Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(end = 12.dp, top = systemBarsTopPadding + 12.dp),
+            ) {
+                if (sortType == PlaylistSortType.CUSTOM) {
+                    Box(
+                        modifier = Modifier.size(48.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        androidx.compose.material3.IconButton(
+                            onClick = { locked = !locked },
+                        ) {
+                            Icon(
+                                painter = painterResource(if (locked) R.drawable.lock else R.drawable.lock_open),
+                                contentDescription = null,
+                                tint = liquidGlassContentColor(),
+                            )
+                        }
+                    }
+                }
+                Box(
+                    modifier = Modifier.size(48.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    androidx.compose.material3.IconButton(
+                        onClick = { showCreatePlaylistDialog = true },
+                    ) {
+                        Icon(
+                            painter = painterResource(id = R.drawable.add),
+                            contentDescription = stringResource(R.string.create_playlist),
+                            tint = liquidGlassContentColor(),
+                        )
                     }
                 }
             }
@@ -722,7 +856,7 @@ fun rememberArtworkCardColor(
         val hue = hsv[0]
 
         if (useDarkTheme) {
-            // Issue 6/3 fix: increased brightness for visibility in pure black mode
+
             val s = (hsv[1] * 0.45f).coerceIn(0.06f, 0.20f)
             val v = if (pureBlack) 0.18f else 0.12f
             Color(android.graphics.Color.HSVToColor(floatArrayOf(hue, s, v)))
@@ -743,64 +877,95 @@ fun PlaylistListCard(
     showDragHandle: Boolean = false,
     dragHandleModifier: Modifier = Modifier,
 ) {
-    val sourceLabel =
-        stringResource(
-            if (playlist.playlist.isEditable) {
-                R.string.personal_label
-            } else {
-                R.string.youtube_synced
-            },
-        )
-    val sourceColor =
-        if (playlist.playlist.isEditable) {
-            MaterialTheme.colorScheme.primary
+
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.985f else 1.0f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
+        label = "PlaylistListCardScale",
+    )
+    val hiddenAlpha = if (playlist.playlist.isHidden) 0.45f else 1f
+
+    val subtitleText =
+        if (playlist.songCount == 0 && playlist.playlist.remoteSongCount != null) {
+            pluralStringResource(
+                R.plurals.n_song,
+                playlist.playlist.remoteSongCount,
+                playlist.playlist.remoteSongCount,
+            )
         } else {
-            MaterialTheme.colorScheme.secondary
-        }
-    val additionalAction: (@Composable RowScope.() -> Unit)? =
-        if (showDragHandle) {
-            {
-                Spacer(modifier = Modifier.width(4.dp))
-                IconButton(
-                    onClick = {},
-                    modifier = dragHandleModifier.size(36.dp),
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.drag_handle),
-                        contentDescription = null,
-                    )
-                }
-            }
-        } else {
-            null
-        }
-    val metadataTrailingContent: (@Composable RowScope.() -> Unit)? =
-        if (playlist.playlist.isHidden) {
-            {
-                Spacer(modifier = Modifier.width(8.dp))
-                Icon(
-                    painter = painterResource(R.drawable.visibility_off),
-                    contentDescription = stringResource(R.string.hide_playlist),
-                    modifier = Modifier.size(12.dp),
-                    tint = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.4f),
-                )
-            }
-        } else {
-            null
+            pluralStringResource(
+                R.plurals.n_song,
+                playlist.songCount,
+                playlist.songCount,
+            )
         }
 
-    LibraryMediaListCard(
+    ListItem(
         title = playlist.playlist.name,
-        subtitle = "${playlist.songCount} ${stringResource(R.string.tracks_label)}",
-        thumbnailUrl = playlist.thumbnails.getOrNull(0),
-        sourceLabel = sourceLabel,
-        sourceColor = sourceColor,
-        onClick = onClick,
-        onPlay = onPlay,
-        onMenuClick = onMenuClick,
-        contentAlpha = if (playlist.playlist.isHidden) 0.45f else 1f,
-        metadataTrailingContent = metadataTrailingContent,
-        additionalAction = additionalAction,
+        subtitle = subtitleText,
+        thumbnailContent = {
+            PlaylistThumbnail(
+                thumbnails = playlist.thumbnails,
+                size = ListThumbnailSize,
+                placeHolder = {
+                    val painter =
+                        when (playlist.playlist.name) {
+                            stringResource(R.string.liked) -> R.drawable.favorite_border
+                            stringResource(R.string.offline) -> R.drawable.offline
+                            stringResource(R.string.cached_playlist) -> R.drawable.cached
+                            else -> R.drawable.queue_music
+                        }
+                    Icon(
+                        painter = painterResource(painter),
+                        contentDescription = null,
+                        tint = LocalContentColor.current.copy(alpha = 0.8f),
+                        modifier = Modifier.size(ListThumbnailSize / 2),
+                    )
+                },
+                shape = RoundedCornerShape(ThumbnailCornerRadius),
+            )
+        },
+        trailingContent = {
+            if (showDragHandle) {
+                Icon(
+                    painter = painterResource(id = R.drawable.drag_handle),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.50f),
+                    modifier =
+                        Modifier
+                            .size(28.dp)
+                            .then(dragHandleModifier),
+                )
+            }
+            Icon(
+                painter = painterResource(id = R.drawable.navigate_next),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.50f),
+                modifier = Modifier.size(20.dp),
+            )
+            if (playlist.playlist.isHidden) {
+                Icon(
+                    painter = painterResource(id = R.drawable.visibility_off),
+                    contentDescription = stringResource(R.string.hide_playlist),
+                    modifier = Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                )
+            }
+        },
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                    alpha = hiddenAlpha
+                }.clickable(
+                    interactionSource = interactionSource,
+                    indication = null,
+                    onClick = onClick,
+                ),
     )
 }
 
@@ -860,7 +1025,7 @@ fun PlaylistGridCard(
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
-            // Play overlay on bottom right of grid cover
+
             Box(
                 modifier =
                     Modifier

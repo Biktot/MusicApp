@@ -36,12 +36,10 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -62,9 +60,8 @@ import moe.rukamori.archivetune.innertube.models.PlaylistItem
 import moe.rukamori.archivetune.innertube.models.PodcastItem
 import moe.rukamori.archivetune.innertube.models.SongItem
 import moe.rukamori.archivetune.models.toMediaMetadata
-import moe.rukamori.archivetune.extensions.toMediaItem
-import moe.rukamori.archivetune.playback.queues.ListQueue
 import moe.rukamori.archivetune.playback.queues.YouTubeQueue
+import moe.rukamori.archivetune.ui.component.FrostedTopAppBar
 import moe.rukamori.archivetune.ui.component.IconButton
 import moe.rukamori.archivetune.ui.component.LocalMenuState
 import moe.rukamori.archivetune.ui.component.NavigationTitle
@@ -80,6 +77,7 @@ import moe.rukamori.archivetune.ui.menu.YouTubeSongMenu
 import moe.rukamori.archivetune.ui.utils.SnapLayoutInfoProvider
 import moe.rukamori.archivetune.ui.utils.backToMain
 import moe.rukamori.archivetune.viewmodels.YouTubeBrowseViewModel
+import androidx.compose.runtime.getValue
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -90,10 +88,10 @@ fun YouTubeBrowseScreen(
     val menuState = LocalMenuState.current
     val haptic = LocalHapticFeedback.current
     val playerConnection = LocalPlayerConnection.current ?: return
-    val isPlaying by playerConnection.isPlaying.collectAsState()
-    val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
+    val isPlaying by playerConnection.isPlaying.collectAsStateWithLifecycle()
+    val mediaMetadata by playerConnection.mediaMetadata.collectAsStateWithLifecycle()
 
-    val browseResult by viewModel.result.collectAsState()
+    val browseResult by viewModel.result.collectAsStateWithLifecycle()
 
     val coroutineScope = rememberCoroutineScope()
 
@@ -227,61 +225,48 @@ fun YouTubeBrowseScreen(
                                                             is ArtistItem -> navController.navigate("artist/${item.id}")
                                                             is PlaylistItem -> navController.navigate("online_playlist/${item.id}")
                                                             is PodcastItem -> navController.navigate("podcast/${android.net.Uri.encode(item.browseId)}")
-                                                            is EpisodeItem -> {
-                                                                playerConnection.playQueue(
-                                                                    ListQueue(
-                                                                        title = item.podcast?.name ?: item.title,
-                                                                        items = listOf(item.toMediaItem()),
-                                                                    ),
-                                                                )
-                                                            }
                                                             else -> item
                                                         }
                                                     },
-                                                    onLongClick =
-                                                        if (item is PodcastItem || item is EpisodeItem) {
-                                                            null
-                                                        } else {
-                                                            {
-                                                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                                                menuState.show {
-                                                                    when (item) {
-                                                                        is SongItem -> {
-                                                                            YouTubeSongMenu(
-                                                                                song = item,
-                                                                                navController = navController,
-                                                                                onDismiss = menuState::dismiss,
-                                                                            )
-                                                                        }
-
-                                                                        is AlbumItem -> {
-                                                                            YouTubeAlbumMenu(
-                                                                                albumItem = item,
-                                                                                navController = navController,
-                                                                                onDismiss = menuState::dismiss,
-                                                                            )
-                                                                        }
-
-                                                                        is ArtistItem -> {
-                                                                            YouTubeArtistMenu(
-                                                                                artist = item,
-                                                                                onDismiss = menuState::dismiss,
-                                                                            )
-                                                                        }
-
-                                                                        is PlaylistItem -> {
-                                                                            YouTubePlaylistMenu(
-                                                                                playlist = item,
-                                                                                coroutineScope = coroutineScope,
-                                                                                onDismiss = menuState::dismiss,
-                                                                            )
-                                                                        }
-
-                                                                        is PodcastItem, is EpisodeItem -> Unit
-                                                                    }
+                                                    onLongClick = {
+                                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                        menuState.show {
+                                                            when (item) {
+                                                                is SongItem -> {
+                                                                    YouTubeSongMenu(
+                                                                        song = item,
+                                                                        navController = navController,
+                                                                        onDismiss = menuState::dismiss,
+                                                                    )
                                                                 }
+
+                                                                is AlbumItem -> {
+                                                                    YouTubeAlbumMenu(
+                                                                        albumItem = item,
+                                                                        navController = navController,
+                                                                        onDismiss = menuState::dismiss,
+                                                                    )
+                                                                }
+
+                                                                is ArtistItem -> {
+                                                                    YouTubeArtistMenu(
+                                                                        artist = item,
+                                                                        onDismiss = menuState::dismiss,
+                                                                    )
+                                                                }
+
+                                                                is PlaylistItem -> {
+                                                                    YouTubePlaylistMenu(
+                                                                        playlist = item,
+                                                                        coroutineScope = coroutineScope,
+                                                                        onDismiss = menuState::dismiss,
+                                                                    )
+                                                                }
+
+                                                                is PodcastItem, is EpisodeItem -> Unit
                                                             }
-                                                        },
+                                                        }
+                                                    },
                                                 ).animateItem(),
                                     )
                                 }
@@ -293,18 +278,9 @@ fun YouTubeBrowseScreen(
         }
     }
 
-    TopAppBar(
+    FrostedTopAppBar(
         title = { Text(browseResult?.title.orEmpty()) },
-        navigationIcon = {
-            IconButton(
-                onClick = navController::navigateUp,
-                onLongClick = navController::backToMain,
-            ) {
-                Icon(
-                    painterResource(R.drawable.arrow_back),
-                    contentDescription = null,
-                )
-            }
-        },
+        onBack = navController::navigateUp,
+        onBackLongClick = navController::backToMain,
     )
 }

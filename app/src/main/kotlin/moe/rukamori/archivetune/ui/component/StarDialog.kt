@@ -48,6 +48,7 @@ fun StarDialog(
         onDismissRequest = onDismissRequest,
         sheetState = sheetState,
     ) {
+        KeepStatusBarHiddenInDialog()
         Column(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier =

@@ -57,7 +57,6 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialShapes
@@ -71,13 +70,11 @@ import androidx.compose.material3.SegmentedListItem
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.adaptive.currentWindowAdaptiveInfo
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.toShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -104,6 +101,7 @@ import coil3.compose.AsyncImage
 import coil3.request.ImageRequest
 import coil3.request.allowHardware
 import moe.rukamori.archivetune.R
+import androidx.compose.material3.LargeTopAppBar
 import moe.rukamori.archivetune.ui.component.SwitchPreference
 import moe.rukamori.archivetune.ui.screens.search.onlineSearchResultRoute
 import moe.rukamori.archivetune.ui.utils.appBarScrollBehavior
@@ -118,6 +116,14 @@ import moe.rukamori.archivetune.viewmodels.RecognitionHistoryUiModel
 import moe.rukamori.archivetune.viewmodels.RecognitionPhaseUi
 import moe.rukamori.archivetune.viewmodels.RecognizedTrackUiModel
 import moe.rukamori.archivetune.musicrecognition.navigateToMusicRecognitionDetails
+import moe.rukamori.archivetune.ui.component.KeepStatusBarHiddenInDialog
+import moe.rukamori.archivetune.ui.screens.GlassScreenHeaderOverlay
+import moe.rukamori.archivetune.ui.screens.glassHeaderSource
+import moe.rukamori.archivetune.ui.screens.rememberGlassScreenHeader
+import moe.rukamori.archivetune.LocalStableSystemBarsTopPadding
+import moe.rukamori.archivetune.ui.component.IconButton as AppIconButton
+import moe.rukamori.archivetune.ui.component.liquidGlassContentColor
+import androidx.compose.runtime.getValue
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -251,25 +257,26 @@ private fun MusicRecognitionContent(
         )
     val maximumContentWidth = if (useWideLayout) 1_040.dp else 680.dp
 
+    val glassHeader = rememberGlassScreenHeader()
+    val systemBarsTopPadding = LocalStableSystemBarsTopPadding.current
+
     Scaffold(
         modifier =
             Modifier
                 .fillMaxSize()
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            LargeFlexibleTopAppBar(
-                title = {
-                    Text(
-                        text = stringResource(R.string.music_recognition),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
+            if (!glassHeader.liquidGlassActive) {
+            LargeTopAppBar(
+                title = { Text(stringResource(R.string.music_recognition)) },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    moe.rukamori.archivetune.ui.component.IconButton(
+                        onClick = onNavigateBack,
+                        onLongClick = {},
+                    ) {
                         Icon(
                             painter = painterResource(R.drawable.arrow_back),
-                            contentDescription = stringResource(R.string.back_button_desc),
+                            contentDescription = null,
                         )
                     }
                 },
@@ -287,33 +294,39 @@ private fun MusicRecognitionContent(
                         )
                     }
                 },
-                colors =
-                    TopAppBarDefaults.largeTopAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-                    ),
                 scrollBehavior = scrollBehavior,
             )
+            }
         },
         containerColor = MaterialTheme.colorScheme.surface,
         contentWindowInsets = WindowInsets.safeDrawing,
     ) { contentPadding ->
+
+        val contentTopPadding =
+            if (glassHeader.liquidGlassActive) {
+                0.dp
+            } else {
+                contentPadding.calculateTopPadding()
+            }
+
         Box(
             modifier =
                 Modifier
                     .fillMaxSize()
-                    .padding(contentPadding),
+                    .padding(top = contentTopPadding, bottom = contentPadding.calculateBottomPadding()),
             contentAlignment = Alignment.TopCenter,
         ) {
             LazyColumn(
                 modifier =
                     Modifier
                         .widthIn(max = maximumContentWidth)
-                        .fillMaxWidth(),
+                        .fillMaxWidth()
+                        .glassHeaderSource(glassHeader),
                 contentPadding =
                     PaddingValues(
                         start = if (useWideLayout) 24.dp else 16.dp,
-                        top = 24.dp,
+
+                        top = if (glassHeader.liquidGlassActive) systemBarsTopPadding + 72.dp else 24.dp,
                         end = if (useWideLayout) 24.dp else 16.dp,
                         bottom = 40.dp,
                     ),
@@ -384,6 +397,39 @@ private fun MusicRecognitionContent(
                         }
                     }
                 }
+            }
+
+            if (glassHeader.liquidGlassActive) {
+                GlassScreenHeaderOverlay(
+                    header = glassHeader,
+                    title = stringResource(R.string.music_recognition),
+                    onBack = onNavigateBack,
+                    onBackLongClick = {},
+                    trailing = {
+                        AppIconButton(
+                            onClick = onShowHistory,
+                            onLongClick = {},
+                            modifier = Modifier.size(48.dp),
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.history),
+                                contentDescription = stringResource(R.string.music_recognition_history),
+                                tint = liquidGlassContentColor(),
+                            )
+                        }
+                        AppIconButton(
+                            onClick = onShowSettings,
+                            onLongClick = {},
+                            modifier = Modifier.size(48.dp),
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.settings),
+                                contentDescription = stringResource(R.string.music_recognition_settings),
+                                tint = liquidGlassContentColor(),
+                            )
+                        }
+                    },
+                )
             }
         }
     }
@@ -959,6 +1005,7 @@ private fun MusicRecognitionSettingsBottomSheet(
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surface,
     ) {
+        KeepStatusBarHiddenInDialog()
         Column(
             modifier =
                 Modifier
@@ -1028,6 +1075,7 @@ private fun RecognitionHistoryBottomSheet(
         modifier = Modifier.fillMaxSize(),
         containerColor = MaterialTheme.colorScheme.surface,
     ) {
+        KeepStatusBarHiddenInDialog()
         Box(
             modifier =
                 Modifier

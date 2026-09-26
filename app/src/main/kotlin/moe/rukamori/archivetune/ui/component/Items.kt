@@ -12,7 +12,6 @@ package moe.rukamori.archivetune.ui.component
 import android.widget.Toast
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandIn
@@ -60,12 +59,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -74,6 +72,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -84,7 +83,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.util.fastForEachIndexed
@@ -101,6 +99,7 @@ import coil3.request.allowHardware
 import coil3.toBitmap
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
@@ -142,7 +141,8 @@ import moe.rukamori.archivetune.utils.joinByBullet
 import moe.rukamori.archivetune.utils.makeTimeString
 import moe.rukamori.archivetune.utils.rememberPreference
 import moe.rukamori.archivetune.utils.reportException
-import kotlin.math.roundToInt
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 const val ActiveBoxAlpha = 0.6f
 
@@ -155,21 +155,22 @@ inline fun ListItem(
     crossinline trailingContent: @Composable RowScope.() -> Unit = {},
     isActive: Boolean = false,
     showActiveContainer: Boolean = true,
+    textColorOverride: Color? = null,
 ) {
     val titleColor =
-        if (isActive) {
+        textColorOverride ?: if (isActive) {
             MaterialTheme.colorScheme.onSecondaryContainer
         } else {
             MaterialTheme.colorScheme.onSurface
         }
     val subtitleContentColor =
-        if (isActive) {
+        textColorOverride?.copy(alpha = 0.7f) ?: if (isActive) {
             MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.7f)
         } else {
             MaterialTheme.colorScheme.onSurfaceVariant
         }
     val trailingContentColor =
-        if (isActive) {
+        textColorOverride ?: if (isActive) {
             MaterialTheme.colorScheme.onSecondaryContainer
         } else {
             MaterialTheme.colorScheme.onSurfaceVariant
@@ -346,34 +347,16 @@ fun GridItem(
 )
 
 @Composable
-private fun SongSourceIcon(isLocal: Boolean) {
-    val color = if (isLocal) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
-    Icon(
-        painter = painterResource(if (isLocal) R.drawable.playlist_local else R.drawable.playlist_online),
-        contentDescription =
-            stringResource(
-                if (isLocal) R.string.playlist_source_local else R.string.playlist_source_online,
-            ),
-        modifier = Modifier.size(12.dp),
-        tint = color,
-    )
-}
-
-@Composable
 fun SongListItem(
     song: Song,
     modifier: Modifier = Modifier,
     albumIndex: Int? = null,
     viewCountText: String? = null,
-    showSourceIcon: Boolean = false,
     showLikedIcon: Boolean = true,
     showInLibraryIcon: Boolean = false,
     showDownloadIcon: Boolean = true,
     showSongIconPlaceholder: Boolean = false,
     badges: @Composable RowScope.() -> Unit = {
-        if (showSourceIcon) {
-            SongSourceIcon(isLocal = song.song.isLocal)
-        }
         if (showLikedIcon && song.song.liked) {
             Icon.Favorite()
         }
@@ -386,7 +369,7 @@ fun SongListItem(
         if (showDownloadIcon) {
             val download by LocalDownloadUtil.current
                 .getDownload(song.id)
-                .collectAsState(initial = null)
+                .collectAsStateWithLifecycle(initialValue = null)
             Icon.Download(download?.state, percent = download?.percentDownloaded ?: -1f)
         }
     },
@@ -459,7 +442,7 @@ fun SongGridItem(
             Icon.Library()
         }
         if (showDownloadIcon) {
-            val download by LocalDownloadUtil.current.getDownload(song.id).collectAsState(initial = null)
+            val download by LocalDownloadUtil.current.getDownload(song.id).collectAsStateWithLifecycle(initialValue = null)
             Icon.Download(download?.state, percent = download?.percentDownloaded ?: -1f)
         }
     },
@@ -536,7 +519,7 @@ fun ArtistListItem(
             thumbnailUrl = artist.artist.thumbnailUrl,
             isActive = false,
             isPlaying = false,
-            shape = CircleShape,
+            shape = RoundedCornerShape(ThumbnailCornerRadius),
             contentScale = ContentScale.Crop,
             maxSizePx = 200,
             modifier = Modifier.size(ListThumbnailSize),
@@ -565,7 +548,7 @@ fun ArtistGridItem(
             thumbnailUrl = artist.artist.thumbnailUrl,
             isActive = false,
             isPlaying = false,
-            shape = CircleShape,
+            shape = RoundedCornerShape(GridThumbnailCornerRadius),
             contentScale = ContentScale.Crop,
             maxSizePx = 544,
             modifier = Modifier.fillMaxSize(),
@@ -921,45 +904,52 @@ fun LibraryPinnedCollectionTile(
     subtitle: String? = null,
     accentColor: Color = MaterialTheme.colorScheme.primary,
 ) {
+
+    val surfaceContainerHigh = MaterialTheme.colorScheme.surfaceContainerHigh
+    val surfaceContainerLow = MaterialTheme.colorScheme.surfaceContainerLow
+    val pinnedGradientBrush =
+        remember(accentColor, surfaceContainerHigh, surfaceContainerLow) {
+            Brush.linearGradient(
+                colors =
+                    listOf(
+                        accentColor.copy(alpha = 0.45f),
+                        surfaceContainerHigh,
+                        surfaceContainerLow,
+                    ),
+            )
+        }
+
     Card(
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+
         modifier = modifier,
     ) {
         Box(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .background(
-                        Brush.linearGradient(
-                            colors =
-                                listOf(
-                                    accentColor.copy(alpha = 0.28f),
-                                    MaterialTheme.colorScheme.surfaceContainerHigh,
-                                    MaterialTheme.colorScheme.surfaceContainerLow,
-                                ),
-                        ),
-                    ),
+                    .background(pinnedGradientBrush),
         ) {
             Column(
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
                 modifier =
                     Modifier
                         .fillMaxWidth()
-                        .padding(14.dp),
+                        .padding(10.dp),
             ) {
                 Surface(
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.76f),
+                    color = MaterialTheme.colorScheme.surface,
                     shape = CircleShape,
                 ) {
                     Icon(
                         painter = painterResource(iconRes),
                         contentDescription = null,
                         tint = accentColor,
-                        modifier = Modifier.padding(12.dp),
+                        modifier = Modifier.padding(8.dp),
                     )
                 }
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
                         text = title,
                         style = MaterialTheme.typography.titleMedium,
@@ -1001,11 +991,8 @@ fun LibraryPlaylistFeatureCard(
     val context = LocalContext.current
     val primaryThumbnailUrl = playlist.thumbnails.getOrNull(0)
     var extractedGlowColor by remember(primaryThumbnailUrl) { mutableStateOf(Color.Transparent) }
-    val glowColor by animateColorAsState(
-        targetValue = extractedGlowColor,
-        animationSpec = tween(400),
-        label = "playlistItemGlow",
-    )
+
+    val glowColor = extractedGlowColor
     LaunchedEffect(primaryThumbnailUrl) {
         if (primaryThumbnailUrl == null) return@LaunchedEffect
         val bitmap =
@@ -1109,11 +1096,8 @@ fun LibraryAlbumSpotlightCard(
         )
     val context = LocalContext.current
     var extractedGlowColor by remember(album.album.thumbnailUrl) { mutableStateOf(Color.Transparent) }
-    val glowColor by animateColorAsState(
-        targetValue = extractedGlowColor,
-        animationSpec = tween(400),
-        label = "albumItemGlow",
-    )
+
+    val glowColor = extractedGlowColor
     LaunchedEffect(album.album.thumbnailUrl) {
         val url = album.album.thumbnailUrl ?: return@LaunchedEffect
         val bitmap =
@@ -1223,11 +1207,8 @@ fun LibraryArtistSpotlightCard(
 ) {
     val context = LocalContext.current
     var extractedGlowColor by remember(artist.artist.thumbnailUrl) { mutableStateOf(Color.Transparent) }
-    val glowColor by animateColorAsState(
-        targetValue = extractedGlowColor,
-        animationSpec = tween(400),
-        label = "artistItemGlow",
-    )
+
+    val glowColor = extractedGlowColor
     LaunchedEffect(artist.artist.thumbnailUrl) {
         val url = artist.artist.thumbnailUrl ?: return@LaunchedEffect
         val bitmap =
@@ -1263,7 +1244,7 @@ fun LibraryArtistSpotlightCard(
                         .size(LibraryCardThumbnailSize)
                         .shadow(
                             elevation = LibraryCardGlowElevation,
-                            shape = CircleShape,
+                            shape = RoundedCornerShape(ThumbnailCornerRadius),
                             clip = false,
                             ambientColor = glowColor.copy(alpha = LibraryCardGlowAmbientAlpha),
                             spotColor = glowColor.copy(alpha = LibraryCardGlowSpotAlpha),
@@ -1273,7 +1254,7 @@ fun LibraryArtistSpotlightCard(
                     thumbnailUrl = artist.artist.thumbnailUrl,
                     isActive = false,
                     isPlaying = false,
-                    shape = CircleShape,
+                    shape = RoundedCornerShape(ThumbnailCornerRadius),
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -1316,15 +1297,25 @@ fun MediaMetadataListItem(
     isActive: Boolean = false,
     isPlaying: Boolean = false,
     shouldLoadImage: Boolean = true,
+
+    showActiveContainer: Boolean = true,
     trailingContent: @Composable RowScope.() -> Unit = {},
+    textColorOverride: Color? = null,
 ) {
     ListItem(
         title = mediaMetadata.title,
-        subtitle =
-            joinByBullet(
-                mediaMetadata.artists.joinToString { it.name },
-                makeTimeString(mediaMetadata.duration * 1000L),
-            ),
+        subtitle = {
+            Text(
+                text =
+                    joinByBullet(
+                        mediaMetadata.artists.joinToString { it.name },
+                        makeTimeString(mediaMetadata.duration * 1000L),
+                    ),
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
         thumbnailContent = {
             ItemThumbnail(
                 thumbnailUrl = mediaMetadata.thumbnailUrl,
@@ -1340,6 +1331,8 @@ fun MediaMetadataListItem(
         trailingContent = trailingContent,
         modifier = modifier,
         isActive = isActive,
+        showActiveContainer = showActiveContainer,
+        textColorOverride = textColorOverride,
     )
 }
 
@@ -1350,7 +1343,6 @@ fun YouTubeListItem(
     modifier: Modifier = Modifier,
     albumIndex: Int? = null,
     viewCountText: String? = null,
-    showSourceIcon: Boolean = false,
     isSelected: Boolean = false,
     isActive: Boolean = false,
     isPlaying: Boolean = false,
@@ -1359,12 +1351,9 @@ fun YouTubeListItem(
     showActiveContainer: Boolean = true,
     trailingContent: @Composable RowScope.() -> Unit = {},
     badges: @Composable RowScope.() -> Unit = {
-        if (showSourceIcon) {
-            SongSourceIcon(isLocal = false)
-        }
         val database = LocalDatabase.current
-        val song by database.song(item.id).collectAsState(initial = null)
-        val album by database.album(item.id).collectAsState(initial = null)
+        val song by database.song(item.id).collectAsStateWithLifecycle(initialValue = null)
+        val album by database.album(item.id).collectAsStateWithLifecycle(initialValue = null)
 
         if ((item is SongItem && song?.song?.liked == true) ||
             (item is AlbumItem && album?.album?.bookmarkedAt != null)
@@ -1376,7 +1365,7 @@ fun YouTubeListItem(
             Icon.Library()
         }
         if (item is SongItem) {
-            val downloads by LocalDownloadUtil.current.downloads.collectAsState()
+            val downloads by LocalDownloadUtil.current.downloads.collectAsStateWithLifecycle()
             val download = downloads[item.id]
             Icon.Download(download?.state, percent = download?.percentDownloaded ?: -1f)
         }
@@ -1415,14 +1404,29 @@ fun YouTubeListItem(
                 },
             badges = badges,
             thumbnailContent = {
+
+                val rowRatio =
+                    item.thumbnailSourceRatio
+                        ?.takeIf { it >= 4f / 3f }
+                        ?.let { 16f / 9f }
+                        ?: 1f
                 ItemThumbnail(
                     thumbnailUrl = item.thumbnail,
                     albumIndex = albumIndex,
                     isSelected = isSelected,
                     isActive = isActive,
                     isPlaying = isPlaying,
-                    shape = if (item is ArtistItem) CircleShape else RoundedCornerShape(ThumbnailCornerRadius),
-                    modifier = Modifier.size(ListThumbnailSize),
+                    shape = RoundedCornerShape(ThumbnailCornerRadius),
+                    thumbnailRatio = rowRatio,
+                    modifier =
+                        if (rowRatio > 1f) {
+                            Modifier.size(
+                                width = ListThumbnailSize * rowRatio,
+                                height = ListThumbnailSize,
+                            )
+                        } else {
+                            Modifier.size(ListThumbnailSize)
+                        },
                 )
             },
             trailingContent = trailingContent,
@@ -1463,8 +1467,8 @@ fun YouTubeGridItem(
     coroutineScope: CoroutineScope? = null,
     badges: @Composable RowScope.() -> Unit = {
         val database = LocalDatabase.current
-        val song by database.song(item.id).collectAsState(initial = null)
-        val album by database.album(item.id).collectAsState(initial = null)
+        val song by database.song(item.id).collectAsStateWithLifecycle(initialValue = null)
+        val album by database.album(item.id).collectAsStateWithLifecycle(initialValue = null)
 
         if (item is SongItem && song?.song?.liked == true ||
             item is AlbumItem && album?.album?.bookmarkedAt != null
@@ -1474,7 +1478,7 @@ fun YouTubeGridItem(
         if (item.explicit) Icon.Explicit()
         if (item is SongItem && song?.song?.inLibrary != null) Icon.Library()
         if (item is SongItem) {
-            val downloads by LocalDownloadUtil.current.downloads.collectAsState()
+            val downloads by LocalDownloadUtil.current.downloads.collectAsStateWithLifecycle()
             val download = downloads[item.id]
             Icon.Download(download?.state, percent = download?.percentDownloaded ?: -1f)
         }
@@ -1483,6 +1487,7 @@ fun YouTubeGridItem(
     isActive: Boolean = false,
     isPlaying: Boolean = false,
     fillMaxWidth: Boolean = false,
+    showPlayOverlay: Boolean = true,
 ) {
     val (cropThumbnailToSquare, _) = rememberPreference(CropThumbnailToSquareKey, false)
     val resolvedThumbnailRatio = thumbnailRatio ?: item.preferredThumbnailRatio(cropThumbnailToSquare)
@@ -1506,7 +1511,9 @@ fun YouTubeGridItem(
                     is AlbumItem -> joinByBullet(item.artists?.joinToString { it.name }, item.year?.toString())
                     is ArtistItem -> null
                     is PlaylistItem -> joinByBullet(item.author?.name, item.songCountText)
+
                     is PodcastItem -> item.author?.name
+
                     is EpisodeItem -> joinByBullet(item.podcast?.name, item.dateText, item.durationText)
                 }
             if (subtitle != null) {
@@ -1523,7 +1530,7 @@ fun YouTubeGridItem(
         thumbnailContent = {
             val database = LocalDatabase.current
             val playerConnection = LocalPlayerConnection.current ?: return@GridItem
-            val shape = if (item is ArtistItem) CircleShape else RoundedCornerShape(GridThumbnailCornerRadius)
+            val shape = RoundedCornerShape(GridThumbnailCornerRadius)
 
             ItemThumbnail(
                 thumbnailUrl = item.thumbnail,
@@ -1534,33 +1541,35 @@ fun YouTubeGridItem(
                 sourceAspectRatio = item.thumbnailSourceRatio,
             )
 
-            if ((item is SongItem || item is EpisodeItem) && !isActive) {
+            if (item is SongItem && !isActive && showPlayOverlay) {
                 OverlayPlayButton(
                     visible = true,
                 )
             }
 
-            AlbumPlayButton(
-                visible = item is AlbumItem && !isActive,
-                onClick = {
-                    coroutineScope?.launch(Dispatchers.IO) {
-                        var albumWithSongs = database.albumWithSongs(item.id).first()
-                        if (albumWithSongs?.songs.isNullOrEmpty()) {
-                            YouTube
-                                .album(item.id)
-                                .onSuccess { albumPage ->
-                                    database.transaction { insert(albumPage) }
-                                    albumWithSongs = database.albumWithSongs(item.id).first()
-                                }.onFailure { reportException(it) }
-                        }
-                        albumWithSongs?.let {
-                            withContext(Dispatchers.Main) {
-                                playerConnection.playQueue(LocalAlbumRadio(it))
+            if (showPlayOverlay) {
+                AlbumPlayButton(
+                    visible = item is AlbumItem && !isActive,
+                    onClick = {
+                        coroutineScope?.launch(Dispatchers.IO) {
+                            var albumWithSongs = database.albumWithSongs(item.id).first()
+                            if (albumWithSongs?.songs.isNullOrEmpty()) {
+                                YouTube
+                                    .album(item.id)
+                                    .onSuccess { albumPage ->
+                                        database.transaction { insert(albumPage) }
+                                        albumWithSongs = database.albumWithSongs(item.id).first()
+                                    }.onFailure { reportException(it) }
+                            }
+                            albumWithSongs?.let {
+                                withContext(Dispatchers.Main) {
+                                    playerConnection.playQueue(LocalAlbumRadio(it))
+                                }
                             }
                         }
-                    }
-                },
-            )
+                    },
+                )
+            }
         },
         thumbnailRatio = resolvedThumbnailRatio,
         fillMaxWidth = fillMaxWidth,
@@ -1616,7 +1625,7 @@ fun LocalArtistsGrid(
             thumbnailUrl = thumbnailUrl,
             isActive = false,
             isPlaying = false,
-            shape = CircleShape,
+            shape = RoundedCornerShape(GridThumbnailCornerRadius),
             modifier = if (fillMaxWidth) Modifier.fillMaxWidth() else Modifier,
             showCenterPlay = false,
             playButtonVisible = false,
@@ -1693,8 +1702,12 @@ fun ItemThumbnail(
     ) {
         val (cropThumbnailToSquare, _) = rememberPreference(CropThumbnailToSquareKey, false)
         val isYouTubeThumb = thumbnailUrl?.contains("ytimg.com", ignoreCase = true) == true
-        val shouldApplySquareCrop = cropThumbnailToSquare && isYouTubeThumb && kotlin.math.abs(thumbnailRatio - 1f) < 0.001f
-        val resolvedContentScale = contentScale ?: if (shouldApplySquareCrop) ContentScale.Crop else ContentScale.Fit
+        val isSquareFrame = kotlin.math.abs(thumbnailRatio - 1f) < 0.001f
+        val shouldApplySquareCrop = cropThumbnailToSquare && isYouTubeThumb && isSquareFrame
+
+        val resolvedContentScale =
+            contentScale
+                ?: if (shouldApplySquareCrop || (isYouTubeThumb && isSquareFrame)) ContentScale.Crop else ContentScale.Fit
         val widthPx = if (maxWidth == Dp.Infinity) null else with(density) { maxWidth.roundToPx().coerceAtLeast(1) }
         val heightPx = if (maxHeight == Dp.Infinity) null else with(density) { maxHeight.roundToPx().coerceAtLeast(1) }
 
@@ -2121,7 +2134,7 @@ fun SwipeToSongBox(
     val ctx = LocalContext.current
     val player = LocalPlayerConnection.current
     val scope = rememberCoroutineScope()
-    val offset = remember { mutableStateOf(0f) }
+    val offset = remember { mutableFloatStateOf(0f) }
     val threshold = 300f
     val resolvedContentBackgroundColor = contentBackgroundColor ?: MaterialTheme.colorScheme.surface
 
@@ -2201,7 +2214,10 @@ fun SwipeToSongBox(
         Box(
             modifier =
                 Modifier
-                    .offset { IntOffset(offset.value.roundToInt(), 0) }
+
+                    .graphicsLayer {
+                        translationX = offset.value
+                    }
                     .fillMaxWidth()
                     .background(resolvedContentBackgroundColor),
             content = content,
@@ -2209,7 +2225,6 @@ fun SwipeToSongBox(
     }
 }
 
-// Helper to animate reset of swipe offset
 private fun reset(
     offset: MutableState<Float>,
     scope: CoroutineScope,
@@ -2223,7 +2238,6 @@ private fun reset(
     }
 }
 
-// Data holder for swipe visuals
 data class Quadruple<A, B, C, D>(
     val first: A,
     val second: B,
@@ -2264,14 +2278,44 @@ private object Icon {
     ) {
         when (state) {
             STATE_COMPLETED -> {
-                Icon(
-                    painter = painterResource(R.drawable.offline),
-                    contentDescription = null,
-                    modifier =
-                        Modifier
-                            .size(18.dp)
-                            .padding(end = 2.dp),
-                )
+
+                var burstTrigger by remember { mutableStateOf<Any?>(null) }
+                var lastSeenState by remember { mutableStateOf<Int?>(null) }
+                LaunchedEffect(state) {
+                    if (state == STATE_COMPLETED &&
+                        lastSeenState != null &&
+                        lastSeenState != STATE_COMPLETED
+                    ) {
+                        burstTrigger = System.nanoTime()
+                    }
+                    lastSeenState = state
+                }
+                LaunchedEffect(burstTrigger) {
+                    if (burstTrigger != null) {
+                        delay(800)
+                        burstTrigger = null
+                    }
+                }
+                if (burstTrigger != null) {
+                    moe.rukamori.archivetune.ui.lottie.ArchiveTuneLottieAnimation(
+                        rawRes = moe.rukamori.archivetune.ui.lottie.ArchiveTuneLottie.DownloadCompleteRes,
+                        trigger = burstTrigger,
+                        tintColor = MaterialTheme.colorScheme.primary,
+                        modifier =
+                            Modifier
+                                .size(20.dp)
+                                .padding(end = 0.dp),
+                    )
+                } else {
+                    Icon(
+                        painter = painterResource(R.drawable.offline),
+                        contentDescription = null,
+                        modifier =
+                            Modifier
+                                .size(18.dp)
+                                .padding(end = 2.dp),
+                    )
+                }
             }
 
             STATE_QUEUED, STATE_DOWNLOADING -> {
@@ -2300,7 +2344,7 @@ private object Icon {
                 }
             }
 
-            else -> { /* no icon */ }
+            else -> {  }
         }
     }
 

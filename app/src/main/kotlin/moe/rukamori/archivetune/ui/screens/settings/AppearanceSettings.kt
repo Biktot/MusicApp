@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -50,12 +51,10 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -63,34 +62,34 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
 import moe.rukamori.archivetune.R
 import moe.rukamori.archivetune.constants.AppFontPreference
+import moe.rukamori.archivetune.constants.AppleMusicAnimatedArtworkKey
+import moe.rukamori.archivetune.constants.AppleMusicExperienceKey
 import moe.rukamori.archivetune.constants.BackdropBlurAmountKey
 import moe.rukamori.archivetune.constants.BackdropEnabledKey
 import moe.rukamori.archivetune.constants.BlurRadiusKey
-import moe.rukamori.archivetune.constants.ChipSortTypeKey
 import moe.rukamori.archivetune.constants.CropThumbnailToSquareKey
 import moe.rukamori.archivetune.constants.CustomFontNameKey
 import moe.rukamori.archivetune.constants.CustomFontUriKey
 import moe.rukamori.archivetune.constants.DarkModeKey
-import moe.rukamori.archivetune.constants.DefaultLibraryFilterOrder
-import moe.rukamori.archivetune.constants.DefaultLibraryFilterOrderPreference
 import moe.rukamori.archivetune.constants.DefaultOpenTabKey
 import moe.rukamori.archivetune.constants.DisableAnimationsKey
 import moe.rukamori.archivetune.constants.DisableBlurKey
 import moe.rukamori.archivetune.constants.DynamicThemeKey
 import moe.rukamori.archivetune.constants.FontPreferenceKey
 import moe.rukamori.archivetune.constants.ForceHighRefreshRateKey
+import moe.rukamori.archivetune.constants.HideStatusBarKey
 import moe.rukamori.archivetune.constants.GridItemSize
 import moe.rukamori.archivetune.constants.GridItemsSizeKey
 import moe.rukamori.archivetune.constants.HidePlayerThumbnailKey
-import moe.rukamori.archivetune.constants.LibraryChipOrderKey
-import moe.rukamori.archivetune.constants.LibraryFilter
+import moe.rukamori.archivetune.constants.HideScrollbarKey
+import moe.rukamori.archivetune.constants.LiquidGlassEnabledKey
+import moe.rukamori.archivetune.constants.MinimalHomeModeKey
 import moe.rukamori.archivetune.constants.LyricsBackgroundStyle
 import moe.rukamori.archivetune.constants.LyricsBackgroundStyleKey
 import moe.rukamori.archivetune.constants.MiniPlayerBackgroundStyle
@@ -101,35 +100,23 @@ import moe.rukamori.archivetune.constants.PlayerButtonsStyle
 import moe.rukamori.archivetune.constants.PlayerButtonsStyleKey
 import moe.rukamori.archivetune.constants.PlayerDesignStyle
 import moe.rukamori.archivetune.constants.PlayerDesignStyleKey
-import moe.rukamori.archivetune.constants.PlaylistTagOrderKey
 import moe.rukamori.archivetune.constants.PureBlackKey
-import moe.rukamori.archivetune.constants.QuickPicksDisplayMode
-import moe.rukamori.archivetune.constants.QuickPicksDisplayModeKey
 import moe.rukamori.archivetune.constants.RandomThemeOnStartupKey
-import moe.rukamori.archivetune.constants.ShowHomeCategoryChipsKey
 import moe.rukamori.archivetune.constants.ShowPlayerVolumeBarKey
-import moe.rukamori.archivetune.constants.ShowTagsInLibraryKey
 import moe.rukamori.archivetune.constants.SliderStyle
 import moe.rukamori.archivetune.constants.SliderStyleKey
-import moe.rukamori.archivetune.constants.SwipeSensitivityKey
-import moe.rukamori.archivetune.constants.SwipeThumbnailKey
-import moe.rukamori.archivetune.constants.SwipeToSongKey
+import moe.rukamori.archivetune.constants.TabletModeEnabledKey
 import moe.rukamori.archivetune.constants.ThumbnailCornerRadiusKey
 import moe.rukamori.archivetune.constants.WallpaperExtractionFailedKey
-import moe.rukamori.archivetune.constants.toLibraryFilterOrder
-import moe.rukamori.archivetune.constants.toLibraryFilterPreference
-import moe.rukamori.archivetune.constants.toPlaylistTagOrder
-import moe.rukamori.archivetune.constants.toPlaylistTagPreference
+import moe.rukamori.archivetune.constants.UiScaleFactorKey
 import moe.rukamori.archivetune.ui.component.DefaultDialog
 import moe.rukamori.archivetune.ui.component.EnumListPreference
+import moe.rukamori.archivetune.ui.component.FrostedHeaderPill
 import moe.rukamori.archivetune.ui.component.IconButton
-import moe.rukamori.archivetune.ui.component.LibraryChipOrderDialog
 import moe.rukamori.archivetune.ui.component.ListPreference
-import moe.rukamori.archivetune.ui.component.PlaylistTagOrderDialog
 import moe.rukamori.archivetune.ui.component.PreferenceEntry
 import moe.rukamori.archivetune.ui.component.PreferenceGroup
 import moe.rukamori.archivetune.ui.component.SwitchPreference
-import moe.rukamori.archivetune.ui.component.TagsManagementDialog
 import moe.rukamori.archivetune.ui.component.ThumbnailCornerRadiusSelectorButton
 import moe.rukamori.archivetune.ui.player.StyledPlaybackSlider
 import moe.rukamori.archivetune.ui.theme.CustomFontLoader
@@ -137,27 +124,30 @@ import moe.rukamori.archivetune.ui.utils.backToMain
 import moe.rukamori.archivetune.utils.isLowRamDevice
 import moe.rukamori.archivetune.utils.rememberEnumPreference
 import moe.rukamori.archivetune.utils.rememberPreference
-import moe.rukamori.archivetune.viewmodels.PlaylistTagUiModel
-import moe.rukamori.archivetune.viewmodels.PlaylistTagsScreenState
-import moe.rukamori.archivetune.viewmodels.PlaylistTagsViewModel
 import kotlin.math.roundToInt
+import androidx.compose.foundation.layout.asPaddingValues
+import moe.rukamori.archivetune.ui.screens.ScreenHeaderHaze
+import moe.rukamori.archivetune.ui.screens.rememberScreenHeaderHaze
+import moe.rukamori.archivetune.LocalStableSystemBarsTopPadding
+import dev.chrisbanes.haze.hazeSource
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppearanceSettings(navController: NavController) {
-    val playlistTagsViewModel: PlaylistTagsViewModel = hiltViewModel()
-    val playlistTagsState by playlistTagsViewModel.screenState.collectAsStateWithLifecycle()
+fun AppearanceSettings(navController: NavController, scrollTo: String? = null) {
     val context = LocalContext.current
     val defaultDisableAnimations = remember(context) { context.isLowRamDevice() }
+    val (wallpaperExtractionFailed) =
+        rememberPreference(WallpaperExtractionFailedKey, defaultValue = false)
     val (dynamicTheme, onDynamicThemeChange) =
         rememberPreference(
             DynamicThemeKey,
             defaultValue = true,
-        )
-    val (wallpaperExtractionFailed) =
-        rememberPreference(
-            WallpaperExtractionFailedKey,
-            defaultValue = false,
         )
     val (randomThemeOnStartup, onRandomThemeOnStartupChange) =
         rememberPreference(
@@ -174,6 +164,19 @@ fun AppearanceSettings(navController: NavController) {
             PlayerDesignStyleKey,
             defaultValue = PlayerDesignStyle.V4,
         )
+    val (_, onAppleMusicExperienceChange) =
+        rememberPreference(
+            AppleMusicExperienceKey,
+            defaultValue = false,
+        )
+    val (appleMusicAnimatedArtwork, onAppleMusicAnimatedArtworkChange) =
+        rememberPreference(
+            AppleMusicAnimatedArtworkKey,
+            defaultValue = true,
+        )
+    var showSfProFontPicker by rememberSaveable {
+        mutableStateOf(false)
+    }
     val (showPlayerVolumeBar, onShowPlayerVolumeBarChange) =
         rememberPreference(
             ShowPlayerVolumeBarKey,
@@ -187,7 +190,7 @@ fun AppearanceSettings(navController: NavController) {
     val (thumbnailCornerRadius, onThumbnailCornerRadiusChange) =
         rememberPreference(
             key = ThumbnailCornerRadiusKey,
-            defaultValue = 16f, // default dp
+            defaultValue = 16f,
         )
     val (cropThumbnailToSquare, onCropThumbnailToSquareChange) =
         rememberPreference(
@@ -209,6 +212,11 @@ fun AppearanceSettings(navController: NavController) {
             MiniPlayerBackgroundStyleKey,
             defaultValue = MiniPlayerBackgroundStyle.THEME,
         )
+    val (liquidGlassEnabled, onLiquidGlassEnabledChange) =
+        rememberPreference(
+            LiquidGlassEnabledKey,
+            defaultValue = false,
+        )
     val (pureBlack, onPureBlackChange) = rememberPreference(PureBlackKey, defaultValue = false)
     val (disableBlur, onDisableBlurChange) = rememberPreference(DisableBlurKey, defaultValue = false)
     val (disableAnimations, onDisableAnimationsChange) =
@@ -219,6 +227,21 @@ fun AppearanceSettings(navController: NavController) {
     val (forceHighRefreshRate, onForceHighRefreshRateChange) =
         rememberPreference(
             ForceHighRefreshRateKey,
+            defaultValue = false,
+        )
+    val (hideStatusBar, onHideStatusBarChange) =
+        rememberPreference(
+            HideStatusBarKey,
+            defaultValue = false,
+        )
+    val (uiScale, onUiScaleChange) =
+        rememberPreference(
+            UiScaleFactorKey,
+            defaultValue = 1.0f,
+        )
+    val (tabletModeEnabled, onTabletModeEnabledChange) =
+        rememberPreference(
+            TabletModeEnabledKey,
             defaultValue = false,
         )
     val (blurRadius, onBlurRadiusChange) = rememberPreference(BlurRadiusKey, defaultValue = 48f)
@@ -246,66 +269,15 @@ fun AppearanceSettings(navController: NavController) {
             SliderStyleKey,
             defaultValue = SliderStyle.Standard,
         )
-    val (swipeThumbnail, onSwipeThumbnailChange) =
-        rememberPreference(
-            SwipeThumbnailKey,
-            defaultValue = true,
-        )
-    val (swipeSensitivity, onSwipeSensitivityChange) =
-        rememberPreference(
-            SwipeSensitivityKey,
-            defaultValue = 0.73f,
-        )
     val (gridItemSize, onGridItemSizeChange) =
         rememberEnumPreference(
             GridItemsSizeKey,
             defaultValue = GridItemSize.SMALL,
         )
-
-    val (swipeToSong, onSwipeToSongChange) =
-        rememberPreference(
-            SwipeToSongKey,
-            defaultValue = false,
-        )
-
-    val (showTagsInLibrary, onShowTagsInLibraryChange) =
-        rememberPreference(
-            ShowTagsInLibraryKey,
-            defaultValue = true,
-        )
-    val (showHomeCategoryChips, onShowHomeCategoryChipsChange) =
-        rememberPreference(
-            ShowHomeCategoryChipsKey,
-            defaultValue = true,
-        )
-    val (libraryChipOrderPreference, onLibraryChipOrderChange) =
-        rememberPreference(
-            LibraryChipOrderKey,
-            defaultValue = DefaultLibraryFilterOrderPreference,
-        )
-    val libraryChipOrder =
-        remember(libraryChipOrderPreference) {
-            libraryChipOrderPreference.toLibraryFilterOrder()
-        }
-    val (playlistTagOrderPreference, onPlaylistTagOrderChange) =
-        rememberPreference(
-            PlaylistTagOrderKey,
-            defaultValue = "",
-        )
-    val availablePlaylistTags =
-        (playlistTagsState as? PlaylistTagsScreenState.Success)?.tags.orEmpty()
-    val playlistTagOrder =
-        remember(availablePlaylistTags, playlistTagOrderPreference) {
-            val tagsById = availablePlaylistTags.associateBy(PlaylistTagUiModel::id)
-            playlistTagOrderPreference
-                .toPlaylistTagOrder(availablePlaylistTags.map(PlaylistTagUiModel::id))
-                .mapNotNull { tagId -> tagsById[tagId] }
-        }
-    val (quickPicksDisplayMode, onQuickPicksDisplayModeChange) =
-        rememberEnumPreference(
-            QuickPicksDisplayModeKey,
-            defaultValue = QuickPicksDisplayMode.CARD,
-        )
+    val (hideScrollbar, onHideScrollbarChange) =
+        rememberPreference(HideScrollbarKey, defaultValue = false)
+    val (minimalHomeMode, onMinimalHomeModeChange) =
+        rememberPreference(MinimalHomeModeKey, defaultValue = false)
 
     val customFontPickerLauncher =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
@@ -356,37 +328,40 @@ fun AppearanceSettings(navController: NavController) {
         }
     val availableLyricsBackgroundStyles =
         remember {
-            listOf(
-                LyricsBackgroundStyle.DEFAULT,
-                LyricsBackgroundStyle.FOLLOW_THEME,
-                LyricsBackgroundStyle.COLORING,
-            )
+            buildList {
+                add(LyricsBackgroundStyle.DEFAULT)
+                add(LyricsBackgroundStyle.FOLLOW_THEME)
+                add(LyricsBackgroundStyle.COLORING)
+                add(LyricsBackgroundStyle.MOVING_BLUR)
+            }
         }
     val lyricsBackground = configuredLyricsBackground.resolveFor(playerBackground)
     val isPlayerStyleCustomizationEnabled =
         when (playerDesignStyle) {
             PlayerDesignStyle.V7,
-            PlayerDesignStyle.V8,
             PlayerDesignStyle.V9,
+            PlayerDesignStyle.APPLE_MUSIC,
             PlayerDesignStyle.V10,
+            PlayerDesignStyle.BITCHORD,
+            PlayerDesignStyle.TIKTOK,
+            PlayerDesignStyle.SIMPMUSIC,
+            PlayerDesignStyle.SPATIALFLOW,
+            PlayerDesignStyle.LOOPER,
             -> false
 
             else -> true
         }
-    val isVolumeBarSupported =
-        playerDesignStyle == PlayerDesignStyle.V7 ||
-            playerDesignStyle == PlayerDesignStyle.V8
+    val isLyricsBackgroundStyleAvailable =
+        playerDesignStyle != PlayerDesignStyle.APPLE_MUSIC &&
+            playerDesignStyle != PlayerDesignStyle.TIKTOK &&
+            playerDesignStyle != PlayerDesignStyle.SPATIALFLOW
+    val isVolumeBarSupported = playerDesignStyle == PlayerDesignStyle.V7
     val isSystemInDarkTheme = isSystemInDarkTheme()
     val useDarkTheme =
         remember(darkMode, isSystemInDarkTheme) {
             if (darkMode == DarkMode.AUTO) isSystemInDarkTheme else darkMode == DarkMode.ON
         }
 
-    val (defaultChip, onDefaultChipChange) =
-        rememberEnumPreference(
-            key = ChipSortTypeKey,
-            defaultValue = LibraryFilter.LIBRARY,
-        )
     val supportedHighestFps = rememberSupportedHighestFps()
     val isHighRefreshRateSupported = supportedHighestFps > HIGH_REFRESH_RATE_THRESHOLD_FPS
 
@@ -396,15 +371,6 @@ fun AppearanceSettings(navController: NavController) {
     )
 
     var showSliderOptionDialog by rememberSaveable {
-        mutableStateOf(false)
-    }
-    var showLibraryChipOrderDialog by rememberSaveable {
-        mutableStateOf(false)
-    }
-    var showPlaylistTagOrderDialog by rememberSaveable {
-        mutableStateOf(false)
-    }
-    var showTagsManagementDialog by rememberSaveable {
         mutableStateOf(false)
     }
 
@@ -472,65 +438,103 @@ fun AppearanceSettings(navController: NavController) {
         }
     }
 
-    if (showLibraryChipOrderDialog) {
-        LibraryChipOrderDialog(
-            initialOrder = libraryChipOrder,
-            onDismiss = { showLibraryChipOrderDialog = false },
-            onConfirm = { newOrder ->
-                onLibraryChipOrderChange(newOrder.toLibraryFilterPreference())
-                showLibraryChipOrderDialog = false
+    if (showSfProFontPicker) {
+        SfProFontPickerDialog(
+            onDismiss = { showSfProFontPicker = false },
+            onApply = { uri, name ->
+                onCustomFontUriChange(uri)
+                onCustomFontNameChange(name)
+                onFontPreferenceChange(AppFontPreference.CUSTOM)
+                Toast.makeText(
+                    context,
+                    context.getString(R.string.sf_pro_applied, name),
+                    Toast.LENGTH_SHORT,
+                ).show()
             },
         )
     }
 
-    if (showPlaylistTagOrderDialog) {
-        PlaylistTagOrderDialog(
-            state = playlistTagsState,
-            initialOrder = playlistTagOrder,
-            onDismiss = { showPlaylistTagOrderDialog = false },
-            onConfirm = { newOrder ->
-                onPlaylistTagOrderChange(
-                    newOrder.map(PlaylistTagUiModel::id).toPlaylistTagPreference(),
-                )
-                showPlaylistTagOrderDialog = false
-            },
-        )
-    }
-
-    if (showTagsManagementDialog) {
-        TagsManagementDialog(
-            onDismiss = { showTagsManagementDialog = false },
-        )
-    }
+    val headerHaze = rememberScreenHeaderHaze()
+    val systemBarsTopPadding = LocalStableSystemBarsTopPadding.current
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.appearance)) },
+                title = {},
                 navigationIcon = {
-                    IconButton(
-                        onClick = navController::navigateUp,
-                        onLongClick = navController::backToMain,
-                    ) {
-                        Icon(
-                            painterResource(R.drawable.arrow_back),
-                            contentDescription = null,
+                    FrostedHeaderPill(plain = true) {
+                        IconButton(
+                            onClick = navController::navigateUp,
+                            onLongClick = navController::backToMain,
+                        ) {
+                            Icon(
+                                painterResource(R.drawable.arrow_back),
+                                contentDescription = null,
+                            )
+                        }
+                        Text(
+                            text = stringResource(R.string.appearance),
+                            color = MaterialTheme.colorScheme.onBackground,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            modifier = Modifier.padding(end = 4.dp),
                         )
                     }
                 },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
+                    scrolledContainerColor = Color.Transparent,
+                ),
             )
         },
     ) { innerPadding ->
+        Box(modifier = Modifier.fillMaxSize()) {
+
+        val playerAwareBottomPadding =
+            LocalPlayerAwareWindowInsets.current
+                .only(WindowInsetsSides.Bottom)
+                .asPaddingValues()
+                .calculateBottomPadding()
         val topPadding = innerPadding.calculateTopPadding()
+        val scrollState = rememberScrollState()
+        val positions = rememberPreferencePositions()
+
+        LaunchedEffect(scrollTo) { positions.scrollToKey(scrollTo, scrollState) }
 
         Column(
             Modifier
+                .windowInsetsPadding(LocalPlayerAwareWindowInsets.current.only(WindowInsetsSides.Horizontal))
+                .then(positions.containerModifier())
+                .verticalScroll(scrollState)
+                .hazeSource(headerHaze)
                 .padding(top = topPadding)
-                .windowInsetsPadding(LocalPlayerAwareWindowInsets.current.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
-                .verticalScroll(rememberScrollState())
-                .padding(bottom = SettingsDimensions.ScreenBottomPadding),
+                .padding(bottom = playerAwareBottomPadding + SettingsDimensions.ScreenBottomPadding),
         ) {
-            PreferenceGroup(title = stringResource(R.string.theme)) {
+            PreferenceGroup(
+                modifier = positions.modifierFor("dynamic_theme"),
+                title = stringResource(R.string.theme),
+            ) {
+                item {
+                    Column(modifier = positions.modifierFor("liquid_glass_effects")) {
+                        SwitchPreference(
+                            title = { Text(stringResource(R.string.liquid_glass_effects)) },
+                            description = stringResource(R.string.liquid_glass_effects_desc),
+                            icon = { Icon(painterResource(R.drawable.blur_on), null) },
+                            checked = liquidGlassEnabled,
+                            onCheckedChange = onLiquidGlassEnabledChange,
+                        )
+                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S && liquidGlassEnabled) {
+                            Text(
+                                text = stringResource(R.string.liquid_glass_effects_unsupported),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 56.dp, top = 4.dp, end = 16.dp),
+                            )
+                        }
+                    }
+                }
+
                 item {
                     SwitchPreference(
                         title = { Text(stringResource(R.string.enable_dynamic_theme)) },
@@ -542,6 +546,7 @@ fun AppearanceSettings(navController: NavController) {
 
                 item(visible = dynamicTheme && Build.VERSION.SDK_INT < Build.VERSION_CODES.S && wallpaperExtractionFailed) {
                     PreferenceEntry(
+                        modifier = positions.modifierFor("wallpaper_permission"),
                         title = { Text(stringResource(R.string.wallpaper_permission)) },
                         description = stringResource(R.string.wallpaper_permission_desc),
                         icon = { Icon(painterResource(R.drawable.storage), null) },
@@ -558,6 +563,7 @@ fun AppearanceSettings(navController: NavController) {
 
                 item(visible = !dynamicTheme) {
                     SwitchPreference(
+                        modifier = positions.modifierFor("random_theme_on_startup"),
                         title = { Text(stringResource(R.string.random_theme_on_startup)) },
                         description = stringResource(R.string.random_theme_on_startup_desc),
                         icon = { Icon(painterResource(R.drawable.shuffle), null) },
@@ -567,46 +573,55 @@ fun AppearanceSettings(navController: NavController) {
                 }
 
                 item(visible = !dynamicTheme || Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-                    PreferenceEntry(
-                        title = { Text(stringResource(R.string.color_palette)) },
-                        description = stringResource(R.string.customize_theme_colors),
-                        icon = { Icon(painterResource(R.drawable.format_paint), null) },
-                        onClick = { navController.navigate("settings/appearance/palette_picker") },
-                    )
+                    Column(modifier = positions.modifierFor("color_palette")) {
+                        PreferenceEntry(
+                            modifier = positions.modifierFor("palette_picker"),
+                            title = { Text(stringResource(R.string.color_palette)) },
+                            description = stringResource(R.string.customize_theme_colors),
+                            icon = { Icon(painterResource(R.drawable.format_paint), null) },
+                            onClick = { navController.navigate("settings/appearance/palette_picker") },
+                        )
+                    }
                 }
 
                 item {
-                    PreferenceEntry(
-                        title = { Text(stringResource(R.string.app_icon)) },
-                        description = stringResource(R.string.app_icon_description),
-                        icon = { Icon(painterResource(R.drawable.app_icon_small), null) },
-                        onClick = { navController.navigate("settings/appearance/icon") },
-                    )
+                    Column(modifier = positions.modifierFor("app_icon")) {
+                        PreferenceEntry(
+                            title = { Text(stringResource(R.string.app_icon)) },
+                            description = stringResource(R.string.app_icon_description),
+                            icon = { Icon(painterResource(R.drawable.app_icon_small), null) },
+                            onClick = { navController.navigate("settings/appearance/icon") },
+                        )
+                    }
                 }
 
                 item {
-                    EnumListPreference(
-                        title = { Text(stringResource(R.string.dark_theme)) },
-                        icon = { Icon(painterResource(R.drawable.dark_mode), null) },
-                        selectedValue = darkMode,
-                        onValueSelected = onDarkModeChange,
-                        valueText = {
-                            when (it) {
-                                DarkMode.ON -> stringResource(R.string.dark_theme_on)
-                                DarkMode.OFF -> stringResource(R.string.dark_theme_off)
-                                DarkMode.AUTO -> stringResource(R.string.dark_theme_follow_system)
-                            }
-                        },
-                    )
+                    Column(modifier = positions.modifierFor("dark_theme")) {
+                        EnumListPreference(
+                            title = { Text(stringResource(R.string.dark_theme)) },
+                            icon = { Icon(painterResource(R.drawable.dark_mode), null) },
+                            selectedValue = darkMode,
+                            onValueSelected = onDarkModeChange,
+                            valueText = {
+                                when (it) {
+                                    DarkMode.ON -> stringResource(R.string.dark_theme_on)
+                                    DarkMode.OFF -> stringResource(R.string.dark_theme_off)
+                                    DarkMode.AUTO -> stringResource(R.string.dark_theme_follow_system)
+                                }
+                            },
+                        )
+                    }
                 }
 
                 item(visible = useDarkTheme) {
-                    SwitchPreference(
-                        title = { Text(stringResource(R.string.pure_black)) },
-                        icon = { Icon(painterResource(R.drawable.contrast), null) },
-                        checked = pureBlack,
-                        onCheckedChange = onPureBlackChange,
-                    )
+                    Column(modifier = positions.modifierFor("pure_black")) {
+                        SwitchPreference(
+                            title = { Text(stringResource(R.string.pure_black)) },
+                            icon = { Icon(painterResource(R.drawable.contrast), null) },
+                            checked = pureBlack,
+                            onCheckedChange = onPureBlackChange,
+                        )
+                    }
                 }
 
                 item {
@@ -621,6 +636,7 @@ fun AppearanceSettings(navController: NavController) {
 
                 item {
                     SwitchPreference(
+                        modifier = positions.modifierFor("disable_animations"),
                         title = { Text(stringResource(R.string.disable_animations)) },
                         description = stringResource(R.string.disable_animations_desc),
                         icon = { Icon(painterResource(R.drawable.animation), null) },
@@ -630,85 +646,118 @@ fun AppearanceSettings(navController: NavController) {
                 }
 
                 item {
-                    SwitchPreference(
-                        title = { Text(stringResource(R.string.force_high_refresh_rate)) },
-                        description =
-                            stringResource(
-                                R.string.max_supported_refresh_rate,
-                                supportedHighestFps.roundToInt(),
-                            ),
-                        icon = { Icon(painterResource(R.drawable.speed), null) },
-                        checked = forceHighRefreshRate,
-                        onCheckedChange = onForceHighRefreshRateChange,
-                        isEnabled = isHighRefreshRateSupported,
-                    )
+                    Column(modifier = positions.modifierFor("hide_status_bar")) {
+                        SwitchPreference(
+                            title = { Text(stringResource(R.string.hide_status_bar)) },
+                            description = stringResource(R.string.hide_status_bar_desc),
+                            icon = { Icon(painterResource(R.drawable.visibility_off), null) },
+                            checked = hideStatusBar,
+                            onCheckedChange = onHideStatusBarChange,
+                        )
+                    }
                 }
 
                 item {
-                    PreferenceEntry(
-                        title = { Text(stringResource(R.string.blur_intensity)) },
-                        description = stringResource(R.string.blur_intensity_value, blurRadius.roundToInt()),
-                        icon = { Icon(painterResource(R.drawable.blur_on), null) },
-                        isEnabled = !disableBlur,
-                        content = {
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Slider(
-                                value = blurRadius,
-                                onValueChange = onBlurRadiusChange,
-                                valueRange = 0f..64f,
-                                steps = 63,
-                                enabled = !disableBlur,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                        },
-                    )
+                    Column(modifier = positions.modifierFor("ui_scale")) {
+                        PreferenceEntry(
+                            title = { Text(stringResource(R.string.ui_scale)) },
+                            description = stringResource(R.string.ui_scale_desc),
+                            icon = { Icon(painterResource(R.drawable.text_fields), null) },
+                            content = {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Slider(
+                                    value = uiScale,
+                                    onValueChange = { v ->
+                                        onUiScaleChange((v * 100f).roundToInt() / 100f)
+                                    },
+                                    valueRange = 0.85f..1.30f,
+                                    steps = 44,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                                Text(
+                                    text = stringResource(R.string.ui_scale_value, (uiScale * 100f).roundToInt()),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(start = 56.dp, top = 4.dp),
+                                )
+                            },
+                        )
+                    }
                 }
 
                 item {
-                    SwitchPreference(
-                        title = { Text(stringResource(R.string.album_backdrop)) },
-                        description = stringResource(R.string.album_backdrop_desc),
-                        icon = { Icon(painterResource(R.drawable.blur_on), null) },
-                        checked = backdropEnabled,
-                        onCheckedChange = onBackdropEnabledChange,
-                    )
+                    Column(modifier = positions.modifierFor("blur_intensity")) {
+                        PreferenceEntry(
+                            title = { Text(stringResource(R.string.blur_intensity)) },
+                            description = stringResource(R.string.blur_intensity_value, blurRadius.roundToInt()),
+                            icon = { Icon(painterResource(R.drawable.blur_on), null) },
+                            isEnabled = !disableBlur,
+                            content = {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Slider(
+                                    value = blurRadius,
+                                    onValueChange = onBlurRadiusChange,
+                                    valueRange = 0f..64f,
+                                    steps = 63,
+                                    enabled = !disableBlur,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            },
+                        )
+                    }
+                }
+
+                if (playerDesignStyle != PlayerDesignStyle.APPLE_MUSIC) {
+                    item {
+                        SwitchPreference(
+                            title = { Text(stringResource(R.string.album_backdrop)) },
+                            description = stringResource(R.string.album_backdrop_desc),
+                            icon = { Icon(painterResource(R.drawable.blur_on), null) },
+                            checked = backdropEnabled,
+                            onCheckedChange = onBackdropEnabledChange,
+                        )
+                    }
+
+                    item {
+                        PreferenceEntry(
+                            modifier = positions.modifierFor("backdrop_blur_amount"),
+                            title = { Text(stringResource(R.string.backdrop_blur_amount)) },
+                            description = stringResource(R.string.backdrop_blur_amount_value, backdropBlurAmount),
+                            icon = { Icon(painterResource(R.drawable.blur_on), null) },
+                            isEnabled = backdropEnabled,
+                            content = {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Slider(
+                                    value = backdropBlurAmount.toFloat(),
+                                    onValueChange = { onBackdropBlurAmountChange(it.roundToInt()) },
+                                    valueRange = 0f..100f,
+                                    steps = 19,
+                                    enabled = backdropEnabled,
+                                    modifier = Modifier.fillMaxWidth(),
+                                )
+                            },
+                        )
+                    }
                 }
 
                 item {
-                    PreferenceEntry(
-                        title = { Text(stringResource(R.string.backdrop_blur_amount)) },
-                        description = stringResource(R.string.backdrop_blur_amount_value, backdropBlurAmount),
-                        icon = { Icon(painterResource(R.drawable.blur_on), null) },
-                        isEnabled = backdropEnabled,
-                        content = {
-                            Spacer(modifier = Modifier.height(10.dp))
-                            Slider(
-                                value = backdropBlurAmount.toFloat(),
-                                onValueChange = { onBackdropBlurAmountChange(it.roundToInt()) },
-                                valueRange = 0f..100f,
-                                steps = 19,
-                                enabled = backdropEnabled,
-                                modifier = Modifier.fillMaxWidth(),
-                            )
-                        },
-                    )
-                }
-
-                item {
-                    EnumListPreference(
-                        title = { Text(stringResource(R.string.font_preference)) },
-                        description = stringResource(R.string.font_preference_desc),
-                        icon = { Icon(painterResource(R.drawable.text_fields), null) },
-                        selectedValue = fontPreference,
-                        onValueSelected = onFontPreferenceSelected,
-                        valueText = {
-                            when (it) {
-                                AppFontPreference.DEFAULT -> stringResource(R.string.font_preference_default)
-                                AppFontPreference.SYSTEM -> stringResource(R.string.font_preference_system)
-                                AppFontPreference.CUSTOM -> stringResource(R.string.font_preference_custom)
-                            }
-                        },
-                    )
+                    Column(modifier = positions.modifierFor("font_preference")) {
+                        EnumListPreference(
+                            modifier = positions.modifierFor("use_system_font"),
+                            title = { Text(stringResource(R.string.font_preference)) },
+                            description = stringResource(R.string.font_preference_desc),
+                            icon = { Icon(painterResource(R.drawable.text_fields), null) },
+                            selectedValue = fontPreference,
+                            onValueSelected = onFontPreferenceSelected,
+                            valueText = {
+                                when (it) {
+                                    AppFontPreference.DEFAULT -> stringResource(R.string.font_preference_default)
+                                    AppFontPreference.SYSTEM -> stringResource(R.string.font_preference_system)
+                                    AppFontPreference.CUSTOM -> stringResource(R.string.font_preference_custom)
+                                }
+                            },
+                        )
+                    }
                 }
 
                 item(visible = fontPreference == AppFontPreference.CUSTOM) {
@@ -721,40 +770,69 @@ fun AppearanceSettings(navController: NavController) {
                             customFontUri
                         }
                     PreferenceEntry(
+                        modifier = positions.modifierFor("custom_font"),
                         title = { Text(stringResource(R.string.custom_font)) },
                         description = customFontDescription,
                         icon = { Icon(painterResource(R.drawable.text_fields), null) },
                         onClick = pickCustomFont,
                     )
                 }
+                item {
+                    PreferenceEntry(
+                        modifier = positions.modifierFor("sf_pro_fonts"),
+                        title = { Text(stringResource(R.string.sf_pro_fonts)) },
+                        description = stringResource(R.string.sf_pro_fonts_desc),
+                        icon = { Icon(painterResource(R.drawable.solar_download_minimalistic_linear), null) },
+                        onClick = { showSfProFontPicker = true },
+                    )
+                }
             }
 
-            PreferenceGroup(title = stringResource(R.string.player)) {
+            PreferenceGroup(
+                modifier = positions.modifierFor("disable_blur"),
+                title = stringResource(R.string.player),
+            ) {
                 item {
-                    EnumListPreference(
-                        title = { Text(stringResource(R.string.player_design_style)) },
-                        icon = { Icon(painterResource(R.drawable.palette), null) },
-                        selectedValue = playerDesignStyle,
-                        onValueSelected = onPlayerDesignStyleChange,
-                        valueText = {
-                            when (it) {
-                                PlayerDesignStyle.V1 -> stringResource(R.string.player_design_v1)
-                                PlayerDesignStyle.V2 -> stringResource(R.string.player_design_v2)
-                                PlayerDesignStyle.V3 -> stringResource(R.string.player_design_v3)
-                                PlayerDesignStyle.V4 -> stringResource(R.string.player_design_v4)
-                                PlayerDesignStyle.V5 -> stringResource(R.string.player_design_v5)
-                                PlayerDesignStyle.V6 -> stringResource(R.string.player_design_v6)
-                                PlayerDesignStyle.V7 -> stringResource(R.string.player_design_v7)
-                                PlayerDesignStyle.V8 -> stringResource(R.string.player_design_v8)
-                                PlayerDesignStyle.V9 -> stringResource(R.string.player_design_v9)
-                                PlayerDesignStyle.V10 -> stringResource(R.string.player_design_v10)
-                            }
-                        },
-                    )
+                    Column(modifier = positions.modifierFor("player_design_style")) {
+                        EnumListPreference(
+                            title = { Text(stringResource(R.string.player_design_style)) },
+                            icon = { Icon(painterResource(R.drawable.palette), null) },
+                            selectedValue = playerDesignStyle,
+                            onValueSelected = { style ->
+                                onPlayerDesignStyleChange(style)
+                                if (style != PlayerDesignStyle.APPLE_MUSIC) {
+                                    onAppleMusicExperienceChange(false)
+                                }
+                            },
+                            valueText = {
+                                when (it) {
+                                    PlayerDesignStyle.V4 -> stringResource(R.string.player_design_v4)
+                                    PlayerDesignStyle.V5 -> stringResource(R.string.player_design_v5)
+                                    PlayerDesignStyle.V7 -> stringResource(R.string.player_design_v7)
+                                    PlayerDesignStyle.V9 -> stringResource(R.string.player_design_v9)
+                                    PlayerDesignStyle.APPLE_MUSIC ->
+                                        stringResource(R.string.player_design_apple_music)
+                                    PlayerDesignStyle.V10 ->
+                                        stringResource(R.string.player_design_v10)
+                                    PlayerDesignStyle.BITCHORD ->
+                                        stringResource(R.string.player_design_bitchord)
+                                    PlayerDesignStyle.TIKTOK ->
+                                        stringResource(R.string.player_design_tiktok)
+                                    PlayerDesignStyle.SIMPMUSIC ->
+                                        stringResource(R.string.player_design_simpmusic)
+                                    PlayerDesignStyle.SPATIALFLOW ->
+                                        stringResource(R.string.player_design_spatialflow)
+                                    PlayerDesignStyle.LOOPER ->
+                                        stringResource(R.string.player_design_looper)
+                                }
+                            },
+                        )
+                    }
                 }
 
                 item {
                     SwitchPreference(
+                        modifier = positions.modifierFor("show_player_volume_bar"),
                         title = { Text(stringResource(R.string.show_player_volume_bar)) },
                         description =
                             if (isVolumeBarSupported) {
@@ -770,65 +848,90 @@ fun AppearanceSettings(navController: NavController) {
                 }
 
                 item {
-                    EnumListPreference(
-                        title = { Text(stringResource(R.string.player_background_style)) },
-                        description =
-                            if (isPlayerStyleCustomizationEnabled) {
-                                null
-                            } else {
-                                stringResource(R.string.player_background_style_v8_v9_desc)
-                            },
-                        icon = { Icon(painterResource(R.drawable.gradient), null) },
-                        selectedValue = playerBackground,
-                        onValueSelected = { selectedBackground ->
-                            onPlayerBackgroundChange(selectedBackground)
-                            when {
-                                selectedBackground == PlayerBackgroundStyle.CUSTOM -> {
-                                    onLyricsBackgroundChange(LyricsBackgroundStyle.CUSTOM)
-                                }
+                    Column(modifier = positions.modifierFor("player_background_style")) {
+                        EnumListPreference(
+                            title = { Text(stringResource(R.string.player_background_style)) },
+                            description =
+                                if (isPlayerStyleCustomizationEnabled) {
+                                    null
+                                } else {
+                                    stringResource(R.string.player_background_style_v8_v9_desc)
+                                },
+                            icon = { Icon(painterResource(R.drawable.gradient), null) },
+                            selectedValue = playerBackground,
+                            onValueSelected = { selectedBackground ->
+                                onPlayerBackgroundChange(selectedBackground)
+                                when {
+                                    selectedBackground == PlayerBackgroundStyle.CUSTOM -> {
+                                        onLyricsBackgroundChange(LyricsBackgroundStyle.CUSTOM)
+                                    }
 
-                                configuredLyricsBackground == LyricsBackgroundStyle.CUSTOM -> {
-                                    onLyricsBackgroundChange(LyricsBackgroundStyle.DEFAULT)
+                                    configuredLyricsBackground == LyricsBackgroundStyle.CUSTOM -> {
+                                        onLyricsBackgroundChange(LyricsBackgroundStyle.DEFAULT)
+                                    }
                                 }
-                            }
-                        },
-                        isEnabled = isPlayerStyleCustomizationEnabled,
-                        valueText = {
-                            when (it) {
-                                PlayerBackgroundStyle.DEFAULT -> stringResource(R.string.follow_theme)
-                                PlayerBackgroundStyle.GRADIENT -> stringResource(R.string.gradient)
-                                PlayerBackgroundStyle.CUSTOM -> stringResource(R.string.custom)
-                                PlayerBackgroundStyle.BLUR -> stringResource(R.string.player_background_blur)
-                                PlayerBackgroundStyle.COLORING -> stringResource(R.string.coloring)
-                                PlayerBackgroundStyle.BLUR_GRADIENT -> stringResource(R.string.blur_gradient)
-                                PlayerBackgroundStyle.GLOW -> stringResource(R.string.glow)
-                                PlayerBackgroundStyle.GLOW_ANIMATED -> "Glow Animated"
-                            }
-                        },
-                    )
+                            },
+                            isEnabled = isPlayerStyleCustomizationEnabled,
+                            valueText = {
+                                when (it) {
+                                    PlayerBackgroundStyle.DEFAULT -> stringResource(R.string.follow_theme)
+                                    PlayerBackgroundStyle.GRADIENT -> stringResource(R.string.gradient)
+                                    PlayerBackgroundStyle.CUSTOM -> stringResource(R.string.custom)
+                                    PlayerBackgroundStyle.BLUR -> stringResource(R.string.player_background_blur)
+                                    PlayerBackgroundStyle.COLORING -> stringResource(R.string.coloring)
+                                    PlayerBackgroundStyle.BLUR_GRADIENT -> stringResource(R.string.blur_gradient)
+                                    PlayerBackgroundStyle.GLOW -> stringResource(R.string.glow)
+                                    PlayerBackgroundStyle.GLOW_ANIMATED -> "Glow Animated"
+                                }
+                            },
+                        )
+                    }
                 }
 
                 item {
-                    ListPreference(
-                        title = { Text(stringResource(R.string.lyrics_background_style)) },
-                        icon = { Icon(painterResource(R.drawable.lyrics), null) },
-                        selectedValue = lyricsBackground,
-                        values = availableLyricsBackgroundStyles,
-                        onValueSelected = onLyricsBackgroundChange,
-                        isEnabled = playerBackground != PlayerBackgroundStyle.CUSTOM,
-                        valueText = {
-                            when (it) {
-                                LyricsBackgroundStyle.DEFAULT -> stringResource(R.string.lyrics_background_default)
-                                LyricsBackgroundStyle.FOLLOW_THEME -> stringResource(R.string.follow_theme)
-                                LyricsBackgroundStyle.COLORING -> stringResource(R.string.coloring)
-                                LyricsBackgroundStyle.CUSTOM -> stringResource(R.string.custom)
-                            }
-                        },
-                    )
+                    Column(modifier = positions.modifierFor("lyrics_background_style")) {
+                        ListPreference(
+                            modifier = positions.modifierFor("lyrics_background_style"),
+                            title = { Text(stringResource(R.string.lyrics_background_style)) },
+                            description =
+                                if (isLyricsBackgroundStyleAvailable) {
+                                    null
+                                } else {
+                                    stringResource(R.string.lyrics_background_style_own_player_desc)
+                                },
+                            icon = { Icon(painterResource(R.drawable.lyrics), null) },
+                            selectedValue = lyricsBackground,
+                            values = availableLyricsBackgroundStyles,
+                            onValueSelected = onLyricsBackgroundChange,
+                            isEnabled =
+                                playerBackground != PlayerBackgroundStyle.CUSTOM &&
+                                    isLyricsBackgroundStyleAvailable,
+                            valueText = {
+                                when (it) {
+                                    LyricsBackgroundStyle.DEFAULT -> stringResource(R.string.lyrics_background_default)
+                                    LyricsBackgroundStyle.FOLLOW_THEME -> stringResource(R.string.follow_theme)
+                                    LyricsBackgroundStyle.COLORING -> stringResource(R.string.coloring)
+                                    LyricsBackgroundStyle.MOVING_BLUR -> stringResource(R.string.lyrics_background_moving_blur)
+                                    LyricsBackgroundStyle.CUSTOM -> stringResource(R.string.custom)
+                                }
+                            },
+                        )
+                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S &&
+                            lyricsBackground == LyricsBackgroundStyle.MOVING_BLUR
+                        ) {
+                            Text(
+                                text = stringResource(R.string.moving_blur_static_disclaimer),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 56.dp, top = 4.dp, end = 16.dp),
+                            )
+                        }
+                    }
                 }
 
                 item(visible = playerBackground == PlayerBackgroundStyle.CUSTOM) {
                     PreferenceEntry(
+                        modifier = positions.modifierFor("customized_background"),
                         title = { Text(stringResource(R.string.customized_background)) },
                         icon = { Icon(painterResource(R.drawable.image), null) },
                         onClick = { navController.navigate("customize_background") },
@@ -836,23 +939,61 @@ fun AppearanceSettings(navController: NavController) {
                 }
 
                 item {
-                    EnumListPreference(
-                        title = { Text(stringResource(R.string.mini_player_background_style)) },
-                        icon = { Icon(painterResource(R.drawable.gradient), null) },
-                        selectedValue = miniPlayerBackground,
-                        onValueSelected = onMiniPlayerBackgroundChange,
-                        valueText = {
-                            when (it) {
-                                MiniPlayerBackgroundStyle.THEME -> stringResource(R.string.follow_theme)
-                                MiniPlayerBackgroundStyle.GRADIENT -> stringResource(R.string.gradient)
-                                MiniPlayerBackgroundStyle.GLOW -> stringResource(R.string.glow)
-                            }
-                        },
-                    )
+                    Column(modifier = positions.modifierFor("mini_player_background_style")) {
+                        EnumListPreference(
+                            title = { Text(stringResource(R.string.mini_player_background_style)) },
+                            icon = { Icon(painterResource(R.drawable.gradient), null) },
+                            selectedValue = miniPlayerBackground,
+                            onValueSelected = { newStyle ->
+                                val canUseLiquidGlass =
+                                    liquidGlassEnabled &&
+                                        Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+                                val effective =
+                                    if (newStyle == MiniPlayerBackgroundStyle.LIQUID_GLASS &&
+                                        !canUseLiquidGlass
+                                    ) {
+                                        MiniPlayerBackgroundStyle.THEME
+                                    } else {
+                                        newStyle
+                                    }
+                                onMiniPlayerBackgroundChange(effective)
+                            },
+                            valueText = {
+                                when (it) {
+                                    MiniPlayerBackgroundStyle.THEME -> stringResource(R.string.follow_theme)
+                                    MiniPlayerBackgroundStyle.GRADIENT -> stringResource(R.string.gradient)
+                                    MiniPlayerBackgroundStyle.GLOW -> stringResource(R.string.glow)
+                                    MiniPlayerBackgroundStyle.FROSTED -> stringResource(R.string.frosted_blur)
+                                    MiniPlayerBackgroundStyle.LIQUID_GLASS -> stringResource(R.string.liquid_glass)
+                                }
+                            },
+                        )
+                        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S &&
+                            miniPlayerBackground == MiniPlayerBackgroundStyle.FROSTED
+                        ) {
+                            Text(
+                                text = stringResource(R.string.frosted_mini_player_unsupported),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 56.dp, top = 4.dp, end = 16.dp),
+                            )
+                        }
+                        if (miniPlayerBackground == MiniPlayerBackgroundStyle.LIQUID_GLASS &&
+                            (!liquidGlassEnabled || Build.VERSION.SDK_INT < Build.VERSION_CODES.S)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.liquid_glass_mini_player_unsupported),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 56.dp, top = 4.dp, end = 16.dp),
+                            )
+                        }
+                    }
                 }
 
                 item {
                     SwitchPreference(
+                        modifier = positions.modifierFor("hide_player_thumbnail"),
                         title = { Text(stringResource(R.string.hide_player_thumbnail)) },
                         description = stringResource(R.string.hide_player_thumbnail_desc),
                         icon = { Icon(painterResource(R.drawable.hide_image), null) },
@@ -869,6 +1010,7 @@ fun AppearanceSettings(navController: NavController) {
 
                 item {
                     SwitchPreference(
+                        modifier = positions.modifierFor("crop_thumbnail_to_square"),
                         title = { Text(stringResource(R.string.crop_thumbnail_to_square)) },
                         description = stringResource(R.string.crop_thumbnail_to_square_desc),
                         icon = { Icon(painterResource(R.drawable.image), null) },
@@ -887,237 +1029,137 @@ fun AppearanceSettings(navController: NavController) {
                 }
 
                 item {
-                    EnumListPreference(
-                        title = { Text(stringResource(R.string.player_buttons_style)) },
-                        description =
-                            if (isPlayerStyleCustomizationEnabled) {
-                                null
-                            } else {
-                                stringResource(R.string.player_background_style_v8_v9_desc)
-                            },
-                        icon = { Icon(painterResource(R.drawable.palette), null) },
-                        selectedValue = playerButtonsStyle,
-                        onValueSelected = onPlayerButtonsStyleChange,
-                        isEnabled = isPlayerStyleCustomizationEnabled,
-                        valueText = {
-                            when (it) {
-                                PlayerButtonsStyle.DEFAULT -> stringResource(R.string.default_style)
-                                PlayerButtonsStyle.SECONDARY -> stringResource(R.string.secondary_color_style)
-                            }
-                        },
-                    )
-                }
-
-                item {
-                    PreferenceEntry(
-                        title = { Text(stringResource(R.string.player_slider_style)) },
-                        description = sliderStyleLabel(sliderStyle),
-                        icon = { Icon(painterResource(R.drawable.sliders), null) },
-                        onClick = {
-                            showSliderOptionDialog = true
-                        },
-                        isEnabled = isPlayerStyleCustomizationEnabled,
-                    )
-                }
-
-                item {
-                    SwitchPreference(
-                        title = { Text(stringResource(R.string.enable_swipe_thumbnail)) },
-                        icon = { Icon(painterResource(R.drawable.swipe), null) },
-                        checked = swipeThumbnail,
-                        onCheckedChange = onSwipeThumbnailChange,
-                    )
-                }
-
-                item(visible = swipeThumbnail) {
-                    var showSensitivityDialog by rememberSaveable { mutableStateOf(false) }
-
-                    if (showSensitivityDialog) {
-                        var tempSensitivity by remember { mutableFloatStateOf(swipeSensitivity) }
-
-                        DefaultDialog(
-                            onDismiss = {
-                                tempSensitivity = swipeSensitivity
-                                showSensitivityDialog = false
-                            },
-                            buttons = {
-                                TextButton(
-                                    onClick = {
-                                        tempSensitivity = 0.73f
-                                    },
-                                    shapes = ButtonDefaults.shapes(),
-                                ) {
-                                    Text(stringResource(R.string.reset))
-                                }
-
-                                Spacer(modifier = Modifier.weight(1f))
-
-                                TextButton(
-                                    onClick = {
-                                        tempSensitivity = swipeSensitivity
-                                        showSensitivityDialog = false
-                                    },
-                                    shapes = ButtonDefaults.shapes(),
-                                ) {
-                                    Text(stringResource(android.R.string.cancel))
-                                }
-                                TextButton(
-                                    onClick = {
-                                        onSwipeSensitivityChange(tempSensitivity)
-                                        showSensitivityDialog = false
-                                    },
-                                    shapes = ButtonDefaults.shapes(),
-                                ) {
-                                    Text(stringResource(android.R.string.ok))
+                    Column(modifier = positions.modifierFor("player_buttons_style")) {
+                        EnumListPreference(
+                            title = { Text(stringResource(R.string.player_buttons_style)) },
+                            description =
+                                if (isPlayerStyleCustomizationEnabled) {
+                                    null
+                                } else {
+                                    stringResource(R.string.player_background_style_v8_v9_desc)
+                                },
+                            icon = { Icon(painterResource(R.drawable.palette), null) },
+                            selectedValue = playerButtonsStyle,
+                            onValueSelected = onPlayerButtonsStyleChange,
+                            isEnabled = isPlayerStyleCustomizationEnabled,
+                            valueText = {
+                                when (it) {
+                                    PlayerButtonsStyle.DEFAULT -> stringResource(R.string.default_style)
+                                    PlayerButtonsStyle.SECONDARY -> stringResource(R.string.secondary_color_style)
                                 }
                             },
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier.padding(16.dp),
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.swipe_sensitivity),
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    modifier = Modifier.padding(bottom = 16.dp),
-                                )
-
-                                Text(
-                                    text = stringResource(R.string.sensitivity_percentage, (tempSensitivity * 100).roundToInt()),
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    modifier = Modifier.padding(bottom = 16.dp),
-                                )
-
-                                Slider(
-                                    value = tempSensitivity,
-                                    onValueChange = { tempSensitivity = it },
-                                    valueRange = 0f..1f,
-                                    modifier = Modifier.fillMaxWidth(),
-                                )
-                            }
-                        }
+                        )
                     }
+                }
 
-                    PreferenceEntry(
-                        title = { Text(stringResource(R.string.swipe_sensitivity)) },
-                        description = stringResource(R.string.sensitivity_percentage, (swipeSensitivity * 100).roundToInt()),
-                        icon = { Icon(painterResource(R.drawable.tune), null) },
-                        onClick = { showSensitivityDialog = true },
-                    )
+                item {
+                    Column(modifier = positions.modifierFor("player_slider_style")) {
+                        PreferenceEntry(
+                            title = { Text(stringResource(R.string.player_slider_style)) },
+                            description = sliderStyleLabel(sliderStyle),
+                            icon = { Icon(painterResource(R.drawable.sliders), null) },
+                            onClick = {
+                                showSliderOptionDialog = true
+                            },
+                            isEnabled = isPlayerStyleCustomizationEnabled,
+                        )
+                    }
                 }
             }
 
-            PreferenceGroup(title = stringResource(R.string.misc)) {
-                item {
-                    EnumListPreference(
-                        title = { Text(stringResource(R.string.quick_picks_display_mode)) },
-                        icon = { Icon(painterResource(R.drawable.grid_view), null) },
-                        selectedValue = quickPicksDisplayMode,
-                        onValueSelected = onQuickPicksDisplayModeChange,
-                        valueText = {
-                            when (it) {
-                                QuickPicksDisplayMode.CARD -> stringResource(R.string.quick_picks_display_mode_card)
-                                QuickPicksDisplayMode.LIST -> stringResource(R.string.quick_picks_display_mode_list)
-                            }
-                        },
-                    )
-                }
-
-                item {
-                    EnumListPreference(
-                        title = { Text(stringResource(R.string.default_open_tab)) },
-                        icon = { Icon(painterResource(R.drawable.nav_bar), null) },
-                        selectedValue = defaultOpenTab,
-                        onValueSelected = onDefaultOpenTabChange,
-                        valueText = {
-                            when (it) {
-                                NavigationTab.HOME -> stringResource(R.string.home)
-                                NavigationTab.SEARCH -> stringResource(R.string.search)
-                                NavigationTab.LIBRARY -> stringResource(R.string.filter_library)
-                            }
-                        },
-                    )
-                }
-
-                item {
-                    ListPreference(
-                        title = { Text(stringResource(R.string.default_lib_chips)) },
-                        icon = { Icon(painterResource(R.drawable.tab), null) },
-                        selectedValue = defaultChip,
-                        values = DefaultLibraryFilterOrder,
-                        valueText = {
-                            when (it) {
-                                LibraryFilter.SONGS -> stringResource(R.string.songs)
-                                LibraryFilter.ARTISTS -> stringResource(R.string.artists)
-                                LibraryFilter.ALBUMS -> stringResource(R.string.albums)
-                                LibraryFilter.PLAYLISTS -> stringResource(R.string.playlists)
-                                LibraryFilter.PODCASTS -> stringResource(R.string.podcast)
-                                LibraryFilter.SPOTIFY -> stringResource(R.string.spotify_playlists)
-                                LibraryFilter.LIBRARY -> stringResource(R.string.filter_library)
-                            }
-                        },
-                        onValueSelected = onDefaultChipChange,
-                    )
-                }
-
-                item {
-                    PreferenceEntry(
-                        title = { Text(stringResource(R.string.arrange_library_chips)) },
-                        description = stringResource(R.string.arrange_library_chips_desc),
-                        icon = { Icon(painterResource(R.drawable.tab), null) },
-                        onClick = { showLibraryChipOrderDialog = true },
-                    )
-                }
-
-                item {
-                    PreferenceEntry(
-                        title = { Text(stringResource(R.string.arrange_playlist_tags)) },
-                        description = stringResource(R.string.arrange_playlist_tags_desc),
-                        icon = { Icon(painterResource(R.drawable.style), null) },
-                        onClick = { showPlaylistTagOrderDialog = true },
-                    )
-                }
-
-                item {
-                    PreferenceEntry(
-                        title = { Text(stringResource(R.string.manage_playlist_tags)) },
-                        description = stringResource(R.string.manage_playlist_tags_desc),
-                        icon = { Icon(painterResource(R.drawable.style), null) },
-                        onClick = { showTagsManagementDialog = true },
-                    )
-                }
-
+            PreferenceGroup(
+                modifier = positions.modifierFor("home_screen"),
+                title = stringResource(R.string.home),
+            ) {
                 item {
                     SwitchPreference(
-                        title = { Text(stringResource(R.string.show_home_category_chips)) },
-                        description = stringResource(R.string.show_home_category_chips_desc),
+                        modifier = positions.modifierFor("minimal_home_mode"),
+                        title = { Text(stringResource(R.string.minimal_home_mode)) },
+                        description = stringResource(R.string.minimal_home_mode_desc),
                         icon = { Icon(painterResource(R.drawable.home_outlined), null) },
-                        checked = showHomeCategoryChips,
-                        onCheckedChange = onShowHomeCategoryChipsChange,
+                        checked = minimalHomeMode,
+                        onCheckedChange = onMinimalHomeModeChange,
+                    )
+                }
+
+                item {
+                    Column(modifier = positions.modifierFor("default_open_tab")) {
+                        EnumListPreference(
+                            title = { Text(stringResource(R.string.default_open_tab)) },
+                            icon = { Icon(painterResource(R.drawable.nav_bar), null) },
+                            selectedValue = defaultOpenTab,
+                            onValueSelected = onDefaultOpenTabChange,
+                            valueText = {
+                                when (it) {
+                                    NavigationTab.HOME -> stringResource(R.string.home)
+                                    NavigationTab.SEARCH -> stringResource(R.string.search)
+                                    NavigationTab.LIBRARY -> stringResource(R.string.filter_library)
+                                }
+                            },
+                        )
+                    }
+                }
+            }
+
+            PreferenceGroup(
+                modifier = positions.modifierFor("app_language"),
+                title = stringResource(R.string.misc),
+            ) {
+                item {
+                    SwitchPreference(
+                        modifier = positions.modifierFor("tablet_mode"),
+                        title = { Text(stringResource(R.string.tablet_mode)) },
+                        description = stringResource(R.string.tablet_mode_desc),
+                        icon = { Icon(painterResource(R.drawable.desktop_windows), null) },
+                        checked = tabletModeEnabled,
+                        onCheckedChange = onTabletModeEnabledChange,
+                    )
+                }
+
+                item {
+                    PreferenceEntry(
+                        modifier = positions.modifierFor("navigation_bar_settings", "navigation_bar_style"),
+                        title = { Text(stringResource(R.string.navigation_bar_settings_title)) },
+                        description = stringResource(R.string.navigation_bar_settings_subtitle),
+                        icon = { Icon(painterResource(R.drawable.nav_bar), null) },
+                        onClick = { navController.navigate("settings/appearance/navigation_bar") },
                     )
                 }
 
                 item {
                     SwitchPreference(
-                        title = { Text(stringResource(R.string.show_tags_in_library)) },
-                        description = stringResource(R.string.show_tags_in_library_desc),
+                        modifier = positions.modifierFor("hide_scrollbar"),
+                        title = { Text(stringResource(R.string.hide_scrollbar)) },
+                        description = stringResource(R.string.hide_scrollbar_desc),
                         icon = { Icon(painterResource(R.drawable.filter_alt), null) },
-                        checked = showTagsInLibrary,
-                        onCheckedChange = onShowTagsInLibraryChange,
+                        checked = hideScrollbar,
+                        onCheckedChange = onHideScrollbarChange,
                     )
                 }
 
+            }
+
+            PreferenceGroup(
+                modifier = positions.modifierFor("extras"),
+                title = stringResource(R.string.extras),
+            ) {
                 item {
-                    SwitchPreference(
-                        title = { Text(stringResource(R.string.swipe_song_to_add)) },
-                        icon = { Icon(painterResource(R.drawable.swipe), null) },
-                        checked = swipeToSong,
-                        onCheckedChange = onSwipeToSongChange,
+                    PreferenceEntry(
+                        title = { Text(stringResource(R.string.extras)) },
+                        description = stringResource(R.string.settings_extras_subtitle),
+                        icon = { Icon(painterResource(R.drawable.discover_tune), null) },
+                        onClick = { navController.navigate("settings/appearance/extras") },
                     )
                 }
             }
         }
-    }
+
+        ScreenHeaderHaze(
+            hazeState = headerHaze,
+            systemBarsTopPadding = systemBarsTopPadding,
+        )
+        }
+}
 }
 
 @Composable

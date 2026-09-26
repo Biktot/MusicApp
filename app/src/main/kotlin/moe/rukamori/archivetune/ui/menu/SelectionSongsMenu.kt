@@ -16,12 +16,9 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularWavyProgressIndicator
@@ -35,13 +32,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
@@ -64,6 +59,7 @@ import moe.rukamori.archivetune.R
 import moe.rukamori.archivetune.db.entities.PlaylistSongMap
 import moe.rukamori.archivetune.db.entities.Song
 import moe.rukamori.archivetune.extensions.toMediaItem
+import moe.rukamori.archivetune.innertube.YouTube
 import moe.rukamori.archivetune.models.MediaMetadata
 import moe.rukamori.archivetune.playback.ExoDownloadService
 import moe.rukamori.archivetune.playback.queues.ListQueue
@@ -71,9 +67,12 @@ import moe.rukamori.archivetune.ui.component.DefaultDialog
 import moe.rukamori.archivetune.ui.component.MenuSurfaceSection
 import moe.rukamori.archivetune.ui.component.NewAction
 import moe.rukamori.archivetune.ui.component.NewActionGrid
+import moe.rukamori.archivetune.ui.component.MenuSectionDivider
 import moe.rukamori.archivetune.ui.utils.HeaderDownloadItem
 import moe.rukamori.archivetune.ui.utils.sendAddMissingDownloads
 import java.time.LocalDateTime
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @SuppressLint("MutableCollectionMutableState")
 @Composable
@@ -134,10 +133,6 @@ fun SelectionSongMenu(
 
     var showChoosePlaylistDialog by rememberSaveable {
         mutableStateOf(false)
-    }
-
-    val notAddedList by remember {
-        mutableStateOf(mutableListOf<Song>())
     }
 
     AddToPlaylistDialog(
@@ -221,7 +216,7 @@ fun SelectionSongMenu(
 
     val configuration = LocalConfiguration.current
     val isPortrait = configuration.orientation == Configuration.ORIENTATION_PORTRAIT
-    val dividerModifier = Modifier.padding(start = 56.dp)
+    val dividerModifier = Modifier.padding(horizontal = 16.dp)
 
     LazyColumn(
         userScrollEnabled = true,
@@ -230,7 +225,7 @@ fun SelectionSongMenu(
                 start = 0.dp,
                 top = 0.dp,
                 end = 0.dp,
-                bottom = 8.dp + WindowInsets.systemBars.asPaddingValues().calculateBottomPadding(),
+                bottom = 12.dp,
             ),
     ) {
         item {
@@ -238,7 +233,7 @@ fun SelectionSongMenu(
         }
 
         item {
-            MenuSurfaceSection(modifier = Modifier.padding(vertical = 6.dp)) {
+            MenuSurfaceSection {
                 NewActionGrid(
                     actions =
                         listOf(
@@ -305,11 +300,11 @@ fun SelectionSongMenu(
         }
 
         item {
-            Spacer(modifier = Modifier.height(12.dp))
+            MenuSectionDivider()
         }
 
         item {
-            MenuSurfaceSection(modifier = Modifier.padding(vertical = 6.dp)) {
+            MenuSurfaceSection {
                 Column {
                     ListItem(
                         headlineContent = { Text(text = stringResource(R.string.add_to_queue)) },
@@ -331,6 +326,7 @@ fun SelectionSongMenu(
                     HorizontalDivider(
                         modifier = dividerModifier,
                         color = MaterialTheme.colorScheme.outlineVariant,
+                        thickness = 0.5.dp,
                     )
 
                     ListItem(
@@ -356,24 +352,32 @@ fun SelectionSongMenu(
                                 coroutineScope.launch(Dispatchers.IO) {
                                     val shouldAdd = !allInLibrary
                                     val now = LocalDateTime.now()
-                                    val requestedSongs =
-                                        songSelection
-                                            .asSequence()
-                                            .map { it.song }
-                                            .distinctBy { it.id }
-                                            .map { song ->
-                                                song.copy(
-                                                    liked = shouldAdd,
-                                                    likedDate = if (shouldAdd) now else null,
-                                                    inLibrary = if (shouldAdd) now else null,
-                                                )
-                                            }.toList()
-                                    val failedSongIds = syncUtils.likeSongs(requestedSongs)
+                                    val failed = LinkedHashSet<String>()
+                                    val updatedSongs = ArrayList<moe.rukamori.archivetune.db.entities.SongEntity>()
+                                    for (song in songSelection.asSequence().map { it.song }.distinctBy { it.id }) {
+                                        val remoteResult = YouTube.likeVideo(song.id, shouldAdd)
+                                        if (remoteResult.isFailure) {
+                                            failed += song.id
+                                            continue
+                                        }
+                                        updatedSongs +=
+                                            song.copy(
+                                                liked = shouldAdd,
+                                                likedDate = if (shouldAdd) now else null,
+                                                inLibrary = if (shouldAdd) now else null,
+                                            )
+                                    }
+
+                                    if (updatedSongs.isNotEmpty()) {
+                                        database.withTransaction {
+                                            updatedSongs.forEach(::update)
+                                        }
+                                    }
 
                                     withContext(Dispatchers.Main) {
                                         onDismiss()
                                         clearAction()
-                                        if (failedSongIds.isNotEmpty()) {
+                                        if (failed.isNotEmpty()) {
                                             Toast
                                                 .makeText(context, context.getString(R.string.error_unknown), Toast.LENGTH_SHORT)
                                                 .show()
@@ -387,6 +391,7 @@ fun SelectionSongMenu(
                     HorizontalDivider(
                         modifier = dividerModifier,
                         color = MaterialTheme.colorScheme.outlineVariant,
+                        thickness = 0.5.dp,
                     )
 
                     ListItem(
@@ -409,6 +414,7 @@ fun SelectionSongMenu(
                         },
                         modifier =
                             Modifier.clickable {
+                                onDismiss()
                                 val shouldUnlikeAll = songSelection.all { it.song.liked }
                                 val updatedSongs =
                                     songSelection
@@ -422,15 +428,10 @@ fun SelectionSongMenu(
                                 if (updatedSongs.isEmpty()) return@clickable
 
                                 coroutineScope.launch(Dispatchers.IO) {
-                                    val failedSongIds = syncUtils.likeSongs(updatedSongs)
-
-                                    withContext(Dispatchers.Main) {
-                                        onDismiss()
-                                        clearAction()
-                                        if (failedSongIds.isNotEmpty()) {
-                                            Toast.makeText(context, R.string.error_unknown, Toast.LENGTH_SHORT).show()
-                                        }
+                                    database.withTransaction {
+                                        updatedSongs.forEach(::update)
                                     }
+                                    syncUtils.likeSongs(updatedSongs)
                                 }
                             },
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
@@ -440,11 +441,11 @@ fun SelectionSongMenu(
         }
 
         item {
-            Spacer(modifier = Modifier.height(12.dp))
+            MenuSectionDivider()
         }
 
         item {
-            MenuSurfaceSection(modifier = Modifier.padding(vertical = 6.dp)) {
+            MenuSurfaceSection {
                 when (downloadState) {
                     Download.STATE_COMPLETED -> {
                         ListItem(
@@ -506,6 +507,7 @@ fun SelectionSongMenu(
                                                 )
                                             },
                                         downloads = downloadUtil.downloads.value,
+                                        downloadUtil = downloadUtil,
                                     )
                                 },
                             colors = ListItemDefaults.colors(containerColor = Color.Transparent),
@@ -517,11 +519,11 @@ fun SelectionSongMenu(
 
         if (songPosition?.size != 0) {
             item {
-                Spacer(modifier = Modifier.height(12.dp))
+                MenuSectionDivider()
             }
 
             item {
-                MenuSurfaceSection(modifier = Modifier.padding(vertical = 6.dp)) {
+                MenuSurfaceSection {
                     ListItem(
                         headlineContent = {
                             Text(
@@ -603,11 +605,11 @@ fun SelectionSongMenu(
 
         if (isFromCache && onRemoveFromCache != null) {
             item {
-                Spacer(modifier = Modifier.height(12.dp))
+                MenuSectionDivider()
             }
 
             item {
-                MenuSurfaceSection(modifier = Modifier.padding(vertical = 6.dp)) {
+                MenuSurfaceSection {
                     ListItem(
                         headlineContent = {
                             Text(
@@ -659,10 +661,6 @@ fun SelectionMediaMetadataMenu(
 
     var showChoosePlaylistDialog by rememberSaveable {
         mutableStateOf(false)
-    }
-
-    val notAddedList by remember {
-        mutableStateOf(mutableListOf<Song>())
     }
 
     AddToPlaylistDialog(
@@ -770,7 +768,7 @@ fun SelectionMediaMetadataMenu(
 
     val configuration = LocalConfiguration.current
     val isPortrait = configuration.orientation == Configuration.ORIENTATION_PORTRAIT
-    val dividerModifier = Modifier.padding(start = 56.dp)
+    val dividerModifier = Modifier.padding(horizontal = 16.dp)
 
     LazyColumn(
         userScrollEnabled = true,
@@ -779,7 +777,7 @@ fun SelectionMediaMetadataMenu(
                 start = 0.dp,
                 top = 0.dp,
                 end = 0.dp,
-                bottom = 8.dp + WindowInsets.systemBars.asPaddingValues().calculateBottomPadding(),
+                bottom = 12.dp,
             ),
     ) {
         item {
@@ -787,7 +785,7 @@ fun SelectionMediaMetadataMenu(
         }
 
         item {
-            MenuSurfaceSection(modifier = Modifier.padding(vertical = 6.dp)) {
+            MenuSurfaceSection {
                 NewActionGrid(
                     actions =
                         listOf(
@@ -854,11 +852,11 @@ fun SelectionMediaMetadataMenu(
         }
 
         item {
-            Spacer(modifier = Modifier.height(12.dp))
+            MenuSectionDivider()
         }
 
         item {
-            MenuSurfaceSection(modifier = Modifier.padding(vertical = 6.dp)) {
+            MenuSurfaceSection {
                 Column {
                     if (onRemoveFromHistory != null) {
                         ListItem(
@@ -887,6 +885,7 @@ fun SelectionMediaMetadataMenu(
                         HorizontalDivider(
                             modifier = dividerModifier,
                             color = MaterialTheme.colorScheme.outlineVariant,
+                            thickness = 0.5.dp,
                         )
                     }
 
@@ -926,6 +925,7 @@ fun SelectionMediaMetadataMenu(
                         HorizontalDivider(
                             modifier = dividerModifier,
                             color = MaterialTheme.colorScheme.outlineVariant,
+                            thickness = 0.5.dp,
                         )
                     }
 
@@ -949,6 +949,7 @@ fun SelectionMediaMetadataMenu(
                     HorizontalDivider(
                         modifier = dividerModifier,
                         color = MaterialTheme.colorScheme.outlineVariant,
+                        thickness = 0.5.dp,
                     )
 
                     ListItem(
@@ -971,6 +972,7 @@ fun SelectionMediaMetadataMenu(
                         },
                         modifier =
                             Modifier.clickable {
+                                onDismiss()
                                 val updatedSongs =
                                     songSelection
                                         .asSequence()
@@ -982,15 +984,10 @@ fun SelectionMediaMetadataMenu(
                                 if (updatedSongs.isEmpty()) return@clickable
 
                                 coroutineScope.launch(Dispatchers.IO) {
-                                    val failedSongIds = syncUtils.likeSongs(updatedSongs)
-
-                                    withContext(Dispatchers.Main) {
-                                        onDismiss()
-                                        clearAction()
-                                        if (failedSongIds.isNotEmpty()) {
-                                            Toast.makeText(context, R.string.error_unknown, Toast.LENGTH_SHORT).show()
-                                        }
+                                    database.withTransaction {
+                                        updatedSongs.forEach(::update)
                                     }
+                                    syncUtils.likeSongs(updatedSongs)
                                 }
                             },
                         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
@@ -1000,11 +997,11 @@ fun SelectionMediaMetadataMenu(
         }
 
         item {
-            Spacer(modifier = Modifier.height(12.dp))
+            MenuSectionDivider()
         }
 
         item {
-            MenuSurfaceSection(modifier = Modifier.padding(vertical = 6.dp)) {
+            MenuSurfaceSection {
                 when (downloadState) {
                     Download.STATE_COMPLETED -> {
                         ListItem(
@@ -1066,6 +1063,7 @@ fun SelectionMediaMetadataMenu(
                                                 )
                                             },
                                         downloads = downloadUtil.downloads.value,
+                                        downloadUtil = downloadUtil,
                                     )
                                 },
                             colors = ListItemDefaults.colors(containerColor = Color.Transparent),

@@ -29,10 +29,9 @@ import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -52,7 +51,6 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -80,12 +78,12 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.util.lerp
 import moe.rukamori.archivetune.constants.AppBarHeight
 import kotlin.math.max
+import androidx.compose.runtime.getValue
 
 @ExperimentalMaterial3Api
 @Composable
@@ -106,7 +104,8 @@ fun TopSearch(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         ),
     tonalElevation: Dp = SearchBarDefaults.TonalElevation,
-    windowInsets: WindowInsets = WindowInsets.systemBars,
+
+    windowInsets: WindowInsets = WindowInsets.safeDrawing,
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
     focusRequester: FocusRequester = remember { FocusRequester() },
     leftFocusRequester: FocusRequester? = null,
@@ -157,7 +156,7 @@ fun TopSearch(
     }
 
     BoxWithConstraints(
-        modifier = modifier.offset { IntOffset(x = 0, y = 0) },
+        modifier = modifier,
         propagateMinConstraints = true,
     ) {
         val height: Dp
@@ -373,7 +372,6 @@ private fun TextRange.coerceInText(textLength: Int): TextRange =
         end = maxOf(start, end).coerceIn(0, textLength),
     )
 
-// Measurement specs
 val InputFieldHeight = 48.dp
 private val SearchBarCornerRadius: Dp = InputFieldHeight / 2
 internal val SearchBarVerticalPadding: Dp = 8.dp

@@ -16,13 +16,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
@@ -41,12 +38,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
@@ -67,6 +62,7 @@ import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.LocalSyncUtils
 import moe.rukamori.archivetune.R
 import moe.rukamori.archivetune.constants.SpeedDialSongIdsKey
+import moe.rukamori.archivetune.constants.TelegramLosslessOnlyKey
 import moe.rukamori.archivetune.db.entities.Playlist
 import moe.rukamori.archivetune.db.entities.PlaylistSong
 import moe.rukamori.archivetune.db.entities.Song
@@ -84,8 +80,10 @@ import moe.rukamori.archivetune.ui.component.MenuSurfaceSection
 import moe.rukamori.archivetune.ui.component.NewAction
 import moe.rukamori.archivetune.ui.component.NewActionGrid
 import moe.rukamori.archivetune.ui.component.PlaylistListItem
+import moe.rukamori.archivetune.ui.component.MenuSectionDivider
 import moe.rukamori.archivetune.ui.utils.HeaderDownloadItem
 import moe.rukamori.archivetune.ui.utils.sendAddMissingDownloads
+import moe.rukamori.archivetune.telegram.TelegramChannelSync
 import moe.rukamori.archivetune.utils.SpeedDialPin
 import moe.rukamori.archivetune.utils.SpeedDialPinType
 import moe.rukamori.archivetune.utils.parseSpeedDialPins
@@ -95,6 +93,8 @@ import moe.rukamori.archivetune.utils.toggleSpeedDialPin
 import timber.log.Timber
 import java.time.LocalDateTime
 import kotlin.math.roundToInt
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @Immutable
 private data class PlaylistSyncProgressUi(
@@ -122,13 +122,15 @@ public fun PlaylistMenu(
     songList: List<Song>? = emptyList(),
     onChangeCover: (() -> Unit)? = null,
     onRemoveCover: (() -> Unit)? = null,
+
+    onAddSongs: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val database = LocalDatabase.current
     val downloadUtil = LocalDownloadUtil.current
     val playerConnection = LocalPlayerConnection.current ?: return
     val syncUtils = LocalSyncUtils.current
-    val dbPlaylist by database.playlist(playlist.id).collectAsState(initial = playlist)
+    val dbPlaylist by database.playlist(playlist.id).collectAsStateWithLifecycle(initialValue = playlist)
     val (speedDialSongIds, onSpeedDialSongIdsChange) = rememberPreference(SpeedDialSongIdsKey, "")
     val speedDialPins = remember(speedDialSongIds) { parseSpeedDialPins(speedDialSongIds) }
     val playlistPin = remember(playlist.id) { SpeedDialPin(type = SpeedDialPinType.PLAYLIST, id = playlist.id) }
@@ -515,7 +517,7 @@ public fun PlaylistMenu(
 
     val configuration = LocalConfiguration.current
     val isPortrait = configuration.orientation == Configuration.ORIENTATION_PORTRAIT
-    val dividerModifier = Modifier.padding(start = 56.dp)
+    val dividerModifier = Modifier.padding(horizontal = 16.dp)
     val startRadioText = stringResource(R.string.start_radio)
     val playText = stringResource(R.string.play)
     val shuffleText = stringResource(R.string.shuffle)
@@ -610,7 +612,7 @@ public fun PlaylistMenu(
                 start = 0.dp,
                 top = 0.dp,
                 end = 0.dp,
-                bottom = 8.dp + WindowInsets.systemBars.asPaddingValues().calculateBottomPadding(),
+                bottom = 12.dp,
             ),
     ) {
         item {
@@ -618,7 +620,7 @@ public fun PlaylistMenu(
         }
 
         item {
-            MenuSurfaceSection(modifier = Modifier.padding(vertical = 6.dp)) {
+            MenuSurfaceSection {
                 NewActionGrid(
                     actions = primaryActions,
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
@@ -627,11 +629,11 @@ public fun PlaylistMenu(
         }
 
         item {
-            Spacer(modifier = Modifier.height(12.dp))
+            MenuSectionDivider()
         }
 
         item {
-            MenuSurfaceSection(modifier = Modifier.padding(vertical = 6.dp)) {
+            MenuSurfaceSection {
                 Column {
                     playlist.playlist.browseId?.let { browseId ->
                         ListItem(
@@ -661,6 +663,7 @@ public fun PlaylistMenu(
                         HorizontalDivider(
                             modifier = dividerModifier,
                             color = MaterialTheme.colorScheme.outlineVariant,
+                            thickness = 0.5.dp,
                         )
                     }
 
@@ -685,6 +688,7 @@ public fun PlaylistMenu(
                     HorizontalDivider(
                         modifier = dividerModifier,
                         color = MaterialTheme.colorScheme.outlineVariant,
+                        thickness = 0.5.dp,
                     )
 
                     ListItem(
@@ -706,6 +710,7 @@ public fun PlaylistMenu(
                     HorizontalDivider(
                         modifier = dividerModifier,
                         color = MaterialTheme.colorScheme.outlineVariant,
+                        thickness = 0.5.dp,
                     )
 
                     ListItem(
@@ -740,6 +745,7 @@ public fun PlaylistMenu(
                         HorizontalDivider(
                             modifier = dividerModifier,
                             color = MaterialTheme.colorScheme.outlineVariant,
+                            thickness = 0.5.dp,
                         )
 
                         ListItem(
@@ -761,6 +767,7 @@ public fun PlaylistMenu(
                             HorizontalDivider(
                                 modifier = dividerModifier,
                                 color = MaterialTheme.colorScheme.outlineVariant,
+                                thickness = 0.5.dp,
                             )
 
                             ListItem(
@@ -782,6 +789,7 @@ public fun PlaylistMenu(
                             HorizontalDivider(
                                 modifier = dividerModifier,
                                 color = MaterialTheme.colorScheme.outlineVariant,
+                                thickness = 0.5.dp,
                             )
 
                             ListItem(
@@ -804,6 +812,7 @@ public fun PlaylistMenu(
                         HorizontalDivider(
                             modifier = dividerModifier,
                             color = MaterialTheme.colorScheme.outlineVariant,
+                            thickness = 0.5.dp,
                         )
 
                         ListItem(
@@ -827,11 +836,11 @@ public fun PlaylistMenu(
 
         if (downloadPlaylist != true) {
             item {
-                Spacer(modifier = Modifier.height(12.dp))
+                MenuSectionDivider()
             }
 
             item {
-                MenuSurfaceSection(modifier = Modifier.padding(vertical = 6.dp)) {
+                MenuSurfaceSection {
                     when (downloadState) {
                         Download.STATE_COMPLETED -> {
                             ListItem(
@@ -893,6 +902,7 @@ public fun PlaylistMenu(
                                                     )
                                                 },
                                             downloads = downloadUtil.downloads.value,
+                                            downloadUtil = downloadUtil,
                                         )
                                     },
                                 colors = ListItemDefaults.colors(containerColor = Color.Transparent),
@@ -905,11 +915,67 @@ public fun PlaylistMenu(
 
         if (autoPlaylist != true) {
             item {
-                Spacer(modifier = Modifier.height(12.dp))
+                MenuSectionDivider()
             }
 
             item {
-                MenuSurfaceSection(modifier = Modifier.padding(vertical = 6.dp)) {
+                MenuSurfaceSection {
+                    val isTelegramPlaylist = playlist.playlist.id.startsWith("LPtg")
+                    if (isTelegramPlaylist) {
+                        val losslessOnly by rememberPreference(TelegramLosslessOnlyKey, defaultValue = false)
+
+                        if (onAddSongs != null) {
+                            ListItem(
+                                headlineContent = { Text(text = stringResource(R.string.telegram_playlist_add_songs)) },
+                                leadingContent = {
+                                    Icon(
+                                        painter = painterResource(R.drawable.solar_add_circle_linear),
+                                        contentDescription = null,
+                                    )
+                                },
+                                modifier =
+                                    Modifier.clickable {
+                                        onDismiss()
+                                        onAddSongs.invoke()
+                                    },
+                                colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                            )
+
+                            HorizontalDivider(
+                                modifier = dividerModifier,
+                                color = MaterialTheme.colorScheme.outlineVariant,
+                                thickness = 0.5.dp,
+                            )
+                        }
+                        ListItem(
+                            headlineContent = { Text(text = stringResource(R.string.refresh_telegram_playlist)) },
+                            leadingContent = {
+                                Icon(
+                                    painter = painterResource(R.drawable.sync),
+                                    contentDescription = null,
+                                )
+                            },
+                            modifier =
+                                Modifier.clickable {
+                                    onDismiss()
+                                    val chatId = playlist.playlist.id.removePrefix("LPtg").toLongOrNull() ?: return@clickable
+                                    TelegramChannelSync.syncAsync(
+                                        database = database,
+                                        chatId = chatId,
+                                        title = playlist.playlist.name,
+                                        losslessOnly = losslessOnly,
+                                    )
+                                },
+                            colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                        )
+
+                        HorizontalDivider(
+                            modifier = dividerModifier,
+                            color = MaterialTheme.colorScheme.outlineVariant,
+                            thickness = 0.5.dp,
+                        )
+                    }
+
                     ListItem(
                         headlineContent = { Text(text = stringResource(R.string.sync_playlist)) },
                         leadingContent = {
@@ -930,6 +996,7 @@ public fun PlaylistMenu(
                     HorizontalDivider(
                         modifier = dividerModifier,
                         color = MaterialTheme.colorScheme.outlineVariant,
+                        thickness = 0.5.dp,
                     )
 
                     ListItem(
@@ -968,6 +1035,7 @@ public fun PlaylistMenu(
                     HorizontalDivider(
                         modifier = dividerModifier,
                         color = MaterialTheme.colorScheme.outlineVariant,
+                        thickness = 0.5.dp,
                     )
 
                     ListItem(
@@ -996,11 +1064,11 @@ public fun PlaylistMenu(
 
         playlist.playlist.shareLink?.let { shareLink ->
             item {
-                Spacer(modifier = Modifier.height(12.dp))
+                MenuSectionDivider()
             }
 
             item {
-                MenuSurfaceSection(modifier = Modifier.padding(vertical = 6.dp)) {
+                MenuSurfaceSection {
                     ListItem(
                         headlineContent = { Text(text = shareText) },
                         leadingContent = {

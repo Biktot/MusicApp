@@ -27,63 +27,68 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.TextUnitType
 import androidx.compose.ui.unit.dp
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import moe.rukamori.archivetune.LocalDatabase
 import moe.rukamori.archivetune.LocalSyncUtils
 import moe.rukamori.archivetune.R
-import moe.rukamori.archivetune.constants.ImportSourcePriorityKey
+import moe.rukamori.archivetune.constants.InnerTubeCookieKey
 import moe.rukamori.archivetune.constants.ListThumbnailSize
+import moe.rukamori.archivetune.constants.YtmSyncKey
 import moe.rukamori.archivetune.db.entities.Playlist
 import moe.rukamori.archivetune.db.entities.Song
-import moe.rukamori.archivetune.models.ImportSource
-import moe.rukamori.archivetune.models.ImportedSongResult
+import moe.rukamori.archivetune.innertube.YouTube
+import moe.rukamori.archivetune.innertube.models.SongItem
 import moe.rukamori.archivetune.models.toMediaMetadata
-import moe.rukamori.archivetune.playlistimport.ImportSongResolver
 import moe.rukamori.archivetune.ui.component.CreatePlaylistDialog
 import moe.rukamori.archivetune.ui.component.DefaultDialog
 import moe.rukamori.archivetune.ui.component.ListDialog
 import moe.rukamori.archivetune.ui.component.ListItem
 import moe.rukamori.archivetune.ui.component.PlaylistListItem
-import moe.rukamori.archivetune.utils.rememberPreference
+import moe.rukamori.archivetune.innertube.utils.hasYouTubeLoginCookie
+import moe.rukamori.archivetune.utils.dataStore
 import timber.log.Timber
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
+import java.time.LocalDateTime
+import java.util.concurrent.atomic.AtomicInteger
+import kotlinx.coroutines.flow.firstOrNull
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @Composable
 fun AddToPlaylistDialogOnline(
     isVisible: Boolean,
     allowSyncing: Boolean = true,
     initialTextFieldValue: String? = null,
-    songs: SnapshotStateList<Song>, // list of song ids. Songs should be inserted to database in this function.
+    songs: SnapshotStateList<Song>,
     onDismiss: () -> Unit,
     onProgressStart: (Boolean) -> Unit,
     onPercentageChange: (Int) -> Unit,
     onStatusChange: (String) -> Unit = {},
 ) {
-    val context = LocalContext.current
     val database = LocalDatabase.current
-    val syncUtils = LocalSyncUtils.current
     val coroutineScope = rememberCoroutineScope()
-    val importResolver = remember { ImportSongResolver() }
-    val (importLocalFirst) = rememberPreference(ImportSourcePriorityKey, false)
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val syncUtils = LocalSyncUtils.current
     var allPlaylists by remember { mutableStateOf(emptyList<Playlist>()) }
     val playlists = remember(allPlaylists) { playlistsForAddToPlaylist(allPlaylists).asReversed() }
 
@@ -91,12 +96,15 @@ fun AddToPlaylistDialogOnline(
         mutableStateOf(false)
     }
 
+    var selectedPlaylist by remember {
+        mutableStateOf<Playlist?>(null)
+    }
+    val songIds by remember {
+        mutableStateOf<List<String>?>(null)
+    }
+
     var showResultDialog by remember { mutableStateOf(false) }
     var processingSummary by remember { mutableStateOf<ProcessingSummary?>(null) }
-    var reviewResults by remember { mutableStateOf<List<ImportedSongResult>?>(null) }
-    var reviewLocalLibrary by remember { mutableStateOf(emptyList<Song>()) }
-    var pendingTargetPlaylist by remember { mutableStateOf<Playlist?>(null) }
-    var pendingAddToLiked by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         database.playlistsByCreateDateAsc().collect {
@@ -104,7 +112,7 @@ fun AddToPlaylistDialogOnline(
         }
     }
 
-    fun prepareSongsForReview(
+    fun processSongs(
         targetPlaylist: Playlist?,
         addToLiked: Boolean,
     ) {
@@ -124,138 +132,160 @@ fun AddToPlaylistDialogOnline(
                 withContext(Dispatchers.Main) {
                     onProgressStart(true)
                     onPercentageChange(0)
-                    onStatusChange(context.getString(R.string.import_preparing))
+                    onStatusChange("Preparing import...")
                     onDismiss()
                 }
 
-                val localLibrary = database.importSongCandidates().first()
-                val resolved =
-                    importResolver.resolve(
-                        songs = snapshotSongs,
-                        localLibrary = localLibrary,
-                        localFirst = importLocalFirst,
-                        onProgress = { completed, count ->
-                            val percent = ((completed.toDouble() / count) * 100).toInt().coerceIn(0, 100)
-                            withContext(Dispatchers.Main) {
-                                onPercentageChange(percent)
-                                onStatusChange(context.getString(R.string.import_matching_progress, completed, count))
-                            }
-                        },
-                    )
+                val processed = AtomicInteger(0)
+                val successCount = AtomicInteger(0)
+                val failCount = AtomicInteger(0)
+                val failedSongs = mutableListOf<String>()
 
-                withContext(Dispatchers.Main) {
-                    onPercentageChange(100)
-                    pendingTargetPlaylist = targetPlaylist
-                    pendingAddToLiked = addToLiked
-                    reviewLocalLibrary = localLibrary
-                    reviewResults = resolved
-                }
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Exception) {
-                Timber.e(error, "Import matching failed")
-                withContext(Dispatchers.Main) {
-                    processingSummary =
-                        ProcessingSummary(
-                            total = total,
-                            success = 0,
-                            failed = total,
-                            failedItems = snapshotSongs.map { it.title },
-                        )
-                    showResultDialog = true
-                }
-            } finally {
-                withContext(Dispatchers.Main) {
-                    onProgressStart(false)
-                }
-            }
-        }
-    }
+                val succeededIds = java.util.Collections.synchronizedList(mutableListOf<String>())
 
-    fun saveReviewedSongs(confirmedResults: List<ImportedSongResult>) {
-        val targetPlaylist = pendingTargetPlaylist
-        val addToLiked = pendingAddToLiked
-        coroutineScope.launch(Dispatchers.IO) {
-            val failedSongs = mutableListOf<String>()
-            val preparedResults = mutableListOf<ImportedSongResult>()
-            val total = confirmedResults.size
+                val semaphore = Semaphore(5)
 
-            try {
-                withContext(Dispatchers.Main) {
-                    onProgressStart(true)
-                    onPercentageChange(0)
-                    onStatusChange(context.getString(R.string.import_saving))
-                }
+                val tasks =
+                    snapshotSongs.map { song ->
+                        async {
+                            semaphore.withPermit {
+                                val allArtists =
+                                    song.artists
+                                        .joinToString(" ") { artist ->
+                                            try {
+                                                URLDecoder.decode(artist.name, StandardCharsets.UTF_8.toString())
+                                            } catch (e: Exception) {
+                                                artist.name
+                                            }
+                                        }.trim()
 
-                confirmedResults.forEachIndexed { index, result ->
-                    val resolvedSong = result.resolvedSong
-                    if (resolvedSong == null || result.resolvedId == null) {
-                        failedSongs += result.originalSong.title
-                    } else {
-                        try {
-                            if (result.source == ImportSource.YOUTUBE) {
-                                database.insert(resolvedSong.toMediaMetadata())
-                            }
-                            preparedResults += result
-                        } catch (error: Exception) {
-                            Timber.e(error, "Failed to prepare imported song: %s", result.originalSong.title)
-                            failedSongs += result.originalSong.title
-                        }
-                    }
+                                val query =
+                                    if (allArtists.isEmpty()) {
+                                        song.title
+                                    } else {
+                                        "${song.title} - $allArtists"
+                                    }
 
-                    val percent = (((index + 1).toDouble() / total.coerceAtLeast(1)) * 80).toInt()
-                    withContext(Dispatchers.Main) {
-                        onPercentageChange(percent)
-                        onStatusChange(context.getString(R.string.import_saving_progress, index + 1, total))
-                    }
-                }
+                                var success = false
+                                try {
+                                    val result = YouTube.search(query, YouTube.SearchFilter.FILTER_SONG)
+                                    result
+                                        .onSuccess { search ->
+                                            val firstSong = search.items.distinctBy { it.id }.firstOrNull() as? SongItem
+                                            if (firstSong != null) {
+                                                val media = firstSong.toMediaMetadata()
+                                                val ids = listOf(firstSong.id)
+                                                try {
+                                                    database.insert(media)
+                                                    if (targetPlaylist != null) {
+                                                        database.addSongToPlaylist(targetPlaylist, ids)
+                                                    }
+                                                    if (addToLiked) {
+                                                        val entity = media.toSongEntity()
+                                                        database.query {
+                                                            update(entity.toggleLike())
+                                                        }
+                                                    }
+                                                    synchronized(succeededIds) {
+                                                        succeededIds.addAll(ids)
+                                                    }
+                                                    success = true
+                                                } catch (e: Exception) {
+                                                    Timber.e(e, "Error inserting/adding song")
+                                                }
+                                            }
+                                        }.onFailure {
+                                            Timber.w(it, "Search failed for $query")
+                                        }
+                                } catch (e: Exception) {
+                                    Timber.e(e, "Error processing song $query")
+                                }
 
-                val savedResults =
-                    if (targetPlaylist != null) {
-                        try {
-                            database.addSongToPlaylist(targetPlaylist, preparedResults.mapNotNull { it.resolvedId })
-                            preparedResults
-                        } catch (error: Exception) {
-                            Timber.e(error, "Failed to add imported songs to playlist")
-                            failedSongs += preparedResults.map { it.originalSong.title }
-                            emptyList()
-                        }
-                    } else if (addToLiked) {
-                        val missingSongIds = mutableSetOf<String>()
-                        val likeRequests =
-                            preparedResults.mapNotNull { result ->
-                                val resolvedId = checkNotNull(result.resolvedId)
-                                val storedSong = database.getSongById(resolvedId)?.song
-                                if (storedSong == null) {
-                                    missingSongIds += resolvedId
-                                    failedSongs += result.originalSong.title
-                                    null
-                                } else if (storedSong.liked) {
-                                    null
+                                if (success) {
+                                    successCount.incrementAndGet()
                                 } else {
-                                    storedSong.toggleLike()
+                                    failCount.incrementAndGet()
+                                    synchronized(failedSongs) {
+                                        failedSongs.add(song.title)
+                                    }
+                                }
+
+                                val currentProcessed = processed.incrementAndGet()
+                                val percent =
+                                    ((currentProcessed.toDouble() / total.toDouble()) * 100)
+                                        .toInt()
+                                        .coerceIn(0, 100)
+
+                                withContext(Dispatchers.Main) {
+                                    onPercentageChange(percent)
+                                    onStatusChange("Importing: $currentProcessed/$total\nFailed: ${failCount.get()}")
                                 }
                             }
-                        val failedSongIds = syncUtils.likeSongs(likeRequests) + missingSongIds
-                        if (failedSongIds.isNotEmpty()) {
-                            preparedResults
-                                .filter { it.resolvedId in failedSongIds && it.resolvedId !in missingSongIds }
-                                .forEach { result -> failedSongs += result.originalSong.title }
                         }
-                        preparedResults.filterNot { result -> result.resolvedId in failedSongIds }
-                    } else {
-                        preparedResults
                     }
 
+                runCatching { tasks.awaitAll() }.onFailure {
+                    Timber.e(it, "Import failed")
+                }
+
+                if (targetPlaylist != null && succeededIds.isNotEmpty()) {
+                    runCatching {
+                        val preferences = context.dataStore.data.firstOrNull()
+                        val isSignedIn = preferences != null &&
+                            hasYouTubeLoginCookie(preferences[InnerTubeCookieKey].orEmpty())
+                        val isYtSyncEnabled = preferences == null || (preferences[YtmSyncKey] ?: true)
+                        if (isSignedIn && isYtSyncEnabled) {
+                            val livePlaylist = database.playlist(targetPlaylist.id).firstOrNull() ?: targetPlaylist
+                            val remoteBrowseId = livePlaylist.playlist.browseId
+                            if (!remoteBrowseId.isNullOrBlank()) {
+                                withContext(Dispatchers.Main) {
+                                    onStatusChange("Syncing playlist to YouTube Music...")
+                                }
+                                syncUtils.syncPlaylistNow(remoteBrowseId, livePlaylist.id)
+                            } else {
+                                withContext(Dispatchers.Main) {
+                                    onStatusChange("Creating remote playlist...")
+                                }
+                                YouTube.createPlaylist(livePlaylist.playlist.name, succeededIds.toList())
+                                    .onSuccess { createdBrowseId ->
+                                        if (createdBrowseId.isNotBlank()) {
+                                            val toUpdate = database.playlist(livePlaylist.id).firstOrNull()
+                                            if (toUpdate != null) {
+                                                database.query {
+                                                    update(
+                                                        toUpdate.playlist.copy(
+                                                            browseId = createdBrowseId,
+                                                            isEditable = true,
+                                                            bookmarkedAt = toUpdate.playlist.bookmarkedAt ?: LocalDateTime.now(),
+                                                            lastUpdateTime = LocalDateTime.now(),
+                                                        ),
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }.onFailure { error ->
+                                        Timber.w(
+                                            error,
+                                            "Remote YT Music playlist creation after import failed; " +
+                                                "playlist remains local-only.",
+                                        )
+                                    }
+                            }
+                        }
+                    }.onFailure { error ->
+                        if (error is kotlinx.coroutines.CancellationException) throw error
+                        Timber.w(error, "Post-import playlist sync failed; playlist remains local-only.")
+                    }
+                }
+
                 withContext(Dispatchers.Main) {
-                    val distinctFailedSongs = failedSongs.distinct()
                     onPercentageChange(100)
                     processingSummary =
                         ProcessingSummary(
                             total = total,
-                            success = savedResults.size,
-                            failed = distinctFailedSongs.size,
-                            failedItems = distinctFailedSongs,
+                            success = successCount.get(),
+                            failed = failCount.get(),
+                            failedItems = failedSongs,
                         )
                     showResultDialog = true
                 }
@@ -289,12 +319,13 @@ fun AddToPlaylistDialogOnline(
                 )
             }
 
-            items(playlists) { playlist ->
+            items(playlists, key = { it.id }) { playlist ->
                 PlaylistListItem(
                     playlist = playlist,
-                        modifier =
-                            Modifier.clickable {
-                            prepareSongsForReview(targetPlaylist = playlist, addToLiked = false)
+                    modifier =
+                        Modifier.clickable {
+                            selectedPlaylist = playlist
+                            processSongs(targetPlaylist = playlist, addToLiked = false)
                         },
                 )
             }
@@ -303,15 +334,15 @@ fun AddToPlaylistDialogOnline(
                 ListItem(
                     modifier =
                         Modifier.clickable {
-                            prepareSongsForReview(targetPlaylist = null, addToLiked = true)
+                            processSongs(targetPlaylist = null, addToLiked = true)
                         },
                     title = stringResource(R.string.liked_songs),
                     thumbnailContent = {
                         Image(
-                            painter = painterResource(id = R.drawable.favorite), // The XML image
+                            painter = painterResource(id = R.drawable.favorite),
                             contentDescription = null,
-                            modifier = Modifier.size(40.dp), // Adjust size as needed
-                            colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onBackground), // Optional tinting
+                            modifier = Modifier.size(40.dp),
+                            colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.onBackground),
                         )
                     },
                     trailingContent = {},
@@ -336,27 +367,6 @@ fun AddToPlaylistDialogOnline(
         )
     }
 
-    reviewResults?.let { results ->
-        ImportReviewScreen(
-            results = results,
-            localLibrary = reviewLocalLibrary,
-            onCancel = {
-                reviewResults = null
-                reviewLocalLibrary = emptyList()
-                pendingTargetPlaylist = null
-                pendingAddToLiked = false
-            },
-            onConfirm = { confirmedResults ->
-                reviewResults = null
-                reviewLocalLibrary = emptyList()
-                saveReviewedSongs(confirmedResults)
-                pendingTargetPlaylist = null
-                pendingAddToLiked = false
-            },
-        )
-    }
-
-    // Result Dialog
     if (showResultDialog && processingSummary != null) {
         val summary = processingSummary!!
         DefaultDialog(
@@ -381,7 +391,7 @@ fun AddToPlaylistDialogOnline(
                                 .fillMaxWidth()
                                 .height(150.dp),
                     ) {
-                        items(summary.failedItems) { title ->
+                        items(summary.failedItems, key = { it }) { title ->
                             Text(
                                 text = "• $title",
                                 style = MaterialTheme.typography.bodySmall,

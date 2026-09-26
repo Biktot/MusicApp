@@ -55,7 +55,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -84,7 +83,10 @@ import moe.rukamori.archivetune.constants.PlayerCustomBrightnessKey
 import moe.rukamori.archivetune.constants.PlayerCustomContrastKey
 import moe.rukamori.archivetune.constants.PlayerCustomImageUriKey
 import moe.rukamori.archivetune.utils.rememberPreference
+import moe.rukamori.archivetune.ui.component.FrostedHeaderPill
 import kotlin.math.roundToInt
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.runtime.getValue
 
 private const val DEFAULT_BLUR = 0f
 private const val DEFAULT_CONTRAST = 1f
@@ -144,36 +146,42 @@ fun CustomizeBackground(navController: NavController) {
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             MediumFlexibleTopAppBar(
-                title = {
-                    Text(
-                        text = stringResource(R.string.customize_background_title),
-                        fontWeight = FontWeight.Bold,
-                    )
-                },
-                subtitle = {
-                    Text(text = stringResource(R.string.custom_background_subtitle))
-                },
+                title = {},
                 navigationIcon = {
-                    IconButton(
-                        onClick = navController::navigateUp,
-                        modifier = Modifier.padding(start = 5.dp),
-                        colors = IconButtonDefaults.filledTonalIconButtonColors(),
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.arrow_back),
-                            contentDescription = stringResource(R.string.back_button_desc),
+                    FrostedHeaderPill(plain = true) {
+                        IconButton(
+                            onClick = navController::navigateUp,
+                            modifier = Modifier.padding(start = 5.dp),
+                            colors = IconButtonDefaults.filledTonalIconButtonColors(),
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.arrow_back),
+                                contentDescription = stringResource(R.string.back_button_desc),
+                            )
+                        }
+                        Text(
+                            text = stringResource(R.string.customize_background_title),
+                            color = MaterialTheme.colorScheme.onBackground,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            modifier = Modifier.padding(end = 4.dp),
                         )
                     }
                 },
                 colors =
                     TopAppBarDefaults.topAppBarColors(
                         containerColor = MaterialTheme.colorScheme.surface,
-                        scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                        scrolledContainerColor = Color.Transparent,
                     ),
                 scrollBehavior = scrollBehavior,
             )
         },
     ) { innerPadding ->
+        val playerAwareBottomPadding =
+            LocalPlayerAwareWindowInsets.current
+                .only(WindowInsetsSides.Bottom)
+                .asPaddingValues()
+                .calculateBottomPadding()
         Box(
             modifier =
                 Modifier
@@ -181,14 +189,14 @@ fun CustomizeBackground(navController: NavController) {
                     .padding(innerPadding)
                     .windowInsetsPadding(
                         LocalPlayerAwareWindowInsets.current.only(
-                            WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom,
+                            WindowInsetsSides.Horizontal,
                         ),
                     ).verticalScroll(rememberScrollState())
                     .padding(
                         start = SettingsDimensions.ScreenHorizontalPadding,
                         top = 12.dp,
                         end = SettingsDimensions.ScreenHorizontalPadding,
-                        bottom = SettingsDimensions.ScreenBottomPadding,
+                        bottom = playerAwareBottomPadding + SettingsDimensions.ScreenBottomPadding,
                     ),
             contentAlignment = Alignment.TopCenter,
         ) {

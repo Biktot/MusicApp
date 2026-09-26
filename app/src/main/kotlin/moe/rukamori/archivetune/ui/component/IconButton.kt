@@ -72,13 +72,26 @@ fun IconButton(
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
     content: @Composable () -> Unit,
 ) {
+
+    val isPlainHeader = LocalPlainHeaderPill.current
+    val effectiveColors =
+        if (isPlainHeader) {
+            IconButtonDefaults.iconButtonColors(
+                containerColor = Color.Transparent,
+                contentColor = colors.contentColor,
+                disabledContainerColor = Color.Transparent,
+                disabledContentColor = colors.disabledContentColor,
+            )
+        } else {
+            colors
+        }
     Box(
         modifier =
             modifier
                 .minimumInteractiveComponentSize()
                 .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
                 .clip(CircleShape)
-                .background(color = colors.containerColor)
+                .background(color = effectiveColors.containerColor)
                 .combinedClickable(
                     onClick = onClick,
                     onLongClick = onLongClick,
@@ -93,7 +106,7 @@ fun IconButton(
                 ),
         contentAlignment = Alignment.Center,
     ) {
-        val contentColor = colors.contentColor
+        val contentColor = effectiveColors.contentColor
         CompositionLocalProvider(LocalContentColor provides contentColor, content = content)
     }
 }

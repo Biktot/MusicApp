@@ -51,10 +51,8 @@ import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.ToggleButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -73,6 +71,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.common.Player
 import coil3.compose.AsyncImage
+import moe.rukamori.archivetune.LocalStableSystemBarsTopPadding
 import moe.rukamori.archivetune.R
 import moe.rukamori.archivetune.constants.EnableHapticFeedbackKey
 import moe.rukamori.archivetune.db.entities.FormatEntity
@@ -89,11 +88,9 @@ import moe.rukamori.archivetune.ui.component.bottomSheetDraggable
 import moe.rukamori.archivetune.utils.makeTimeString
 import moe.rukamori.archivetune.utils.rememberPreference
 import kotlin.math.roundToInt
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
-/**
- * Current Song Header shown at the top of the queue
- * Displays album art, song info, and control buttons
- */
 @Composable
 fun CurrentSongHeader(
     sheetState: BottomSheetState,
@@ -120,6 +117,8 @@ fun CurrentSongHeader(
 ) {
     val view = LocalView.current
     val (enableHapticFeedback) = rememberPreference(EnableHapticFeedbackKey, true)
+
+    val stableTopInset = LocalStableSystemBarsTopPadding.current
     val infiniteQueueAvailable = mediaMetadata?.isPodcast != true
     val queueItemCountText =
         if (mediaMetadata?.isPodcast == true) {
@@ -133,7 +132,8 @@ fun CurrentSongHeader(
             modifier
                 .fillMaxWidth()
                 .background(backgroundColor)
-                .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+                .windowInsetsPadding(WindowInsets.systemBars.only(WindowInsetsSides.Horizontal))
+                .padding(top = stableTopInset)
                 .bottomSheetDraggable(sheetState)
                 .padding(horizontal = 16.dp)
                 .padding(top = 20.dp, bottom = 8.dp),
@@ -282,7 +282,8 @@ fun CurrentSongHeader(
 
             Text(
                 text =
-                    queueItemCountText + "  •  " + makeTimeString(queueDuration * 1000L),
+                    queueItemCountText +
+                        "  •  " + makeTimeString(queueDuration * 1000L),
                 style = MaterialTheme.typography.labelMedium,
                 color = onBackgroundColor.copy(alpha = 0.55f),
                 modifier = Modifier.padding(end = 14.dp),
@@ -393,26 +394,24 @@ fun CurrentSongHeader(
             }
         }
 
-        if (infiniteQueueAvailable) {
-            Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
-            Text(
-                text = stringResource(R.string.queue_continue_playing),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = onBackgroundColor,
-            )
+        Text(
+            text = stringResource(R.string.queue_continue_playing),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = onBackgroundColor,
+        )
 
-            Spacer(modifier = Modifier.height(2.dp))
+        Spacer(modifier = Modifier.height(2.dp))
 
-            Text(
-                text = stringResource(R.string.queue_autoplaying_similar),
-                style = MaterialTheme.typography.bodySmall,
-                color = onBackgroundColor.copy(alpha = 0.5f),
-            )
+        Text(
+            text = stringResource(R.string.queue_autoplaying_similar),
+            style = MaterialTheme.typography.bodySmall,
+            color = onBackgroundColor.copy(alpha = 0.5f),
+        )
 
-            Spacer(modifier = Modifier.height(12.dp))
-        }
+        Spacer(modifier = Modifier.height(12.dp))
 
         HorizontalDivider(
             color = onBackgroundColor.copy(alpha = 0.08f),
@@ -421,9 +420,6 @@ fun CurrentSongHeader(
     }
 }
 
-/**
- * Shared Sleep Timer Dialog component used in both Queue and Player.
- */
 @Composable
 fun SleepTimerDialog(
     onDismiss: () -> Unit,
@@ -487,9 +483,6 @@ fun SleepTimerDialog(
     )
 }
 
-/**
- * Codec information row displayed when showCodecOnPlayer is enabled.
- */
 @Composable
 fun CodecInfoRow(
     codec: String,
@@ -528,9 +521,6 @@ fun CodecInfoRow(
     }
 }
 
-/**
- * V2 Design Style collapsed queue content.
- */
 @Composable
 fun QueueCollapsedContentV2(
     showCodecOnPlayer: Boolean,
@@ -605,7 +595,6 @@ fun QueueCollapsedContentV2(
             val iconSize = 24.dp
             val borderColor = textBackgroundColor.copy(alpha = 0.35f)
 
-            // Queue button
             Box(
                 modifier =
                     Modifier
@@ -637,7 +626,6 @@ fun QueueCollapsedContentV2(
                 )
             }
 
-            // Sleep timer button
             Box(
                 modifier =
                     Modifier
@@ -675,7 +663,6 @@ fun QueueCollapsedContentV2(
                 }
             }
 
-            // Lyrics button
             Box(
                 modifier =
                     Modifier
@@ -693,7 +680,6 @@ fun QueueCollapsedContentV2(
                 )
             }
 
-            // Repeat mode button
             Box(
                 modifier =
                     Modifier
@@ -746,7 +732,6 @@ fun QueueCollapsedContentV2(
 
             Spacer(modifier = Modifier.weight(1f))
 
-            // Menu button
             Box(
                 modifier =
                     Modifier
@@ -767,9 +752,6 @@ fun QueueCollapsedContentV2(
     }
 }
 
-/**
- * V3 Design Style collapsed queue content.
- */
 @Composable
 fun QueueCollapsedContentV3(
     showCodecOnPlayer: Boolean,
@@ -812,7 +794,7 @@ fun QueueCollapsedContentV3(
                         ),
                     ),
         ) {
-            // Queue button
+
             Box(
                 modifier =
                     Modifier
@@ -840,7 +822,6 @@ fun QueueCollapsedContentV3(
                 }
             }
 
-            // Sleep timer button
             Box(
                 modifier =
                     Modifier
@@ -871,7 +852,6 @@ fun QueueCollapsedContentV3(
                 }
             }
 
-            // Lyrics button
             Box(
                 modifier =
                     Modifier
@@ -899,7 +879,6 @@ fun QueueCollapsedContentV3(
                 }
             }
 
-            // Menu button
             Box(
                 modifier =
                     Modifier
@@ -919,9 +898,6 @@ fun QueueCollapsedContentV3(
     }
 }
 
-/**
- * V1 Design Style collapsed queue content (text buttons).
- */
 @Composable
 fun QueueCollapsedContentV1(
     showCodecOnPlayer: Boolean,
@@ -1063,9 +1039,6 @@ fun QueueCollapsedContentV1(
     }
 }
 
-/**
- * V4 Design Style collapsed queue content (pill buttons).
- */
 @Composable
 fun QueueCollapsedContentV4(
     showCodecOnPlayer: Boolean,
@@ -1111,7 +1084,6 @@ fun QueueCollapsedContentV4(
             val buttonSize = 48.dp
             val iconSize = 22.dp
 
-            // Queue button (pill)
             Box(
                 modifier =
                     Modifier
@@ -1145,7 +1117,6 @@ fun QueueCollapsedContentV4(
 
             Spacer(modifier = Modifier.width(10.dp))
 
-            // Sleep timer button (circle)
             Box(
                 modifier =
                     Modifier
@@ -1190,7 +1161,6 @@ fun QueueCollapsedContentV4(
 
             Spacer(modifier = Modifier.width(10.dp))
 
-            // Lyrics button (pill)
             Box(
                 modifier =
                     Modifier
@@ -1227,90 +1197,6 @@ fun QueueCollapsedContentV4(
 
 @Composable
 fun QueueCollapsedContentV7(
-    textBackgroundColor: Color,
-    onExpandQueue: () -> Unit,
-    onShowLyrics: () -> Unit,
-    onDeviceClick: () -> Unit,
-    onMusicTogetherClick: () -> Unit,
-    device: ActiveOutputDevice,
-    modifier: Modifier = Modifier,
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .windowInsetsPadding(
-                    WindowInsets.systemBars.only(
-                        WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal,
-                    ),
-                ).padding(horizontal = 24.dp, vertical = 2.dp),
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            IconButton(onClick = onShowLyrics, modifier = Modifier.size(48.dp)) {
-                Icon(
-                    painter = painterResource(R.drawable.lyrics),
-                    contentDescription = stringResource(R.string.lyrics),
-                    tint = textBackgroundColor,
-                    modifier = Modifier.size(24.dp),
-                )
-            }
-            Surface(
-                shape = RoundedCornerShape(24.dp),
-                color = textBackgroundColor.copy(alpha = 0.12f),
-                modifier = Modifier.height(46.dp),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = onDeviceClick, modifier = Modifier.size(46.dp)) {
-                        Icon(
-                            imageVector = device.type.imageVector,
-                            contentDescription = device.name,
-                            tint = textBackgroundColor,
-                            modifier = Modifier.size(24.dp),
-                        )
-                    }
-                    Box(
-                        modifier =
-                            Modifier
-                                .height(24.dp)
-                                .width(1.dp)
-                                .background(textBackgroundColor.copy(alpha = 0.22f)),
-                    )
-                    IconButton(onClick = onMusicTogetherClick, modifier = Modifier.size(46.dp)) {
-                        Icon(
-                            painter = painterResource(R.drawable.person),
-                            contentDescription = stringResource(R.string.music_together),
-                            tint = textBackgroundColor,
-                            modifier = Modifier.size(23.dp),
-                        )
-                    }
-                }
-            }
-            IconButton(onClick = onExpandQueue, modifier = Modifier.size(48.dp)) {
-                Icon(
-                    painter = painterResource(R.drawable.queue_music),
-                    contentDescription = stringResource(R.string.queue),
-                    tint = textBackgroundColor,
-                    modifier = Modifier.size(25.dp),
-                )
-            }
-        }
-        Text(
-            text = device.name,
-            style = MaterialTheme.typography.labelSmall,
-            color = textBackgroundColor.copy(alpha = 0.72f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-    }
-}
-
-@Composable
-fun QueueCollapsedContentV8(
     showCodecOnPlayer: Boolean,
     currentFormat: FormatEntity?,
     textBackgroundColor: Color,

@@ -25,6 +25,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -58,7 +59,6 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
@@ -71,13 +71,12 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -90,17 +89,17 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
 import androidx.core.content.ContextCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
 import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.R
 import moe.rukamori.archivetune.constants.CONTENT_TYPE_HEADER
 import moe.rukamori.archivetune.constants.CONTENT_TYPE_SONG
+import moe.rukamori.archivetune.constants.LiquidGlassEnabledKey
 import moe.rukamori.archivetune.constants.LocalSongsExcludedFoldersKey
 import moe.rukamori.archivetune.constants.LocalSongsIncludedFoldersKey
 import moe.rukamori.archivetune.constants.LocalSongsMinDurationSecondsKey
@@ -111,10 +110,19 @@ import moe.rukamori.archivetune.extensions.togglePlayPause
 import moe.rukamori.archivetune.localmedia.LocalSongScanConfig
 import moe.rukamori.archivetune.localmedia.SupportedLocalAudio
 import moe.rukamori.archivetune.playback.queues.ListQueue
+import moe.rukamori.archivetune.ui.component.LargeFrostedTopAppBar
+import moe.rukamori.archivetune.ui.component.AppleMusicPlaylistHero
 import moe.rukamori.archivetune.ui.component.LocalMenuState
+import moe.rukamori.archivetune.ui.component.PlatformBackdrop
 import moe.rukamori.archivetune.ui.component.SongListItem
 import moe.rukamori.archivetune.ui.component.SortHeader
+import moe.rukamori.archivetune.ui.component.layerBackdrop
+import moe.rukamori.archivetune.ui.component.rememberBackdrop
+import moe.rukamori.archivetune.ui.component.rememberLayerBackdropSettled
 import moe.rukamori.archivetune.ui.menu.SongMenu
+import moe.rukamori.archivetune.ui.player.LocalMiniPlayerDocked
+import moe.rukamori.archivetune.ui.player.LocalPlayerLyricsFullScreen
+import moe.rukamori.archivetune.ui.utils.backToMain
 import moe.rukamori.archivetune.utils.rememberPreference
 import moe.rukamori.archivetune.viewmodels.LocalSongsScanState
 import moe.rukamori.archivetune.viewmodels.LocalSongsViewModel
@@ -122,6 +130,9 @@ import java.text.Collator
 import java.time.LocalDateTime
 import java.util.Locale
 import kotlin.math.roundToInt
+import moe.rukamori.archivetune.ui.component.KeepStatusBarHiddenInDialog
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @OptIn(
     ExperimentalFoundationApi::class,
@@ -137,8 +148,8 @@ fun LocalSongScreen(
     val haptic = LocalHapticFeedback.current
     val menuState = LocalMenuState.current
     val playerConnection = LocalPlayerConnection.current ?: return
-    val isPlaying by playerConnection.isPlaying.collectAsState()
-    val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
+    val isPlaying by playerConnection.isPlaying.collectAsStateWithLifecycle()
+    val mediaMetadata by playerConnection.mediaMetadata.collectAsStateWithLifecycle()
     val songs by viewModel.songs.collectAsStateWithLifecycle()
     val scanState by viewModel.scanState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
@@ -147,6 +158,26 @@ fun LocalSongScreen(
     var isSearchActive by rememberSaveable { mutableStateOf(false) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     var query by rememberSaveable { mutableStateOf("") }
+
+    val isListScrolling by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex > 0 ||
+                listState.firstVisibleItemScrollOffset > 0
+        }
+    }
+
+    val liquidGlassEnabled by rememberPreference(LiquidGlassEnabledKey, defaultValue = false)
+    val liquidGlassHeaderActive =
+        liquidGlassEnabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    val lyricsFullScreen = LocalPlayerLyricsFullScreen.current
+
+    val screenSettled = rememberLayerBackdropSettled()
+
+    val layerBackdropActive = liquidGlassHeaderActive && !lyricsFullScreen && screenSettled
+
+    val backdrop = rememberBackdrop(MaterialTheme.colorScheme.surface)
+
+    val pillBackdrop: PlatformBackdrop? = backdrop.takeIf { layerBackdropActive }
     val (sortDescending, onSortDescendingChange) = rememberPreference(LocalSongsSortDescendingKey, true)
     val (sortTypeName, onSortTypeNameChange) = rememberPreference(LocalSongsSortTypeKey, LocalSongSortType.MODIFIED.name)
     val (minimumDurationSeconds, onMinimumDurationSecondsChange) =
@@ -313,13 +344,22 @@ fun LocalSongScreen(
         )
     }
 
-    Scaffold(
+    CompositionLocalProvider(
+        LocalMiniPlayerDocked provides isListScrolling,
+    ) {
+    Box(
         modifier =
             Modifier
                 .fillMaxSize()
-                .nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = MaterialTheme.colorScheme.surface,
-        topBar = {
+                .background(MaterialTheme.colorScheme.surface),
+    ) {
+        Scaffold(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .nestedScroll(scrollBehavior.nestedScrollConnection),
+            containerColor = Color.Transparent,
+            topBar = {
             AnimatedContent(
                 targetState = isSearchActive,
                 transitionSpec = {
@@ -377,23 +417,11 @@ fun LocalSongScreen(
                                 .padding(top = 8.dp, bottom = 4.dp),
                     ) {}
                 } else {
-                    LargeFlexibleTopAppBar(
-                        title = {
-                            Text(
-                                text = stringResource(R.string.local_history),
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        },
-                        navigationIcon = {
-                            IconButton(onClick = navController::navigateUp) {
-                                Icon(
-                                    painter = painterResource(R.drawable.arrow_back),
-                                    contentDescription = null,
-                                )
-                            }
-                        },
+                    LargeFrostedTopAppBar(
+                        titleRes = R.string.local_files,
+                        onBack = navController::navigateUp,
+                        onBackLongClick = { navController.backToMain() },
+                        backdrop = pillBackdrop,
                         actions = {
                             IconButton(onClick = { isSearchActive = true }) {
                                 Icon(
@@ -408,11 +436,6 @@ fun LocalSongScreen(
                                 )
                             }
                         },
-                        colors =
-                            TopAppBarDefaults.largeTopAppBarColors(
-                                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
-                                scrolledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-                            ),
                         scrollBehavior = scrollBehavior,
                     )
                 }
@@ -424,6 +447,13 @@ fun LocalSongScreen(
             modifier =
                 Modifier
                     .fillMaxSize()
+                    .then(
+                        if (layerBackdropActive) {
+                            Modifier.layerBackdrop(backdrop)
+                        } else {
+                            Modifier
+                        },
+                    )
                     .padding(paddingValues),
             verticalArrangement = Arrangement.spacedBy(14.dp),
             contentPadding =
@@ -436,29 +466,90 @@ fun LocalSongScreen(
                 key = "controls",
                 contentType = CONTENT_TYPE_HEADER,
             ) {
-                LocalSongControlsCard(
-                    sortType = sortType,
-                    sortDescending = sortDescending,
-                    visibleSongCount = visibleSongs.size,
-                    shuffleEnabled = queueItems.isNotEmpty(),
-                    onSortTypeChange = { onSortTypeNameChange(it.name) },
-                    onSortDescendingChange = onSortDescendingChange,
-                    onShuffleClick = {
+                val localFilesLabel = stringResource(R.string.local_files)
+                AppleMusicPlaylistHero(
+                    sectionLabel = localFilesLabel,
+                    title = localFilesLabel,
+                    subtitle =
+                        pluralStringResource(
+                            R.plurals.n_song,
+                            visibleSongs.size,
+                            visibleSongs.size,
+                        ),
+                    onPlay =
                         if (queueItems.isNotEmpty()) {
-                            playerConnection.playQueue(
-                                ListQueue(
-                                    title =
-                                        if (query.isBlank()) {
-                                            context.getString(R.string.local_history)
-                                        } else {
-                                            context.getString(R.string.queue_searched_songs)
-                                        },
-                                    items = queueItems.shuffled(),
-                                ),
-                            )
-                        }
-                    },
+                            {
+                                playerConnection.playQueue(
+                                    ListQueue(
+                                        title =
+                                            if (query.isBlank()) {
+                                                context.getString(R.string.local_files)
+                                            } else {
+                                                context.getString(R.string.queue_searched_songs)
+                                            },
+                                        items = queueItems,
+                                    ),
+                                )
+                            }
+                        } else {
+                            null
+                        },
+                    onShuffle =
+                        if (queueItems.isNotEmpty()) {
+                            {
+                                playerConnection.playQueue(
+                                    ListQueue(
+                                        title =
+                                            if (query.isBlank()) {
+                                                context.getString(R.string.local_files)
+                                            } else {
+                                                context.getString(R.string.queue_searched_songs)
+                                            },
+                                        items = queueItems.shuffled(),
+                                    ),
+                                )
+                            }
+                        } else {
+                            null
+                        },
+                    onPrimaryTrailing = { showScanSheet = true },
+                    primaryTrailingIcon = R.drawable.settings,
+                    primaryTrailingDescription = R.string.settings,
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
                 )
+            }
+
+            if (visibleSongs.isNotEmpty()) {
+                item(
+                    key = "sortHeader",
+                    contentType = CONTENT_TYPE_HEADER,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp),
+                    ) {
+                        SortHeader(
+                            sortType = sortType,
+                            sortDescending = sortDescending,
+                            onSortTypeChange = { onSortTypeNameChange(it.name) },
+                            onSortDescendingChange = onSortDescendingChange,
+                            sortTypeText = { selectedSort ->
+                                when (selectedSort) {
+                                    LocalSongSortType.MODIFIED -> R.string.sort_by_last_updated
+                                    LocalSongSortType.NAME -> R.string.sort_by_name
+                                    LocalSongSortType.ARTIST -> R.string.sort_by_artist
+                                    LocalSongSortType.ALBUM -> R.string.sort_by_album
+                                }
+                            },
+                        )
+                    }
+                }
             }
 
             if (visibleSongs.isEmpty()) {
@@ -518,7 +609,7 @@ fun LocalSongScreen(
                                                 ListQueue(
                                                     title =
                                                         if (query.isBlank()) {
-                                                            context.getString(R.string.local_history)
+                                                            context.getString(R.string.local_files)
                                                         } else {
                                                             context.getString(R.string.queue_searched_songs)
                                                         },
@@ -538,97 +629,14 @@ fun LocalSongScreen(
                                             )
                                         }
                                     },
-                                ).padding(horizontal = 16.dp)
-                                .animateItem(),
+                                ).padding(horizontal = 16.dp),
                     )
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun LocalSongBadge(
-    iconRes: Int,
-    text: String,
-) {
-    Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = 0.92f),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-        ) {
-            Icon(
-                painter = painterResource(iconRes),
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp),
-            )
-            Text(
-                text = text,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
-
-@Composable
-private fun LocalSongControlsCard(
-    sortType: LocalSongSortType,
-    sortDescending: Boolean,
-    visibleSongCount: Int,
-    shuffleEnabled: Boolean,
-    onSortTypeChange: (LocalSongSortType) -> Unit,
-    onSortDescendingChange: (Boolean) -> Unit,
-    onShuffleClick: () -> Unit,
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 28.dp, vertical = 8.dp),
-    ) {
-        SortHeader(
-            sortType = sortType,
-            sortDescending = sortDescending,
-            onSortTypeChange = onSortTypeChange,
-            onSortDescendingChange = onSortDescendingChange,
-            sortTypeText = { selectedSort ->
-                when (selectedSort) {
-                    LocalSongSortType.MODIFIED -> R.string.sort_by_last_updated
-                    LocalSongSortType.NAME -> R.string.sort_by_name
-                    LocalSongSortType.ARTIST -> R.string.sort_by_artist
-                    LocalSongSortType.ALBUM -> R.string.sort_by_album
-                }
-            },
-        )
-
-        Spacer(modifier = Modifier.width(8.dp))
-
-        IconButton(
-            onClick = onShuffleClick,
-            enabled = shuffleEnabled,
-        ) {
-            Icon(
-                painter = painterResource(R.drawable.shuffle),
-                contentDescription = stringResource(R.string.shuffle),
-            )
         }
 
-        Spacer(modifier = Modifier.weight(1f))
-
-        Text(
-            text = pluralStringResource(R.plurals.n_song, visibleSongCount, visibleSongCount),
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.secondary,
-        )
+    }
     }
 }
 
@@ -695,7 +703,7 @@ private fun LocalSongScanSheet(
     onPrimaryAction: () -> Unit,
 ) {
     val lastSummary = scanState.lastSummary
-    val hasError = scanState.errorMessageRes != null
+    val hasError = scanState.errorMessage != null
     val hasSummary = lastSummary != null
     val sanitizedIncludedFolders =
         remember(includedFolders) {
@@ -757,10 +765,6 @@ private fun LocalSongScanSheet(
                 stringResource(R.string.local_songs_permission_body)
             }
 
-            lastSummary?.metadataLookupFailed == true -> {
-                stringResource(R.string.local_songs_metadata_unavailable, lastSummary.scannedSongs)
-            }
-
             hasSummary -> {
                 stringResource(
                     R.string.local_songs_scan_summary,
@@ -794,6 +798,7 @@ private fun LocalSongScanSheet(
         shape = RoundedCornerShape(topStart = 36.dp, topEnd = 36.dp),
         tonalElevation = 2.dp,
     ) {
+        KeepStatusBarHiddenInDialog()
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier =
@@ -1165,7 +1170,7 @@ private fun LocalSongScanSheet(
             }
 
             AnimatedVisibility(
-                visible = hasError && scanState.errorMessageRes != R.string.local_songs_scan_failed,
+                visible = hasError,
                 enter = expandVertically(spring(stiffness = Spring.StiffnessLow)) + fadeIn(),
                 exit = shrinkVertically(spring(stiffness = Spring.StiffnessLow)) + fadeOut(),
             ) {
@@ -1189,7 +1194,7 @@ private fun LocalSongScanSheet(
                             modifier = Modifier.size(20.dp),
                         )
                         Text(
-                            text = stringResource(scanState.errorMessageRes ?: R.string.local_songs_scan_failed),
+                            text = scanState.errorMessage.orEmpty(),
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onErrorContainer,
                             modifier = Modifier.weight(1f),

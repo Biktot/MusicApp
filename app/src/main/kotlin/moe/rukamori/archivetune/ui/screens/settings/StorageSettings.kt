@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -48,30 +49,30 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import coil3.annotation.ExperimentalCoilApi
 import coil3.imageLoader
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.withContext
 import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
 import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.R
+import moe.rukamori.archivetune.constants.MaxCanvasCacheSizeKey
 import moe.rukamori.archivetune.constants.MaxImageCacheSizeKey
 import moe.rukamori.archivetune.constants.MaxSongCacheSizeKey
 import moe.rukamori.archivetune.constants.SmartTrimmerKey
@@ -81,11 +82,13 @@ import moe.rukamori.archivetune.storage.StorageFolderKind
 import moe.rukamori.archivetune.storage.StorageLocationKind
 import moe.rukamori.archivetune.storage.StorageLocationRepository
 import moe.rukamori.archivetune.ui.component.ActionPromptDialog
+import moe.rukamori.archivetune.ui.component.FrostedHeaderPill
 import moe.rukamori.archivetune.ui.component.IconButton
 import moe.rukamori.archivetune.ui.component.ListPreference
 import moe.rukamori.archivetune.ui.component.PreferenceEntry
 import moe.rukamori.archivetune.ui.component.PreferenceGroup
 import moe.rukamori.archivetune.ui.component.SwitchPreference
+import moe.rukamori.archivetune.ui.player.CanvasArtworkPlaybackCache
 import moe.rukamori.archivetune.ui.utils.backToMain
 import moe.rukamori.archivetune.ui.utils.formatFileSize
 import moe.rukamori.archivetune.utils.rememberPreference
@@ -98,12 +101,25 @@ import moe.rukamori.archivetune.viewmodels.StorageMigrationUiModel
 import moe.rukamori.archivetune.viewmodels.StorageMigrationUiPhase
 import moe.rukamori.archivetune.viewmodels.StorageSettingsScreenState
 import moe.rukamori.archivetune.viewmodels.StorageSettingsViewModel
+import androidx.compose.foundation.layout.asPaddingValues
+import moe.rukamori.archivetune.ui.component.KeepStatusBarHiddenInDialog
+import moe.rukamori.archivetune.ui.screens.ScreenHeaderHaze
+import moe.rukamori.archivetune.ui.screens.rememberScreenHeaderHaze
+import moe.rukamori.archivetune.LocalStableSystemBarsTopPadding
+import dev.chrisbanes.haze.hazeSource
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @OptIn(ExperimentalCoilApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun StorageSettings(
     navController: NavController,
     viewModel: StorageSettingsViewModel = hiltViewModel(),
+    scrollTo: String? = null,
 ) {
     val context = LocalContext.current
     val imageDiskCache = context.imageLoader.diskCache ?: return
@@ -143,6 +159,11 @@ fun StorageSettings(
         remember {
             cacheSizeValues + (-1)
         }
+    val canvasCacheSizeValues =
+        remember {
+            listOf(0, 64, 128, 256, 512, 1024, 2048, 4096, 8192, -1)
+        }
+
     val (smartTrimmer, onSmartTrimmerChange) =
         rememberPreference(
             key = SmartTrimmerKey,
@@ -158,12 +179,19 @@ fun StorageSettings(
             key = MaxSongCacheSizeKey,
             defaultValue = 1024,
         )
+    val (maxCanvasCacheSize, onMaxCanvasCacheSizeChange) =
+        rememberPreference(
+            key = MaxCanvasCacheSizeKey,
+            defaultValue = 256,
+        )
     var clearCacheDialog by remember { mutableStateOf(false) }
-    var clearDownloads by remember { mutableStateOf(false) }
     var clearImageCacheDialog by remember { mutableStateOf(false) }
+    var clearCanvasCacheDialog by remember { mutableStateOf(false) }
+    var clearLyricsCacheDialog by remember { mutableStateOf(false) }
     var imageCacheSize by remember { mutableLongStateOf(0L) }
     var playerCacheSize by remember { mutableLongStateOf(0L) }
     var downloadCacheSize by remember { mutableLongStateOf(0L) }
+    var canvasCacheBytes by remember { mutableLongStateOf(0L) }
     val isCacheClearInProgress =
         (screenState as? StorageSettingsScreenState.Success)
             ?.model
@@ -199,6 +227,16 @@ fun StorageSettings(
             },
         label = "playerCacheProgress",
     )
+    val canvasCacheProgress by animateFloatAsState(
+        targetValue =
+            if (maxCanvasCacheSize > 0) {
+                val maxCanvasCacheSizeBytes = cacheSizeMegabytesToBytes(maxCanvasCacheSize)
+                (canvasCacheBytes.toFloat() / maxCanvasCacheSizeBytes).coerceIn(0f, 1f)
+            } else {
+                0f
+            },
+        label = "canvasCacheProgress",
+    )
     val isSmartTrimmerAvailable = maxImageCacheSize != 0 || maxSongCacheSize != 0
 
     LaunchedEffect(isSmartTrimmerAvailable) {
@@ -212,6 +250,12 @@ fun StorageSettings(
     LaunchedEffect(maxSongCacheSize) {
         if (maxSongCacheSize == 0) {
             viewModel.clearSongCache(showFeedback = false)
+        }
+    }
+    LaunchedEffect(maxCanvasCacheSize) {
+        CanvasArtworkPlaybackCache.setMaxSize(maxCanvasCacheSize)
+        if (maxCanvasCacheSize == 0) {
+            viewModel.clearCanvasCache(showFeedback = false)
         }
     }
     LaunchedEffect(imageDiskCache, isCacheClearInProgress) {
@@ -246,21 +290,49 @@ fun StorageSettings(
             delay(StorageRefreshIntervalMillis)
         }
     }
+    LaunchedEffect(isCacheClearInProgress) {
+        if (isCacheClearInProgress) return@LaunchedEffect
+        while (isActive) {
+            canvasCacheBytes =
+                withContext(Dispatchers.IO) {
+                    CanvasArtworkPlaybackCache.byteSize()
+                }
+            delay(StorageRefreshIntervalMillis)
+        }
+    }
+
+    val headerHaze = rememberScreenHeaderHaze()
+    val systemBarsTopPadding = LocalStableSystemBarsTopPadding.current
+
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.storage)) },
+                title = {},
                 navigationIcon = {
-                    IconButton(
-                        onClick = navController::navigateUp,
-                        onLongClick = navController::backToMain,
-                    ) {
-                        Icon(
-                            painterResource(R.drawable.arrow_back),
-                            contentDescription = null,
+                    FrostedHeaderPill(plain = true) {
+                        IconButton(
+                            onClick = navController::navigateUp,
+                            onLongClick = navController::backToMain,
+                        ) {
+                            Icon(
+                                painterResource(R.drawable.arrow_back),
+                                contentDescription = null,
+                            )
+                        }
+                        Text(
+                            text = stringResource(R.string.storage),
+                            color = MaterialTheme.colorScheme.onBackground,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            modifier = Modifier.padding(end = 4.dp),
                         )
                     }
                 },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
+                    scrolledContainerColor = Color.Transparent,
+                ),
             )
         },
         snackbarHost = {
@@ -273,18 +345,32 @@ fun StorageSettings(
             )
         },
     ) { innerPadding ->
+        Box(modifier = Modifier.fillMaxSize()) {
+
+        val playerAwareBottomPadding =
+            LocalPlayerAwareWindowInsets.current
+                .only(WindowInsetsSides.Bottom)
+                .asPaddingValues()
+                .calculateBottomPadding()
         val topPadding = innerPadding.calculateTopPadding()
+        val scrollState = rememberScrollState()
+        val positions = rememberPreferencePositions()
+
+        LaunchedEffect(scrollTo) { positions.scrollToKey(scrollTo, scrollState) }
 
         Column(
             Modifier
+                .windowInsetsPadding(LocalPlayerAwareWindowInsets.current.only(WindowInsetsSides.Horizontal))
+
+                .then(positions.containerModifier())
+                .verticalScroll(scrollState)
+                .hazeSource(headerHaze)
                 .padding(top = topPadding)
-                .windowInsetsPadding(LocalPlayerAwareWindowInsets.current.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
-                .verticalScroll(rememberScrollState())
                 .padding(
                     start = 12.dp,
                     top = 12.dp,
                     end = 12.dp,
-                    bottom = SettingsDimensions.ScreenBottomPadding,
+                    bottom = playerAwareBottomPadding + SettingsDimensions.ScreenBottomPadding,
                 ),
         ) {
             StorageFolderSection(
@@ -293,42 +379,16 @@ fun StorageSettings(
                 isSmartTrimmerAvailable = isSmartTrimmerAvailable,
                 onSmartTrimmerChange = onSmartTrimmerChange,
                 onSelectFolder = viewModel::openStorageLocationPicker,
+                positions = positions,
             )
 
-            PreferenceGroup(title = stringResource(R.string.downloaded_songs)) {
-                item {
-                    PreferenceEntry(
-                        title = { Text(stringResource(R.string.clear_all_downloads)) },
-                        description = stringResource(R.string.size_used, formatFileSize(downloadCacheSize)),
-                        icon = {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_download),
-                                contentDescription = null,
-                            )
-                        },
-                        onClick = { clearDownloads = true },
-                    )
-                }
-            }
-
-            if (clearDownloads) {
-                ActionPromptDialog(
-                    title = stringResource(R.string.clear_all_downloads),
-                    onDismiss = { clearDownloads = false },
-                    onConfirm = {
-                        viewModel.clearDownloads()
-                        clearDownloads = false
-                    },
-                    onCancel = { clearDownloads = false },
-                    content = {
-                        Text(text = stringResource(R.string.clear_downloads_dialog))
-                    },
-                )
-            }
-
-            PreferenceGroup(title = stringResource(R.string.song_cache)) {
+            PreferenceGroup(
+                modifier = positions.modifierFor("song_cache_size"),
+                title = stringResource(R.string.song_cache),
+            ) {
                 item {
                     ListPreference(
+                        modifier = positions.modifierFor("max_song_cache_size"),
                         title = { Text(stringResource(R.string.max_song_cache_size)) },
                         description =
                             if (maxSongCacheSize == -1) {
@@ -363,6 +423,7 @@ fun StorageSettings(
                 }
                 item {
                     PreferenceEntry(
+                        modifier = positions.modifierFor("clear_song_cache"),
                         title = { Text(stringResource(R.string.clear_song_cache)) },
                         onClick = { clearCacheDialog = true },
                     )
@@ -384,9 +445,13 @@ fun StorageSettings(
                 )
             }
 
-            PreferenceGroup(title = stringResource(R.string.image_cache)) {
+            PreferenceGroup(
+                modifier = positions.modifierFor("image_cache_size"),
+                title = stringResource(R.string.image_cache),
+            ) {
                 item {
                     ListPreference(
+                        modifier = positions.modifierFor("max_image_cache_size"),
                         title = { Text(stringResource(R.string.max_image_cache_size)) },
                         description =
                             when {
@@ -429,6 +494,7 @@ fun StorageSettings(
                 }
                 item {
                     PreferenceEntry(
+                        modifier = positions.modifierFor("clear_image_cache"),
                         title = { Text(stringResource(R.string.clear_image_cache)) },
                         onClick = { clearImageCacheDialog = true },
                     )
@@ -450,9 +516,112 @@ fun StorageSettings(
                 )
             }
 
+            PreferenceGroup(
+                modifier = positions.modifierFor("canvas_cache"),
+                title = stringResource(R.string.canvas_cache),
+            ) {
+                item {
+                    ListPreference(
+                        modifier = positions.modifierFor("max_cache_size"),
+                        title = { Text(stringResource(R.string.max_cache_size)) },
+                        description =
+                            when {
+                                maxCanvasCacheSize < 0 -> {
+                                    stringResource(R.string.size_used, formatFileSize(canvasCacheBytes))
+                                }
 
+                                maxCanvasCacheSize > 0 -> {
+                                    stringResource(
+                                        R.string.storage_size_ratio,
+                                        formatFileSize(canvasCacheBytes),
+                                        formatFileSize(cacheSizeMegabytesToBytes(maxCanvasCacheSize)),
+                                    )
+                                }
+
+                                else -> {
+                                    stringResource(R.string.disable)
+                                }
+                            },
+                        icon = {
+                            Icon(
+                                painter = painterResource(R.drawable.motion_photos_on),
+                                contentDescription = null,
+                            )
+                        },
+                        selectedValue = maxCanvasCacheSize,
+                        values = canvasCacheSizeValues,
+                        valueText = {
+                            when (it) {
+                                0 -> stringResource(R.string.disable)
+                                -1 -> stringResource(R.string.unlimited)
+                                else -> formatFileSize(cacheSizeMegabytesToBytes(it))
+                            }
+                        },
+                        onValueSelected = onMaxCanvasCacheSizeChange,
+                    )
+                }
+                item(visible = maxCanvasCacheSize > 0) {
+                    CacheUsagePreference(progress = canvasCacheProgress)
+                }
+                item {
+                    PreferenceEntry(
+                        modifier = positions.modifierFor("clear_canvas_cache"),
+                        title = { Text(stringResource(R.string.clear_canvas_cache)) },
+                        onClick = { clearCanvasCacheDialog = true },
+                    )
+                }
+            }
+
+            if (clearCanvasCacheDialog) {
+                ActionPromptDialog(
+                    title = stringResource(R.string.clear_canvas_cache),
+                    onDismiss = { clearCanvasCacheDialog = false },
+                    onConfirm = {
+                        viewModel.clearCanvasCache()
+                        clearCanvasCacheDialog = false
+                    },
+                    onCancel = { clearCanvasCacheDialog = false },
+                    content = {
+                        Text(text = stringResource(R.string.clear_canvas_cache_dialog))
+                    },
+                )
+            }
+
+            PreferenceGroup(
+                modifier = positions.modifierFor("lyrics_cache"),
+                title = stringResource(R.string.lyrics),
+            ) {
+                item {
+                    PreferenceEntry(
+                        modifier = positions.modifierFor("clear_lyrics_cache"),
+                        title = { Text(stringResource(R.string.clear_lyrics_cache)) },
+                        onClick = { clearLyricsCacheDialog = true },
+                    )
+                }
+            }
+
+            if (clearLyricsCacheDialog) {
+                ActionPromptDialog(
+                    title = stringResource(R.string.clear_lyrics_cache),
+                    onDismiss = { clearLyricsCacheDialog = false },
+                    onConfirm = {
+                        viewModel.clearLyricsCache()
+                        clearLyricsCacheDialog = false
+                    },
+                    onCancel = { clearLyricsCacheDialog = false },
+                    content = {
+                        Text(text = stringResource(R.string.clear_lyrics_cache_confirm))
+                    },
+                )
+            }
         }
-    }
+
+        ScreenHeaderHaze(
+            hazeState = headerHaze,
+            systemBarsTopPadding = systemBarsTopPadding,
+        )
+        }
+}
 
     val successState = screenState as? StorageSettingsScreenState.Success
     if (successState?.model?.picker?.visible == true) {
@@ -480,8 +649,12 @@ private fun StorageFolderSection(
     isSmartTrimmerAvailable: Boolean,
     onSmartTrimmerChange: (Boolean) -> Unit,
     onSelectFolder: () -> Unit,
+    positions: PreferencePositions,
 ) {
-    PreferenceGroup(title = stringResource(R.string.storage_folder)) {
+    PreferenceGroup(
+        modifier = positions.modifierFor("storage_folder"),
+        title = stringResource(R.string.storage_folder),
+    ) {
         when (state) {
             StorageSettingsScreenState.Loading -> {
                 item {
@@ -531,6 +704,7 @@ private fun StorageFolderSection(
 
         item {
             SwitchPreference(
+                modifier = positions.modifierFor("smart_trimmer"),
                 title = { Text(stringResource(R.string.smart_trimmer)) },
                 description = stringResource(R.string.smart_trimmer_description),
                 checked = smartTrimmer && isSmartTrimmerAvailable,
@@ -676,6 +850,7 @@ private fun StorageLocationPickerSheet(
         shape = MaterialTheme.shapes.extraLarge,
         tonalElevation = 2.dp,
     ) {
+        KeepStatusBarHiddenInDialog()
         Column(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier =

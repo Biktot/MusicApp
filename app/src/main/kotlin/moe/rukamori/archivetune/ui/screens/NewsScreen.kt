@@ -68,11 +68,9 @@ import androidx.compose.material3.carousel.rememberCarouselState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -108,6 +106,10 @@ import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import moe.rukamori.archivetune.ui.component.IconButton as AppIconButton
+import moe.rukamori.archivetune.ui.component.KeepStatusBarHiddenInDialog
+import moe.rukamori.archivetune.LocalStableSystemBarsTopPadding
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @Composable
 fun NewsScreen(
@@ -125,6 +127,9 @@ fun NewsScreen(
 
     var isSearchActive by rememberSaveable { mutableStateOf(false) }
 
+    val glassHeader = rememberGlassScreenHeader()
+    val systemBarsTopPadding = LocalStableSystemBarsTopPadding.current
+
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val listState = rememberLazyListState()
 
@@ -136,6 +141,8 @@ fun NewsScreen(
         containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
+
+            if (isSearchActive || !glassHeader.liquidGlassActive) {
             AnimatedContent(
                 targetState = isSearchActive,
                 transitionSpec = {
@@ -195,12 +202,13 @@ fun NewsScreen(
                                 .padding(top = 8.dp, bottom = 4.dp),
                     ) {}
                 } else {
+
                     LargeFlexibleTopAppBar(
                         title = {
                             Text(
                                 text = stringResource(R.string.news),
-                                style = MaterialTheme.typography.headlineSmall,
                                 fontWeight = FontWeight.Bold,
+                                maxLines = 1,
                             )
                         },
                         navigationIcon = {
@@ -210,7 +218,7 @@ fun NewsScreen(
                             ) {
                                 Icon(
                                     painter = painterResource(R.drawable.arrow_back),
-                                    contentDescription = stringResource(R.string.back_button_desc),
+                                    contentDescription = null,
                                 )
                             }
                         },
@@ -228,24 +236,33 @@ fun NewsScreen(
                                 )
                             }
                         },
-                        colors =
-                            TopAppBarDefaults.largeTopAppBarColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-                                scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            ),
+                        colors = TopAppBarDefaults.largeTopAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+                            scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+                        ),
                         scrollBehavior = scrollBehavior,
                     )
                 }
             }
+            }
         },
     ) { innerPadding ->
+
+        val contentTopPadding =
+            if (glassHeader.liquidGlassActive && !isSearchActive) {
+                systemBarsTopPadding + 72.dp
+
+            } else {
+                innerPadding.calculateTopPadding()
+            }
+        Box(modifier = Modifier.fillMaxSize()) {
         AnimatedContent(
             targetState = uiState,
             transitionSpec = {
                 fadeIn(spring(stiffness = Spring.StiffnessMediumLow)) togetherWith
                     fadeOut(spring(stiffness = Spring.StiffnessMediumLow))
             },
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize().glassHeaderSource(glassHeader),
             label = "newsContent",
         ) { state ->
             when (state) {
@@ -302,7 +319,7 @@ fun NewsScreen(
                             verticalArrangement = Arrangement.spacedBy(14.dp),
                             contentPadding =
                                 PaddingValues(
-                                    top = innerPadding.calculateTopPadding() + 12.dp,
+                                    top = contentTopPadding + 12.dp,
                                     bottom = innerPadding.calculateBottomPadding() + 24.dp,
                                     start = horizontalPadding,
                                     end = horizontalPadding,
@@ -343,6 +360,17 @@ fun NewsScreen(
                     }
                 }
             }
+        }
+
+        if (glassHeader.liquidGlassActive && !isSearchActive) {
+            GlassScreenHeaderOverlay(
+                header = glassHeader,
+                title = stringResource(R.string.news),
+                onBack = navController::navigateUp,
+                onBackLongClick = navController::backToMain,
+                onSearch = { isSearchActive = true },
+            )
+        }
         }
     }
 }
@@ -648,6 +676,7 @@ private fun FullImageViewerDialog(
                 dismissOnClickOutside = true,
             ),
     ) {
+        KeepStatusBarHiddenInDialog()
         val context = LocalContext.current
         val model =
             remember(context, imageUrl) {

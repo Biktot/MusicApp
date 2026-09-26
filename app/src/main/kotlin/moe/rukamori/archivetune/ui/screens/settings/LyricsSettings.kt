@@ -9,12 +9,16 @@
 
 package moe.rukamori.archivetune.ui.screens.settings
 
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -24,46 +28,33 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -74,19 +65,12 @@ import moe.rukamori.archivetune.constants.EnableBetterLyricsKey
 import moe.rukamori.archivetune.constants.EnableBetterLyricsPortatoKey
 import moe.rukamori.archivetune.constants.EnableKugouKey
 import moe.rukamori.archivetune.constants.EnableLrcLibKey
-import moe.rukamori.archivetune.constants.EnableMegalobizLyricsKey
-import moe.rukamori.archivetune.constants.EnablePaxsenixAppleMusicLyricsKey
-import moe.rukamori.archivetune.constants.EnablePaxsenixLyricsKey
-import moe.rukamori.archivetune.constants.EnablePaxsenixMusixmatchLyricsKey
-import moe.rukamori.archivetune.constants.EnablePaxsenixSpotifyLyricsKey
-import moe.rukamori.archivetune.constants.EnableSimpMusicLyricsKey
+import moe.rukamori.archivetune.constants.EnableMusixmatchExperimentalKey
 import moe.rukamori.archivetune.constants.EnableUnisonLyricsKey
 import moe.rukamori.archivetune.constants.EnableYouLyPlusLyricsKey
 import moe.rukamori.archivetune.constants.LyricsClickKey
 import moe.rukamori.archivetune.constants.LyricsLineBlurKey
 import moe.rukamori.archivetune.constants.LyricsLineSpacingKey
-import moe.rukamori.archivetune.constants.LyricsMode
-import moe.rukamori.archivetune.constants.LyricsModeKey
 import moe.rukamori.archivetune.constants.LyricsProviderOrderKey
 import moe.rukamori.archivetune.constants.LyricsRomanizeChineseKey
 import moe.rukamori.archivetune.constants.LyricsRomanizeHindiKey
@@ -94,72 +78,50 @@ import moe.rukamori.archivetune.constants.LyricsRomanizeJapaneseKey
 import moe.rukamori.archivetune.constants.LyricsRomanizeKoreanKey
 import moe.rukamori.archivetune.constants.LyricsRomanizeOtherLanguagesKey
 import moe.rukamori.archivetune.constants.LyricsScrollKey
+import moe.rukamori.archivetune.constants.AutoHideLyricsPlayerControlsKey
+import moe.rukamori.archivetune.constants.ShowLyricsPlayerControlsKey
 import moe.rukamori.archivetune.constants.LyricsTextSizeKey
-import moe.rukamori.archivetune.constants.PaxsenixApiKeyKey
 import moe.rukamori.archivetune.constants.PreferredLyricsProvider
+import moe.rukamori.archivetune.constants.QueueLyricsPreloadCountKey
 import moe.rukamori.archivetune.constants.deserializeLyricsProviderOrder
-import moe.rukamori.archivetune.paxsenix.PaxsenixLyrics
-import moe.rukamori.archivetune.paxsenix.models.PaxsenixStats
-import moe.rukamori.archivetune.paxsenix.models.ProviderStats
-import moe.rukamori.archivetune.ui.component.ActionPromptDialog
+import moe.rukamori.archivetune.lyrics.JapaneseLanguagePackManager
 import moe.rukamori.archivetune.ui.component.DefaultDialog
-import moe.rukamori.archivetune.ui.component.EnumListPreference
+import moe.rukamori.archivetune.ui.component.FrostedHeaderPill
 import moe.rukamori.archivetune.ui.component.IconButton
+import moe.rukamori.archivetune.ui.component.NumberPickerPreference
 import moe.rukamori.archivetune.ui.component.PreferenceEntry
 import moe.rukamori.archivetune.ui.component.PreferenceGroup
 import moe.rukamori.archivetune.ui.component.SwitchPreference
-import moe.rukamori.archivetune.ui.component.TextFieldDialog
 import moe.rukamori.archivetune.ui.utils.backToMain
-import moe.rukamori.archivetune.utils.rememberEnumPreference
+import moe.rukamori.archivetune.ui.screens.ScreenHeaderHaze
+import moe.rukamori.archivetune.ui.screens.rememberScreenHeaderHaze
+import moe.rukamori.archivetune.LocalStableSystemBarsTopPadding
+import dev.chrisbanes.haze.hazeSource
 import moe.rukamori.archivetune.utils.rememberPreference
 import moe.rukamori.archivetune.viewmodels.ContentSettingsViewModel
-import moe.rukamori.archivetune.viewmodels.PaxsenixStatsState
 import sh.calvin.reorderable.ReorderableItem
 import sh.calvin.reorderable.rememberReorderableLazyListState
 import kotlin.math.roundToInt
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @Composable
 fun LyricsSettings(
     navController: NavController,
     viewModel: ContentSettingsViewModel = hiltViewModel(),
+    scrollTo: String? = null,
 ) {
-    var showClearLyricsDialog by remember { mutableStateOf(false) }
-    var showPaxsenixStatsDialog by remember { mutableStateOf(false) }
-    var showPaxsenixApiKeyDialog by rememberSaveable { mutableStateOf(false) }
-
-    if (showClearLyricsDialog) {
-        ActionPromptDialog(
-            title = stringResource(R.string.clear_lyrics_cache),
-            onDismiss = { showClearLyricsDialog = false },
-            onConfirm = {
-                viewModel.clearLyricsCache()
-                showClearLyricsDialog = false
-            },
-            onCancel = { showClearLyricsDialog = false },
-        ) {
-            Text(stringResource(R.string.clear_lyrics_cache_confirm))
-        }
-    }
-
-    if (showPaxsenixStatsDialog) {
-        val statsState by viewModel.paxsenixStatsState.collectAsStateWithLifecycle()
-
-        LaunchedEffect(Unit) {
-            viewModel.fetchPaxsenixStats()
-        }
-
-        PaxsenixStatsDialog(
-            state = statsState,
-            onDismiss = { showPaxsenixStatsDialog = false },
-            onRetry = { viewModel.fetchPaxsenixStats() },
-        )
-    }
 
     val (lyricsClick, onLyricsClickChange) = rememberPreference(LyricsClickKey, defaultValue = true)
     val (lyricsScroll, onLyricsScrollChange) = rememberPreference(LyricsScrollKey, defaultValue = true)
+
+    val (showPlayerControls, onShowPlayerControlsChange) =
+        rememberPreference(ShowLyricsPlayerControlsKey, defaultValue = true)
+    val (autoHidePlayerControls, onAutoHidePlayerControlsChange) =
+        rememberPreference(AutoHideLyricsPlayerControlsKey, defaultValue = true)
     val (lyricsTextSize, onLyricsTextSizeChange) = rememberPreference(LyricsTextSizeKey, defaultValue = 26f)
     val (lyricsLineSpacing, onLyricsLineSpacingChange) = rememberPreference(LyricsLineSpacingKey, defaultValue = 1.3f)
-    val (lyricsMode, onLyricsModeChange) = rememberEnumPreference(LyricsModeKey, defaultValue = LyricsMode.ENHANCED)
+
     val (enableLrclib, onEnableLrclibChange) = rememberPreference(key = EnableLrcLibKey, defaultValue = true)
     val (enableKugou, onEnableKugouChange) = rememberPreference(key = EnableKugouKey, defaultValue = true)
     val (enableBetterLyrics, onEnableBetterLyricsChange) = rememberPreference(key = EnableBetterLyricsKey, defaultValue = true)
@@ -167,30 +129,10 @@ fun LyricsSettings(
         rememberPreference(key = EnableBetterLyricsPortatoKey, defaultValue = true)
     val (enableYouLyPlusLyrics, onEnableYouLyPlusLyricsChange) =
         rememberPreference(key = EnableYouLyPlusLyricsKey, defaultValue = true)
-    val (enableSimpMusicLyrics, onEnableSimpMusicLyricsChange) = rememberPreference(key = EnableSimpMusicLyricsKey, defaultValue = true)
-    val (enableMegalobizLyrics, onEnableMegalobizLyricsChange) = rememberPreference(key = EnableMegalobizLyricsKey, defaultValue = true)
-    val (enablePaxsenixLyrics, onEnablePaxsenixLyricsChange) = rememberPreference(key = EnablePaxsenixLyricsKey, defaultValue = true)
-    val (paxsenixApiKey, onPaxsenixApiKeyChange) =
-        rememberPreference(
-            key = PaxsenixApiKeyKey,
-            defaultValue = "",
-        )
-    val (enablePaxsenixAppleMusicLyrics, onEnablePaxsenixAppleMusicLyricsChange) =
-        rememberPreference(
-            key = EnablePaxsenixAppleMusicLyricsKey,
-            defaultValue = true,
-        )
-    val (enablePaxsenixSpotifyLyrics, onEnablePaxsenixSpotifyLyricsChange) =
-        rememberPreference(
-            key = EnablePaxsenixSpotifyLyricsKey,
-            defaultValue = true,
-        )
-    val (enablePaxsenixMusixmatchLyrics, onEnablePaxsenixMusixmatchLyricsChange) =
-        rememberPreference(
-            key = EnablePaxsenixMusixmatchLyricsKey,
-            defaultValue = true,
-        )
+
     val (enableUnisonLyrics, onEnableUnisonLyricsChange) = rememberPreference(key = EnableUnisonLyricsKey, defaultValue = true)
+    val (enableMusixmatchExperimental, onEnableMusixmatchExperimentalChange) =
+        rememberPreference(key = EnableMusixmatchExperimentalKey, defaultValue = false)
     val (providerOrderStr, onProviderOrderStrChange) =
         rememberPreference(
             key = LyricsProviderOrderKey,
@@ -200,8 +142,8 @@ fun LyricsSettings(
         remember(providerOrderStr) {
             deserializeLyricsProviderOrder(providerOrderStr)
         }
-    val (lyricsLineBlur, onLyricsLineBlurChange) = rememberPreference(LyricsLineBlurKey, defaultValue = true)
-    val (lyricsRomanizeJapanese, onLyricsRomanizeJapaneseChange) = rememberPreference(LyricsRomanizeJapaneseKey, defaultValue = true)
+    val (lyricsLineBlur, onLyricsLineBlurChange) = rememberPreference(LyricsLineBlurKey, defaultValue = false)
+    val (lyricsRomanizeJapanese, onLyricsRomanizeJapaneseChange) = rememberPreference(LyricsRomanizeJapaneseKey, defaultValue = false)
     val (lyricsRomanizeKorean, onLyricsRomanizeKoreanChange) = rememberPreference(LyricsRomanizeKoreanKey, defaultValue = true)
     val (lyricsRomanizeChinese, onLyricsRomanizeChineseChange) = rememberPreference(LyricsRomanizeChineseKey, defaultValue = true)
     val (lyricsRomanizeHindi, onLyricsRomanizeHindiChange) = rememberPreference(LyricsRomanizeHindiKey, defaultValue = true)
@@ -210,31 +152,8 @@ fun LyricsSettings(
             LyricsRomanizeOtherLanguagesKey,
             defaultValue = true,
         )
-
-    if (showPaxsenixApiKeyDialog) {
-        val passwordVisualTransformation = remember { PasswordVisualTransformation() }
-        val keyboardOptions =
-            remember {
-                KeyboardOptions(
-                    keyboardType = KeyboardType.Password,
-                    imeAction = ImeAction.Done,
-                )
-            }
-
-        TextFieldDialog(
-            title = { Text(stringResource(R.string.paxsenix_api_key)) },
-            initialTextFieldValue = TextFieldValue(paxsenixApiKey),
-            keyboardOptions = keyboardOptions,
-            visualTransformation = passwordVisualTransformation,
-            isInputValid = { true },
-            onDone = { value ->
-                val normalizedValue = value.trim()
-                onPaxsenixApiKeyChange(normalizedValue)
-                PaxsenixLyrics.setApiKey(normalizedValue)
-            },
-            onDismiss = { showPaxsenixApiKeyDialog = false },
-        )
-    }
+    val (queueLyricsPreloadCount, onQueueLyricsPreloadCountChange) = rememberPreference(QueueLyricsPreloadCountKey, defaultValue = 3)
+    val japaneseLanguagePackState by JapaneseLanguagePackManager.state.collectAsStateWithLifecycle()
 
     var showProviderOrderDialog by rememberSaveable { mutableStateOf(false) }
 
@@ -249,11 +168,35 @@ fun LyricsSettings(
         )
     }
 
+    val scrollState = rememberScrollState()
+    val positions = rememberPreferencePositions()
+
+    LaunchedEffect(scrollTo) { positions.scrollToKey(scrollTo, scrollState) }
+
+    val headerHaze = rememberScreenHeaderHaze()
+    val systemBarsTopPadding = LocalStableSystemBarsTopPadding.current
+
+    val playerAwareBottomPadding =
+        LocalPlayerAwareWindowInsets.current
+            .only(WindowInsetsSides.Bottom)
+            .asPaddingValues()
+            .calculateBottomPadding()
+
+    val headerTopPadding =
+        LocalPlayerAwareWindowInsets.current
+            .asPaddingValues()
+            .calculateTopPadding()
+
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(
         Modifier
-            .windowInsetsPadding(LocalPlayerAwareWindowInsets.current)
-            .verticalScroll(rememberScrollState())
-            .padding(bottom = SettingsDimensions.ScreenBottomPadding),
+            .windowInsetsPadding(LocalPlayerAwareWindowInsets.current.only(WindowInsetsSides.Horizontal))
+
+            .then(positions.containerModifier())
+            .verticalScroll(scrollState)
+            .hazeSource(headerHaze)
+            .padding(top = headerTopPadding)
+            .padding(bottom = playerAwareBottomPadding + SettingsDimensions.ScreenBottomPadding),
     ) {
         var showLyricsTextSizeDialog by rememberSaveable { mutableStateOf(false) }
 
@@ -389,36 +332,58 @@ fun LyricsSettings(
             }
         }
 
-        PreferenceGroup(title = stringResource(R.string.display)) {
+        PreferenceGroup(
+            modifier = positions.modifierFor("language_packs"),
+            title = stringResource(R.string.language_packs),
+        ) {
             item {
-                EnumListPreference(
-                    title = { Text(stringResource(R.string.lyrics_mode)) },
-                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
-                    selectedValue = lyricsMode,
-                    onValueSelected = onLyricsModeChange,
-                    valueText = {
-                        when (it) {
-                            LyricsMode.V2 -> stringResource(R.string.lyrics_mode_v2)
-                            LyricsMode.ENHANCED -> stringResource(R.string.lyrics_mode_enhanced)
-                        }
-                    },
-                )
-            }
-
-            item {
-                val animationSettingsEnabled = lyricsMode == LyricsMode.V2
-
                 PreferenceEntry(
-                    title = { Text(stringResource(R.string.lyrics_animation_style)) },
-                    description = if (animationSettingsEnabled) null else stringResource(R.string.lyrics_animation_style_v2_only),
-                    icon = { Icon(painterResource(R.drawable.animation), null) },
-                    onClick = { navController.navigate("settings/appearance/lyrics_animations") },
-                    isEnabled = animationSettingsEnabled,
+                    title = { Text(stringResource(R.string.language_packs)) },
+                    description = stringResource(R.string.settings_language_packs_subtitle),
+                    icon = { Icon(painterResource(R.drawable.translate), null) },
+                    onClick = { navController.navigate("settings/language_packs") },
                 )
             }
+        }
+
+        PreferenceGroup(
+            modifier = positions.modifierFor("lyrics_provider"),
+            title = stringResource(R.string.providers),
+        ) {
+            item {
+                PreferenceEntry(
+                    modifier = positions.modifierFor("providers"),
+                    title = { Text(stringResource(R.string.providers)) },
+                    description = stringResource(R.string.settings_lyrics_providers_subtitle),
+                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
+                    onClick = { navController.navigate("settings/lyrics/providers") },
+                )
+            }
+        }
+
+        PreferenceGroup(
+            modifier = positions.modifierFor("lyrics_romanize"),
+            title = stringResource(R.string.romanization),
+        ) {
+            item {
+                PreferenceEntry(
+                    modifier = positions.modifierFor("romanization"),
+                    title = { Text(stringResource(R.string.romanization)) },
+                    description = stringResource(R.string.settings_lyrics_romanisation_subtitle),
+                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
+                    onClick = { navController.navigate("settings/lyrics/romanisation") },
+                )
+            }
+        }
+
+        PreferenceGroup(
+            modifier = positions.modifierFor("lyrics_font_size"),
+            title = stringResource(R.string.display),
+        ) {
 
             item {
                 SwitchPreference(
+                    modifier = positions.modifierFor("lyrics_click"),
                     title = { Text(stringResource(R.string.lyrics_click_change)) },
                     icon = { Icon(painterResource(R.drawable.lyrics), null) },
                     checked = lyricsClick,
@@ -428,6 +393,7 @@ fun LyricsSettings(
 
             item {
                 SwitchPreference(
+                    modifier = positions.modifierFor("lyrics_scroll"),
                     title = { Text(stringResource(R.string.lyrics_auto_scroll)) },
                     icon = { Icon(painterResource(R.drawable.lyrics), null) },
                     checked = lyricsScroll,
@@ -437,6 +403,29 @@ fun LyricsSettings(
 
             item {
                 SwitchPreference(
+                    modifier = positions.modifierFor("show_lyrics_player_controls"),
+                    title = { Text(stringResource(R.string.show_lyrics_player_controls)) },
+                    icon = { Icon(painterResource(R.drawable.play), null) },
+                    checked = showPlayerControls,
+                    onCheckedChange = onShowPlayerControlsChange,
+                )
+            }
+
+            item {
+                SwitchPreference(
+                    modifier = positions.modifierFor("auto_hide_lyrics_player_controls"),
+                    title = { Text(stringResource(R.string.auto_hide_lyrics_player_controls)) },
+                    description = stringResource(R.string.auto_hide_lyrics_player_controls_description),
+                    icon = { Icon(painterResource(R.drawable.timer), null) },
+                    checked = autoHidePlayerControls,
+                    onCheckedChange = onAutoHidePlayerControlsChange,
+                    isEnabled = showPlayerControls,
+                )
+            }
+
+            item {
+                SwitchPreference(
+                    modifier = positions.modifierFor("lyrics_line_blur"),
                     title = { Text(stringResource(R.string.lyrics_line_blur)) },
                     icon = { Icon(painterResource(R.drawable.lyrics), null) },
                     checked = lyricsLineBlur,
@@ -446,6 +435,7 @@ fun LyricsSettings(
 
             item {
                 PreferenceEntry(
+                    modifier = positions.modifierFor("lyrics_text_size"),
                     title = { Text(stringResource(R.string.lyrics_text_size)) },
                     description = "${lyricsTextSize.roundToInt()} sp",
                     icon = { Icon(painterResource(R.drawable.text_fields), null) },
@@ -455,6 +445,7 @@ fun LyricsSettings(
 
             item {
                 PreferenceEntry(
+                    modifier = positions.modifierFor("lyrics_line_spacing"),
                     title = { Text(stringResource(R.string.lyrics_line_spacing)) },
                     description = "${String.format("%.1f", lyricsLineSpacing)}x",
                     icon = { Icon(painterResource(R.drawable.text_fields), null) },
@@ -463,242 +454,79 @@ fun LyricsSettings(
             }
         }
 
-        PreferenceGroup(title = stringResource(R.string.providers)) {
-            item {
-                SwitchPreference(
-                    title = { Text(stringResource(R.string.enable_betterlyrics)) },
-                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
-                    checked = enableBetterLyrics,
-                    onCheckedChange = onEnableBetterLyricsChange,
-                )
-            }
+        PreferenceGroup(
+            modifier = positions.modifierFor("lyrics_preload"),
+            title = stringResource(R.string.queue),
+        ) {
 
             item {
-                SwitchPreference(
-                    title = { Text(stringResource(R.string.enable_betterlyrics_portato)) },
+                NumberPickerPreference(
+                    modifier = positions.modifierFor("preload_queue_lyrics"),
+                    title = { Text(stringResource(R.string.preload_queue_lyrics)) },
                     icon = { Icon(painterResource(R.drawable.lyrics), null) },
-                    checked = enableBetterLyricsPortato,
-                    onCheckedChange = onEnableBetterLyricsPortatoChange,
-                )
-            }
-
-            item {
-                SwitchPreference(
-                    title = { Text(stringResource(R.string.enable_youlyplus_lyrics)) },
-                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
-                    checked = enableYouLyPlusLyrics,
-                    onCheckedChange = onEnableYouLyPlusLyricsChange,
-                )
-            }
-
-            item {
-                SwitchPreference(
-                    title = { Text(stringResource(R.string.enable_lrclib)) },
-                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
-                    checked = enableLrclib,
-                    onCheckedChange = onEnableLrclibChange,
-                )
-            }
-
-            item {
-                SwitchPreference(
-                    title = { Text(stringResource(R.string.enable_kugou)) },
-                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
-                    checked = enableKugou,
-                    onCheckedChange = onEnableKugouChange,
-                )
-            }
-
-            item {
-                SwitchPreference(
-                    title = { Text(stringResource(R.string.enable_unison_lyrics)) },
-                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
-                    checked = enableUnisonLyrics,
-                    onCheckedChange = onEnableUnisonLyricsChange,
-                )
-            }
-
-            item {
-                SwitchPreference(
-                    title = { Text(stringResource(R.string.enable_simpmusic_lyrics)) },
-                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
-                    checked = enableSimpMusicLyrics,
-                    onCheckedChange = onEnableSimpMusicLyricsChange,
-                )
-            }
-
-            item {
-                SwitchPreference(
-                    title = { Text(stringResource(R.string.enable_megalobiz_lyrics)) },
-                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
-                    checked = enableMegalobizLyrics,
-                    onCheckedChange = onEnableMegalobizLyricsChange,
-                )
-            }
-
-            item {
-                SwitchPreference(
-                    title = { Text(stringResource(R.string.enable_paxsenix_lyrics)) },
-                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
-                    checked = enablePaxsenixLyrics,
-                    onCheckedChange = onEnablePaxsenixLyricsChange,
-                )
-            }
-
-            item(visible = enablePaxsenixLyrics) {
-                PreferenceEntry(
-                    title = { Text(stringResource(R.string.paxsenix_api_key)) },
-                    description =
-                        if (paxsenixApiKey.isBlank()) {
-                            stringResource(R.string.paxsenix_api_key_missing)
-                        } else {
-                            stringResource(R.string.paxsenix_api_key_configured)
-                        },
-                    icon = { Icon(painterResource(R.drawable.token), null) },
-                    onClick = { showPaxsenixApiKeyDialog = true },
-                )
-            }
-
-            item(visible = enablePaxsenixLyrics) {
-                PreferenceEntry(
-                    title = { Text(stringResource(R.string.paxsenix_stats)) },
-                    icon = { Icon(painterResource(R.drawable.stats), null) },
-                    onClick = { showPaxsenixStatsDialog = true },
-                )
-            }
-
-            item(visible = enablePaxsenixLyrics) {
-                SwitchPreference(
-                    title = { Text(stringResource(R.string.paxsenix_apple_music)) },
-                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
-                    checked = enablePaxsenixAppleMusicLyrics,
-                    onCheckedChange = onEnablePaxsenixAppleMusicLyricsChange,
-                )
-            }
-
-            item(visible = enablePaxsenixLyrics) {
-                SwitchPreference(
-                    title = { Text(stringResource(R.string.paxsenix_spotify)) },
-                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
-                    checked = enablePaxsenixSpotifyLyrics,
-                    onCheckedChange = onEnablePaxsenixSpotifyLyricsChange,
-                )
-            }
-
-            item(visible = enablePaxsenixLyrics) {
-                SwitchPreference(
-                    title = { Text(stringResource(R.string.paxsenix_musixmatch)) },
-                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
-                    checked = enablePaxsenixMusixmatchLyrics,
-                    onCheckedChange = onEnablePaxsenixMusixmatchLyricsChange,
-                )
-            }
-
-            item {
-                PreferenceEntry(
-                    title = { Text(stringResource(R.string.set_first_lyrics_provider)) },
-                    description = providerOrder.firstOrNull()?.displayName(),
-                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
-                    onClick = { showProviderOrderDialog = true },
+                    value = queueLyricsPreloadCount,
+                    onValueChange = onQueueLyricsPreloadCountChange,
+                    minValue = 0,
+                    maxValue = 10,
+                    valueText = { if (it == 0) "Off" else it.toString() },
                 )
             }
         }
 
-        PreferenceGroup(title = stringResource(R.string.romanization)) {
-            item {
-                SwitchPreference(
-                    title = { Text(stringResource(R.string.lyrics_romanize_japanese)) },
-                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
-                    checked = lyricsRomanizeJapanese,
-                    onCheckedChange = onLyricsRomanizeJapaneseChange,
-                )
-            }
-
-            item {
-                SwitchPreference(
-                    title = { Text(stringResource(R.string.lyrics_romanize_korean)) },
-                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
-                    checked = lyricsRomanizeKorean,
-                    onCheckedChange = onLyricsRomanizeKoreanChange,
-                )
-            }
-
-            item {
-                SwitchPreference(
-                    title = { Text(stringResource(R.string.lyrics_romanize_chinese)) },
-                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
-                    checked = lyricsRomanizeChinese,
-                    onCheckedChange = onLyricsRomanizeChineseChange,
-                )
-            }
-
-            item {
-                SwitchPreference(
-                    title = { Text(stringResource(R.string.lyrics_romanize_hindi)) },
-                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
-                    checked = lyricsRomanizeHindi,
-                    onCheckedChange = onLyricsRomanizeHindiChange,
-                )
-            }
-
-            item {
-                SwitchPreference(
-                    title = { Text(stringResource(R.string.lyrics_romanize_other_languages)) },
-                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
-                    checked = lyricsRomanizeOtherLanguages,
-                    onCheckedChange = onLyricsRomanizeOtherLanguagesChange,
-                )
-            }
-        }
-
-
-        PreferenceGroup(title = stringResource(R.string.cache)) {
-            item {
-                PreferenceEntry(
-                    title = { Text(stringResource(R.string.clear_lyrics_cache)) },
-                    icon = { Icon(painterResource(R.drawable.delete), null) },
-                    onClick = { showClearLyricsDialog = true },
-                )
-            }
-        }
     }
 
+    ScreenHeaderHaze(
+        hazeState = headerHaze,
+        systemBarsTopPadding = systemBarsTopPadding,
+    )
+
     TopAppBar(
-        title = { Text(stringResource(R.string.lyrics)) },
+        title = {},
+        colors =
+            TopAppBarDefaults.topAppBarColors(
+                containerColor = Color.Transparent,
+                scrolledContainerColor = Color.Transparent,
+            ),
         navigationIcon = {
-            IconButton(
-                onClick = navController::navigateUp,
-                onLongClick = navController::backToMain,
-            ) {
-                Icon(
-                    painterResource(R.drawable.arrow_back),
-                    contentDescription = null,
+            FrostedHeaderPill(plain = true) {
+                IconButton(
+                    onClick = navController::navigateUp,
+                    onLongClick = navController::backToMain,
+                ) {
+                    Icon(
+                        painterResource(R.drawable.arrow_back),
+                        contentDescription = null,
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.lyrics),
+                    color = MaterialTheme.colorScheme.onBackground,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    modifier = Modifier.padding(end = 4.dp),
                 )
             }
         },
     )
+    }
 }
 
-private enum class PaxsenixServerStatus { Operational, Degraded, Down }
-
-@Composable
-private fun PreferredLyricsProvider.displayName(): String =
+internal fun PreferredLyricsProvider.displayName(): String =
     when (this) {
         PreferredLyricsProvider.LRCLIB -> "LrcLib"
         PreferredLyricsProvider.KUGOU -> "KuGou"
-        PreferredLyricsProvider.MEGALOBIZ -> "Megalobiz"
         PreferredLyricsProvider.BETTER_LYRICS -> "BetterLyrics"
         PreferredLyricsProvider.BETTER_LYRICS_PORTATO -> "BetterLyrics Portato"
         PreferredLyricsProvider.YOULY_PLUS -> "YouLyPlus"
-        PreferredLyricsProvider.SIMPMUSIC -> "SimpMusic"
-        PreferredLyricsProvider.PAXSENIX_APPLE_MUSIC -> stringResource(R.string.paxsenix_apple_music)
-        PreferredLyricsProvider.PAXSENIX_SPOTIFY -> stringResource(R.string.paxsenix_spotify)
-        PreferredLyricsProvider.PAXSENIX_MUSIXMATCH -> stringResource(R.string.paxsenix_musixmatch)
+
         PreferredLyricsProvider.UNISON -> "Unison"
+
+        PreferredLyricsProvider.APPLE_MUSIC -> "Apple Music (account)"
+        PreferredLyricsProvider.MUSIXMATCH_EXPERIMENTAL -> "Musixmatch (experimental)"
     }
 
 @Composable
-private fun LyricsProviderOrderDialog(
+internal fun LyricsProviderOrderDialog(
     initialOrder: List<PreferredLyricsProvider>,
     onDismiss: () -> Unit,
     onConfirm: (List<PreferredLyricsProvider>) -> Unit,
@@ -795,360 +623,6 @@ private fun LyricsProviderOrderDialog(
                     }
                 }
             }
-        }
-    }
-}
-
-private fun successRateToStatus(rate: Float): PaxsenixServerStatus =
-    when {
-        rate >= 90f -> PaxsenixServerStatus.Operational
-        rate >= 70f -> PaxsenixServerStatus.Degraded
-        else -> PaxsenixServerStatus.Down
-    }
-
-private fun formatUptimeSeconds(seconds: Double): String {
-    val total = seconds.toLong()
-    val days = total / 86400L
-    val hours = (total % 86400L) / 3600L
-    val minutes = (total % 3600L) / 60L
-    return when {
-        days > 0L -> "${days}d ${hours}h ${minutes}m"
-        hours > 0L -> "${hours}h ${minutes}m"
-        else -> "${minutes}m"
-    }
-}
-
-@Composable
-private fun PaxsenixStatsDialog(
-    state: PaxsenixStatsState,
-    onDismiss: () -> Unit,
-    onRetry: () -> Unit,
-) {
-    val uriHandler = LocalUriHandler.current
-
-    DefaultDialog(
-        onDismiss = onDismiss,
-        title = { Text(stringResource(R.string.paxsenix_stats)) },
-        icon = { Icon(painterResource(R.drawable.stats), contentDescription = null) },
-        buttons = {
-            if (state is PaxsenixStatsState.Error) {
-                TextButton(onClick = onRetry) {
-                    Text(stringResource(R.string.retry))
-                }
-            } else {
-                TextButton(onClick = { uriHandler.openUri("https://lyrics.paxsenix.org/") }) {
-                    Text(stringResource(R.string.visit_website))
-                }
-            }
-            Spacer(Modifier.weight(1f))
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(android.R.string.ok))
-            }
-        },
-    ) {
-        when (state) {
-            PaxsenixStatsState.Loading -> {
-                Box(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 24.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    LoadingIndicator()
-                }
-            }
-
-            PaxsenixStatsState.Error -> {
-                Column(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 16.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Icon(
-                        painterResource(R.drawable.error),
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(32.dp),
-                    )
-                    Text(
-                        text = stringResource(R.string.paxsenix_stats_failed),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-
-            is PaxsenixStatsState.Success -> {
-                PaxsenixStatsContent(stats = state.stats)
-            }
-        }
-    }
-}
-
-@Composable
-private fun PaxsenixStatsContent(stats: PaxsenixStats) {
-    val overallRate =
-        remember(stats.overallSuccessRate) {
-            stats.overallSuccessRate.trimEnd('%').toFloatOrNull() ?: 0f
-        }
-
-    Column(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        PaxsenixStatusBar(successRate = overallRate)
-
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    text = stringResource(R.string.uptime),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = formatUptimeSeconds(stats.uptimeSeconds),
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium,
-                )
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    text = stringResource(R.string.total_requests),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = stats.totalRequests.toString(),
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium,
-                )
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    text = stringResource(R.string.success_rate),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Text(
-                    text = stats.overallSuccessRate,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.Medium,
-                )
-            }
-        }
-
-        if (stats.providers.isNotEmpty()) {
-            HorizontalDivider()
-            Text(
-                text = stringResource(R.string.providers),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                stats.providers.forEach { (name, providerStats) ->
-                    key(name) {
-                        PaxsenixProviderRow(name = name, providerStats = providerStats)
-                    }
-                }
-            }
-        }
-
-        if (stats.requestLog.isNotEmpty()) {
-            HorizontalDivider()
-            Text(
-                text = stringResource(R.string.recent_requests),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                stats.requestLog.take(5).forEach { entry ->
-                    key(entry.timestamp + entry.endpoint) {
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors =
-                                CardDefaults.cardColors(
-                                    containerColor =
-                                        if (entry.success) {
-                                            MaterialTheme.colorScheme.surfaceContainerHigh
-                                        } else {
-                                            MaterialTheme.colorScheme.errorContainer
-                                        },
-                                ),
-                        ) {
-                            Row(
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 10.dp, vertical = 6.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = entry.endpoint,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                    Text(
-                                        text = entry.provider,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color =
-                                            if (entry.success) {
-                                                MaterialTheme.colorScheme.onSurfaceVariant
-                                            } else {
-                                                MaterialTheme.colorScheme.onErrorContainer
-                                            },
-                                    )
-                                }
-                                Text(
-                                    text = "${entry.responseTimeMs.toInt()}ms",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color =
-                                        if (entry.success) {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        } else {
-                                            MaterialTheme.colorScheme.onErrorContainer
-                                        },
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PaxsenixStatusBar(successRate: Float) {
-    val status = remember(successRate) { successRateToStatus(successRate) }
-    val statusColor =
-        when (status) {
-            PaxsenixServerStatus.Operational -> Color(0xFF4CAF50)
-            PaxsenixServerStatus.Degraded -> Color(0xFFFF9800)
-            PaxsenixServerStatus.Down -> MaterialTheme.colorScheme.error
-        }
-    val statusLabel =
-        when (status) {
-            PaxsenixServerStatus.Operational -> stringResource(R.string.paxsenix_status_operational)
-            PaxsenixServerStatus.Degraded -> stringResource(R.string.paxsenix_status_degraded)
-            PaxsenixServerStatus.Down -> stringResource(R.string.paxsenix_status_down)
-        }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors =
-            CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            ),
-    ) {
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                Box(
-                    modifier =
-                        Modifier
-                            .size(10.dp)
-                            .clip(CircleShape)
-                            .background(statusColor),
-                )
-                Text(
-                    text = statusLabel,
-                    style = MaterialTheme.typography.titleSmall,
-                )
-            }
-            Text(
-                text = "${successRate.toInt()}%",
-                style = MaterialTheme.typography.titleSmall,
-                color = statusColor,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
-    }
-}
-
-@Composable
-private fun PaxsenixProviderRow(
-    name: String,
-    providerStats: ProviderStats,
-) {
-    val rate =
-        remember(providerStats.successRate) {
-            providerStats.successRate.trimEnd('%').toFloatOrNull() ?: 0f
-        }
-    val status = remember(rate) { successRateToStatus(rate) }
-    val dotColor =
-        when (status) {
-            PaxsenixServerStatus.Operational -> Color(0xFF4CAF50)
-            PaxsenixServerStatus.Degraded -> Color(0xFFFF9800)
-            PaxsenixServerStatus.Down -> MaterialTheme.colorScheme.error
-        }
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.weight(1f),
-        ) {
-            Box(
-                modifier =
-                    Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(dotColor),
-            )
-            Text(
-                text = name,
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "${providerStats.hits} hits",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = providerStats.successRate,
-                style = MaterialTheme.typography.labelSmall,
-                color = dotColor,
-                fontWeight = FontWeight.Medium,
-            )
         }
     }
 }

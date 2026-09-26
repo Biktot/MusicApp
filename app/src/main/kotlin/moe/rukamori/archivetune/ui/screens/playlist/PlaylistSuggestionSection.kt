@@ -27,12 +27,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,6 +54,8 @@ import moe.rukamori.archivetune.ui.component.IconButton
 import moe.rukamori.archivetune.ui.component.NavigationTitle
 import moe.rukamori.archivetune.ui.component.YouTubeListItem
 import moe.rukamori.archivetune.viewmodels.LocalPlaylistViewModel
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 @Composable
 fun PlaylistSuggestionsSection(
@@ -66,13 +66,12 @@ fun PlaylistSuggestionsSection(
     val database = LocalDatabase.current
     val coroutineScope = rememberCoroutineScope()
     val playerConnection = LocalPlayerConnection.current
-    val isPlaying by playerConnection?.isPlaying?.collectAsState() ?: androidx.compose.runtime.mutableStateOf(false)
-    val mediaMetadata by playerConnection?.mediaMetadata?.collectAsState() ?: androidx.compose.runtime.mutableStateOf(null)
+    val isPlaying by playerConnection?.isPlaying?.collectAsStateWithLifecycle() ?: androidx.compose.runtime.mutableStateOf(false)
+    val mediaMetadata by playerConnection?.mediaMetadata?.collectAsStateWithLifecycle() ?: androidx.compose.runtime.mutableStateOf(null)
 
-    val playlistSuggestions by viewModel.playlistSuggestions.collectAsState()
-    val isLoading by viewModel.isLoadingSuggestions.collectAsState()
+    val playlistSuggestions by viewModel.playlistSuggestions.collectAsStateWithLifecycle()
+    val isLoading by viewModel.isLoadingSuggestions.collectAsStateWithLifecycle()
 
-    // State for duplicate check dialog
     var showDuplicateDialog by remember { mutableStateOf(false) }
     var songToCheck by remember { mutableStateOf<SongItem?>(null) }
 
@@ -80,7 +79,6 @@ fun PlaylistSuggestionsSection(
     if (currentSuggestions == null && !isLoading) return
     if (currentSuggestions != null && currentSuggestions.items.isEmpty() && !isLoading) return
 
-    // Duplicate Check Dialog
     if (showDuplicateDialog && songToCheck != null) {
         val song = songToCheck!!
         DefaultDialog(
@@ -98,7 +96,7 @@ fun PlaylistSuggestionsSection(
                 TextButton(
                     onClick = {
                         coroutineScope.launch {
-                            // Add to current playlist anyway
+
                             val browseId =
                                 viewModel.playlist.value
                                     ?.playlist
@@ -137,7 +135,7 @@ fun PlaylistSuggestionsSection(
     Column(
         modifier = modifier.fillMaxWidth(),
     ) {
-        // Header
+
         Row(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -159,7 +157,7 @@ fun PlaylistSuggestionsSection(
         Spacer(modifier = Modifier.height(8.dp))
 
         currentSuggestions?.let { suggestions ->
-            // Suggestions List (Vertical)
+
             suggestions.items.forEach { item ->
                 YouTubeListItem(
                     item = item,
@@ -170,7 +168,7 @@ fun PlaylistSuggestionsSection(
                             onClick = {
                                 val songItem = item as? SongItem
                                 if (songItem != null) {
-                                    // Check for duplicates in current playlist first
+
                                     songToCheck = songItem
                                     coroutineScope.launch {
                                         val isDuplicate =
@@ -186,7 +184,7 @@ fun PlaylistSuggestionsSection(
                                         if (isDuplicate) {
                                             showDuplicateDialog = true
                                         } else {
-                                            // No duplicate, add directly
+
                                             val browseId =
                                                 viewModel.playlist.value
                                                     ?.playlist

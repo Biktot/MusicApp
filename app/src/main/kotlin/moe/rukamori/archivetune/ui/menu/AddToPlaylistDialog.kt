@@ -60,12 +60,10 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -98,6 +96,10 @@ import moe.rukamori.archivetune.ui.component.PlaylistListItem
 import moe.rukamori.archivetune.utils.rememberPreference
 import java.time.LocalDateTime
 import java.util.Locale
+import moe.rukamori.archivetune.ui.component.KeepStatusBarHiddenInDialog
+import moe.rukamori.archivetune.ui.component.UnglassedDialogTheme
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 private fun preferredAddTargetPlaylist(
     current: Playlist,
@@ -299,6 +301,9 @@ fun AddToPlaylistDialog(
             onDismissRequest = onDismiss,
             properties = DialogProperties(usePlatformDefaultWidth = false),
         ) {
+
+            UnglassedDialogTheme {
+            KeepStatusBarHiddenInDialog()
             BoxWithConstraints(
                 modifier =
                     Modifier
@@ -697,6 +702,7 @@ fun AddToPlaylistDialog(
                         }
                     }
                 }
+            }
             }
         }
     }

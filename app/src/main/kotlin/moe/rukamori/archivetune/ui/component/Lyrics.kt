@@ -72,8 +72,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -81,8 +79,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment
@@ -148,6 +146,7 @@ import moe.rukamori.archivetune.db.entities.LyricsEntity.Companion.LYRICS_NOT_FO
 import moe.rukamori.archivetune.lyrics.LyricsEntry
 import moe.rukamori.archivetune.lyrics.LyricsRomanizationPreferences
 import moe.rukamori.archivetune.lyrics.LyricsUtils.findCurrentLineIndex
+import moe.rukamori.archivetune.lyrics.LyricsUtils.hasTrueWordSync
 import moe.rukamori.archivetune.lyrics.LyricsUtils.isChinese
 import moe.rukamori.archivetune.lyrics.LyricsUtils.isJapanese
 import moe.rukamori.archivetune.lyrics.LyricsUtils.isKorean
@@ -169,13 +168,10 @@ import moe.rukamori.archivetune.utils.reportException
 import kotlin.math.abs
 import kotlin.math.sin
 import kotlin.time.Duration.Companion.seconds
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
-private val AppleMusicEasing = CubicBezierEasing(0.25f, 0.1f, 0.25f, 1.0f)
 private val SmoothDecelerateEasing = CubicBezierEasing(0.0f, 0.0f, 0.2f, 1.0f)
-private const val ArchiveTune_AUTO_SCROLL_DURATION = 1500L
-private const val ArchiveTune_INITIAL_SCROLL_DURATION = 1000L
-private const val ArchiveTune_SEEK_DURATION = 800L
-private const val ArchiveTune_FAST_SEEK_DURATION = 600L
 private const val LyricsWordSyncLeadMs = 300L
 
 val LyricsPreviewTime = 2.seconds
@@ -213,10 +209,6 @@ private fun rtlAwareHorizontalGradient(
     return Brush.horizontalGradient(*stops.toTypedArray())
 }
 
-/**
- * Renders a single word with karaoke fill animation.
- * Optimized to perform animation in the draw phase to avoid recomposition.
- */
 @Composable
 private fun KaraokeWord(
     text: String,
@@ -233,7 +225,7 @@ private fun KaraokeWord(
     modifier: Modifier = Modifier,
 ) {
     val duration = endTime - startTime
-    val glowPadding = 10.dp // Reduced to 10dp for tighter spacing
+    val glowPadding = 10.dp
 
     Box(
         modifier =
@@ -259,7 +251,6 @@ private fun KaraokeWord(
                     clip = false
                     val currentTime = currentTimeProvider()
 
-                    // Nudge parameters
                     val maxShift = 5f
                     val attackDuration = 120L
                     val decayDuration = 250L
@@ -269,12 +260,12 @@ private fun KaraokeWord(
                         if (nudgeEnabled && currentTime >= startTime && currentTime < startTime + totalImpulseTime) {
                             val timeSinceStart = currentTime - startTime
                             if (timeSinceStart < attackDuration) {
-                                // Attack: 0 -> max
+
                                 val progress = timeSinceStart.toFloat() / attackDuration.toFloat()
                                 androidx.compose.ui.util
                                     .lerp(0f, maxShift, progress)
                             } else {
-                                // Decay: max -> 0
+
                                 val decayProgress = (timeSinceStart - attackDuration).toFloat() / decayDuration.toFloat()
                                 androidx.compose.ui.util
                                     .lerp(maxShift, 0f, decayProgress)
@@ -286,7 +277,7 @@ private fun KaraokeWord(
                     translationX = if (isRtl) -shift else shift
                 },
     ) {
-        // 1. Inactive (unfilled) layer
+
         val effectiveFontSize = if (isBackground) fontSize * 0.7f else fontSize
         val effectiveAlpha = if (isBackground) 0.6f else 1f
 
@@ -298,7 +289,6 @@ private fun KaraokeWord(
             modifier = Modifier.padding(glowPadding),
         )
 
-        // 2. Completed (filled) layer
         Text(
             text = text,
             fontSize = effectiveFontSize,
@@ -316,7 +306,6 @@ private fun KaraokeWord(
                     },
         )
 
-        // 3. Active (filling) layer - SOFT MASK (no glow)
         Box(
             modifier =
                 Modifier
@@ -355,10 +344,8 @@ private fun KaraokeWord(
                             val totalWidth = size.width
                             val paddingPx = glowPadding.toPx()
 
-                            // Calculated relative to the padded box
                             val textWidth = totalWidth - (paddingPx * 2)
 
-                            // Fill width based on text width
                             val fillWidth = textWidth * progress
 
                             val endFraction = (paddingPx + fillWidth + fadeWidth) / totalWidth
@@ -396,7 +383,7 @@ private fun KaraokeWord(
                 fontSize = effectiveFontSize,
                 color = textColor.copy(alpha = effectiveAlpha),
                 fontWeight = fontWeight,
-                // Removed shadow effect to match player's clean style
+
             )
         }
     }
@@ -432,7 +419,8 @@ fun Lyrics(
     val lyricsAnimationStyle by rememberEnumPreference(LyricsAnimationStyleKey, LyricsAnimationStyle.APPLE)
     val lyricsTextSize by rememberPreference(LyricsTextSizeKey, 26f)
     val lyricsLineSpacing by rememberPreference(LyricsLineSpacingKey, 1.3f)
-    val lyricsLineBlur by rememberPreference(LyricsLineBlurKey, true)
+
+    val lyricsLineBlur by rememberPreference(LyricsLineBlurKey, false)
     val animationsDisabled = LocalAnimationsDisabled.current
     val lyricsFontFamily = rememberArchiveTuneLyricsFontFamily()
 
@@ -465,9 +453,10 @@ fun Lyrics(
         }
     val scope = rememberCoroutineScope()
 
-    val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
-    val lyricsEntity by playerConnection.currentLyrics.collectAsState(initial = null)
+    val mediaMetadata by playerConnection.mediaMetadata.collectAsStateWithLifecycle()
+    val lyricsEntity by playerConnection.currentLyrics.collectAsStateWithLifecycle(initialValue = null)
     val lyrics = remember(lyricsEntity) { lyricsEntity?.lyrics?.trim() }
+    val lyricsProviderName = lyricsEntity?.providerName.orEmpty()
 
     val playerBackground by rememberEnumPreference(
         key = PlayerBackgroundStyleKey,
@@ -531,8 +520,8 @@ fun Lyrics(
             !lyrics.isNullOrEmpty() && (isLineSyncedLrc(lyrics) || isTtml(lyrics))
         }
 
-    val lyricsBaseColor = if (useDarkTheme || playerBackground != PlayerBackgroundStyle.DEFAULT) Color.White else Color.Black
-    val lyricsGlowColor = if (useDarkTheme || playerBackground != PlayerBackgroundStyle.DEFAULT) Color.White else Color.Black
+    val lyricsBaseColor = Color.White
+    val lyricsGlowColor = Color.White
     val textColor = lyricsBaseColor
 
     val wordSyncLeadMs =
@@ -700,12 +689,11 @@ fun Lyrics(
             targetIndex: Int,
             isSeek: Boolean = false,
         ) {
-            // Don't block on animation - let new scroll requests interrupt old ones
 
             try {
                 val itemInfo = lazyListState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == targetIndex }
                 if (itemInfo != null) {
-                    // Item is visible, just center it
+
                     val viewportHeight = lazyListState.layoutInfo.viewportEndOffset - lazyListState.layoutInfo.viewportStartOffset
                     val center = lazyListState.layoutInfo.viewportStartOffset + (viewportHeight / 2)
                     val itemCenter = itemInfo.offset + itemInfo.size / 2
@@ -716,13 +704,13 @@ fun Lyrics(
                             value = offset.toFloat(),
                             animationSpec =
                                 if (isSeek) {
-                                    // Faster response for seeking
+
                                     spring(
                                         dampingRatio = Spring.DampingRatioLowBouncy,
                                         stiffness = Spring.StiffnessMedium,
                                     )
                                 } else {
-                                    // Smooth auto-scroll
+
                                     spring(
                                         dampingRatio = Spring.DampingRatioNoBouncy,
                                         stiffness = Spring.StiffnessLow,
@@ -731,15 +719,15 @@ fun Lyrics(
                         )
                     }
                 } else {
-                    // Item not visible - use simpler scrollToItem for better performance
+
                     val firstVisibleIndex = lazyListState.firstVisibleItemIndex
                     val distance = abs(targetIndex - firstVisibleIndex)
 
                     if (distance > 15) {
-                        // Far away - instant scroll to vicinity, then smooth scroll
+
                         lazyListState.scrollToItem(targetIndex)
                     } else {
-                        // Close - just animate
+
                         lazyListState.animateScrollToItem(
                             index = targetIndex,
                             scrollOffset = 0,
@@ -747,7 +735,7 @@ fun Lyrics(
                     }
                 }
             } catch (e: Exception) {
-                // Ignore scroll interruptions
+
             }
         }
 
@@ -798,6 +786,7 @@ fun Lyrics(
                 )
             }
         } else {
+
             LazyColumn(
                 state = lazyListState,
                 contentPadding =
@@ -819,7 +808,7 @@ fun Lyrics(
                                     ): Offset {
                                         if (!isSelectionModeActive && source == NestedScrollSource.UserInput) {
                                             val currentTime = System.currentTimeMillis()
-                                            // Debounce scroll updates to reduce state changes
+
                                             if (currentTime - lastScrollTime > 50) {
                                                 lastPreviewTime = currentTime
                                                 isManualScrolling = true
@@ -846,6 +835,43 @@ fun Lyrics(
                 val displayedCurrentLineIndex =
                     if (isSeeking || isSelectionModeActive) deferredCurrentLineIndex else currentLineIndex
 
+                if (lyricsProviderName.isNotBlank() && lyrics != null) {
+                    val attributionAlignment =
+                        when (lyricsTextPosition) {
+                            LyricsPosition.LEFT -> TextAlign.Start
+                            LyricsPosition.CENTER -> TextAlign.Center
+                            LyricsPosition.RIGHT -> TextAlign.End
+                        }
+                    val attributionHorizontalAlignment =
+                        when (lyricsTextPosition) {
+                            LyricsPosition.LEFT -> Alignment.TopStart
+                            LyricsPosition.CENTER -> Alignment.TopCenter
+                            LyricsPosition.RIGHT -> Alignment.TopEnd
+                        }
+                    item(key = "lyrics_source_header", contentType = "lyrics_attribution") {
+                        CompositionLocalProvider(
+                            LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = lyricsFontFamily),
+                        ) {
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 24.dp, vertical = 8.dp),
+                                contentAlignment = attributionHorizontalAlignment,
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.lyrics_from_source, lyricsProviderName),
+                                    fontSize = (lyricsTextSize * 0.8f).sp,
+                                    color = lyricsBaseColor.copy(alpha = 0.52f),
+                                    textAlign = attributionAlignment,
+                                    fontWeight = FontWeight.SemiBold,
+                                    lineHeight = (lyricsTextSize * lyricsLineSpacing).sp,
+                                )
+                            }
+                        }
+                    }
+                }
+
                 if (lyrics == null) {
                     item {
                         ShimmerHost {
@@ -870,8 +896,8 @@ fun Lyrics(
                 } else {
                     itemsIndexed(
                         items = lines,
-                        key = { index, item -> "${index}_${item.time}_${item.text.hashCode()}" }, // Stable keys for better recycling
-                        contentType = { _, _ -> "lyric_line" }, // Enables better item recycling
+                        key = { index, item -> "${index}_${item.time}_${item.text.hashCode()}" },
+                        contentType = { _, _ -> "lyric_line" },
                     ) { index, item ->
                         val isSelected = selectedIndices.contains(index)
 
@@ -961,7 +987,7 @@ fun Lyrics(
                         val itemModifier =
                             Modifier
                                 .fillMaxWidth()
-                                // Removed .clip() to prevent glow clipping
+
                                 .combinedClickable(
                                     enabled = true,
                                     onClick = {
@@ -1078,10 +1104,12 @@ fun Lyrics(
                                             }
                                         }
 
-                                    val hasWordTimings = remember(item.words) { item.words?.isNotEmpty() == true }
+                                    val hasWordTimings = remember(item.words) {
+                                        !item.words.isNullOrEmpty() && hasTrueWordSync(item)
+                                    }
                                     val romanizedText: String? =
                                         if (romanizationPreferences.isEnabled) {
-                                            val value by item.romanizedTextFlow.collectAsState()
+                                            val value by item.romanizedTextFlow.collectAsStateWithLifecycle()
                                             value
                                         } else {
                                             null
@@ -1113,7 +1141,7 @@ fun Lyrics(
                                                         val nextText = baseWords.getOrNull(idx + 1)?.text
                                                         val includeSpace =
                                                             if (isCjk) {
-                                                                // Add space at CJK↔Latin boundaries
+
                                                                 val currEdge =
                                                                     if (lineIsRtl) {
                                                                         word.text.firstOrNull()
@@ -1146,13 +1174,12 @@ fun Lyrics(
                                                         val wordDuration = wordEndMs - wordStartMs
 
                                                         if (isCjk && word.text.length > 3) {
-                                                            // Split long CJK phrases into individual characters for FlowRow wrapping
-                                                            // Short entries (1-3 chars) are kept intact — TTML already provides granular timing
+
                                                             val chars = word.text.toList()
                                                             chars.mapIndexed { charIdx, char ->
                                                                 val charStartMs = wordStartMs + (wordDuration * charIdx / chars.size)
                                                                 val charEndMs = wordStartMs + (wordDuration * (charIdx + 1) / chars.size)
-                                                                // Add space only at the last/first character boundary with next/prev word
+
                                                                 val charText =
                                                                     when {
                                                                         includeSpace && !lineIsRtl && charIdx == chars.lastIndex -> "$char "
@@ -1178,7 +1205,7 @@ fun Lyrics(
                                                         }
                                                     }
                                                 } else {
-                                                    // Simulate word timings - cache this computation
+
                                                     val nextLineTime =
                                                         lines.getOrNull(index + 1)?.time
                                                             ?: (item.time + 5000L).coerceAtLeast(item.time + 1000L)
@@ -1279,7 +1306,7 @@ fun Lyrics(
                                                 }
                                             }
 
-                                        val horizontalSpacing = 0.dp // Reduced to 0dp, relying on padding and text spaces
+                                        val horizontalSpacing = 0.dp
                                         val karaokeCurrentTimeProvider: () -> Long = {
                                             if (isActiveLine && !reduceMotionDuringScroll) currentPlaybackPosition else Long.MIN_VALUE
                                         }
@@ -1382,7 +1409,6 @@ fun Lyrics(
                                                                 else -> 0.35f
                                                             }
 
-                                                        // Apply background vocal styling
                                                         val effectiveAlpha = if (word.isBackground) wordAlpha * 0.6f else wordAlpha
                                                         val wordColor = lyricsBaseColor.copy(alpha = effectiveAlpha)
 
@@ -1466,7 +1492,6 @@ fun Lyrics(
                                                                 0.65f
                                                             }
 
-                                                        // Apply background vocal styling
                                                         val effectiveAlpha = if (word.isBackground) wordAlpha * 0.6f else wordAlpha
                                                         val wordColor = lyricsBaseColor.copy(alpha = effectiveAlpha)
 
@@ -1550,7 +1575,6 @@ fun Lyrics(
                                                                 else -> lyricsBaseColor.copy(alpha = 0.35f)
                                                             }
 
-                                                        // Apply background vocal styling
                                                         val wordColor =
                                                             if (word.isBackground) {
                                                                 baseWordColor.copy(alpha = baseWordColor.alpha * 0.6f)
@@ -2399,6 +2423,46 @@ fun Lyrics(
                         }
                     }
                 }
+
+                mediaMetadata?.let { metadata ->
+                    val writersLine = metadata.artists.joinToString { it.name }.trim()
+                    if (writersLine.isNotBlank()) {
+                        val footerAlignment =
+                            when (lyricsTextPosition) {
+                                LyricsPosition.LEFT -> TextAlign.Start
+                                LyricsPosition.CENTER -> TextAlign.Center
+                                LyricsPosition.RIGHT -> TextAlign.End
+                            }
+                        val footerHorizontalAlignment =
+                            when (lyricsTextPosition) {
+                                LyricsPosition.LEFT -> Alignment.TopStart
+                                LyricsPosition.CENTER -> Alignment.TopCenter
+                                LyricsPosition.RIGHT -> Alignment.TopEnd
+                            }
+                        item(key = "lyrics_writers_footer", contentType = "lyrics_attribution") {
+                            CompositionLocalProvider(
+                                LocalTextStyle provides LocalTextStyle.current.copy(fontFamily = lyricsFontFamily),
+                            ) {
+                                Box(
+                                    modifier =
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 24.dp, vertical = 8.dp),
+                                    contentAlignment = footerHorizontalAlignment,
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.written_by, writersLine),
+                                        fontSize = lyricsTextSize.sp,
+                                        color = lyricsBaseColor.copy(alpha = 0.52f),
+                                        textAlign = footerAlignment,
+                                        fontWeight = FontWeight.SemiBold,
+                                        lineHeight = (lyricsTextSize * lyricsLineSpacing).sp,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             AnimatedVisibility(
@@ -2434,7 +2498,6 @@ fun Lyrics(
                                 isManualScrolling = false
                                 lastPreviewTime = 0L
 
-                                // Automatic scroll to current lyric
                                 if (currentLineIndex >= 0) {
                                     scope.launch {
                                         lazyListState.animateScrollToItem(
