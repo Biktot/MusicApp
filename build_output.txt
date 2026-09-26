@@ -1,0 +1,406 @@
+Starting a Gradle Daemon (subsequent builds will be faster)
+> Task :buildSrc:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :buildSrc:compileKotlin UP-TO-DATE
+> Task :buildSrc:compileJava NO-SOURCE
+> Task :buildSrc:compileGroovy NO-SOURCE
+> Task :buildSrc:processResources NO-SOURCE
+> Task :buildSrc:classes UP-TO-DATE
+> Task :buildSrc:jar UP-TO-DATE
+Configuration 'fossAutomotiveArm64DebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'fossAutomotiveArm64DebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'fossAutomotiveArmeabiDebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'fossAutomotiveArmeabiDebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'fossAutomotiveUniversalDebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'fossAutomotiveUniversalDebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'fossAutomotiveX86DebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'fossAutomotiveX86DebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'fossAutomotiveX86_64DebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'fossAutomotiveX86_64DebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'fossMobileArm64DebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'fossMobileArm64DebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'fossMobileArmeabiDebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'fossMobileArmeabiDebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'fossMobileUniversalDebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'fossMobileUniversalDebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'fossMobileX86DebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'fossMobileX86DebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'fossMobileX86_64DebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'fossMobileX86_64DebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'fossTvArm64DebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'fossTvArm64DebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'fossTvArmeabiDebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'fossTvArmeabiDebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'fossTvUniversalDebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'fossTvUniversalDebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'fossTvX86DebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'fossTvX86DebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'fossTvX86_64DebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'fossTvX86_64DebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsAutomotiveArm64DebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsAutomotiveArm64DebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsAutomotiveArmeabiDebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsAutomotiveArmeabiDebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsAutomotiveUniversalDebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsAutomotiveUniversalDebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsAutomotiveX86DebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsAutomotiveX86DebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsAutomotiveX86_64DebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsAutomotiveX86_64DebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsMobileArm64DebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsMobileArm64DebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsMobileArmeabiDebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsMobileArmeabiDebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsMobileUniversalDebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsMobileUniversalDebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsMobileX86DebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsMobileX86DebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsMobileX86_64DebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsMobileX86_64DebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsTvArm64DebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsTvArm64DebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsTvArmeabiDebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsTvArmeabiDebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsTvUniversalDebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsTvUniversalDebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsTvX86DebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsTvX86DebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsTvX86_64DebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsTvX86_64DebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+> Task :spotlessKotlin UP-TO-DATE
+> Task :spotlessKotlinApply UP-TO-DATE
+> Task :spotlessApply UP-TO-DATE
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preFossAutomotiveArm64DebugBuild UP-TO-DATE
+> Task :app:mergeFossAutomotiveArm64DebugNativeDebugMetadata NO-SOURCE
+> Task :core:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :core:processResources UP-TO-DATE
+> Task :lyrics:kugou:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :lyrics:kugou:compileKotlin UP-TO-DATE
+> Task :lyrics:kugou:compileJava NO-SOURCE
+> Task :lyrics:kugou:processResources NO-SOURCE
+> Task :lyrics:kugou:classes UP-TO-DATE
+> Task :lyrics:kugou:jar UP-TO-DATE
+> Task :lyrics:lrclib:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :lyrics:lrclib:compileKotlin UP-TO-DATE
+> Task :lyrics:lrclib:compileJava NO-SOURCE
+> Task :lyrics:lrclib:processResources NO-SOURCE
+> Task :lyrics:lrclib:classes UP-TO-DATE
+> Task :lyrics:lrclib:jar UP-TO-DATE
+> Task :lyrics:simpmusic:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :lyrics:simpmusic:compileKotlin UP-TO-DATE
+> Task :lyrics:simpmusic:compileJava NO-SOURCE
+> Task :lyrics:simpmusic:processResources NO-SOURCE
+> Task :lyrics:simpmusic:classes UP-TO-DATE
+> Task :lyrics:simpmusic:jar UP-TO-DATE
+> Task :lyrics:paxsenix:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :lyrics:paxsenix:compileKotlin UP-TO-DATE
+> Task :lyrics:paxsenix:compileJava NO-SOURCE
+> Task :lyrics:paxsenix:processResources NO-SOURCE
+> Task :lyrics:paxsenix:classes UP-TO-DATE
+> Task :lyrics:paxsenix:jar UP-TO-DATE
+> Task :lyrics:betterlyrics:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :lyrics:betterlyrics:compileKotlin UP-TO-DATE
+> Task :lyrics:betterlyrics:compileJava NO-SOURCE
+> Task :lyrics:betterlyrics:processResources NO-SOURCE
+> Task :lyrics:betterlyrics:classes UP-TO-DATE
+> Task :lyrics:betterlyrics:jar UP-TO-DATE
+> Task :lyrics:unison:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :lyrics:unison:compileKotlin UP-TO-DATE
+> Task :lyrics:unison:compileJava NO-SOURCE
+> Task :lyrics:unison:processResources NO-SOURCE
+> Task :lyrics:unison:classes UP-TO-DATE
+> Task :lyrics:unison:jar UP-TO-DATE
+> Task :lyrics:youlyplus:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :lyrics:youlyplus:compileKotlin UP-TO-DATE
+> Task :lyrics:youlyplus:compileJava NO-SOURCE
+> Task :lyrics:youlyplus:processResources NO-SOURCE
+> Task :lyrics:youlyplus:classes UP-TO-DATE
+> Task :lyrics:youlyplus:jar UP-TO-DATE
+> Task :lastfm:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :lastfm:compileKotlin UP-TO-DATE
+> Task :lastfm:compileJava NO-SOURCE
+> Task :lastfm:processResources NO-SOURCE
+> Task :lastfm:classes UP-TO-DATE
+> Task :lastfm:jar UP-TO-DATE
+> Task :canvas:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :spotifycore:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :core:compileKotlin
+> Task :spotifycore:compileKotlin
+> Task :spotifycore:compileJava NO-SOURCE
+> Task :spotifycore:processResources NO-SOURCE
+> Task :spotifycore:classes UP-TO-DATE
+> Task :spotifycore:jar
+> Task :canvas:compileKotlin
+> Task :canvas:compileJava NO-SOURCE
+> Task :canvas:processResources NO-SOURCE
+> Task :canvas:classes UP-TO-DATE
+> Task :canvas:jar
+> Task :shazamkit:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :shazamkit:compileKotlin
+> Task :shazamkit:compileJava NO-SOURCE
+> Task :shazamkit:processResources NO-SOURCE
+> Task :shazamkit:classes UP-TO-DATE
+> Task :shazamkit:jar
+> Task :app:generateFossAutomotiveArm64DebugBuildConfig
+
+> Task :core:compileKotlin
+w: file:///workspaces/MusicApp/core/src/main/kotlin/moe/rukamori/archivetune/innertube/pages/PodcastPage.kt:64:21 Unnecessary safe call on a non-null receiver of type 'BrowseResponse.Contents'.
+w: file:///workspaces/MusicApp/core/src/main/kotlin/moe/rukamori/archivetune/innertube/pages/PodcastPage.kt:133:17 Unnecessary safe call on a non-null receiver of type 'Runs'.
+w: file:///workspaces/MusicApp/core/src/main/kotlin/moe/rukamori/archivetune/innertube/pages/SearchSummaryPage.kt:178:37 Unnecessary safe call on a non-null receiver of type 'List<List<Run>>'.
+
+> Task :app:generateFossAutomotiveArm64DebugIconPack
+> Task :core:compileJava NO-SOURCE
+> Task :core:classes UP-TO-DATE
+> Task :core:jar
+> Task :app:prepareLibraryDefinitionsFossAutomotiveArm64Debug
+> Task :app:extractFossAutomotiveArm64DebugSupportedLocales
+> Task :app:mapFossAutomotiveArm64DebugSourceSetPaths
+> Task :morideobfuscator:preBuild UP-TO-DATE
+> Task :morideobfuscator:preDebugBuild UP-TO-DATE
+> Task :morideobfuscator:extractDebugSupportedLocales
+> Task :app:generateFossAutomotiveArm64DebugLocaleConfig
+> Task :app:generateFossAutomotiveArm64DebugResources
+> Task :app:packageFossAutomotiveArm64DebugResources
+> Task :morideobfuscator:processDebugNavigationResources
+> Task :app:processFossAutomotiveArm64DebugNavigationResources
+> Task :morideobfuscator:generateDebugResources
+> Task :morideobfuscator:packageDebugResources
+> Task :app:parseFossAutomotiveArm64DebugLocalResources
+> Task :morideobfuscator:parseDebugLocalResources
+> Task :morideobfuscator:javaPreCompileDebug
+> Task :morideobfuscator:generateDebugRFile
+> Task :app:javaPreCompileFossAutomotiveArm64Debug
+> Task :app:generateFossAutomotiveArm64DebugRFile
+> Task :app:generateFossAutomotiveArm64DebugAssets UP-TO-DATE
+> Task :morideobfuscator:generateDebugAssets UP-TO-DATE
+> Task :morideobfuscator:mergeDebugAssets
+> Task :app:mergeFossAutomotiveArm64DebugAssets
+> Task :app:compressFossAutomotiveArm64DebugAssets
+> Task :app:generateFossAutomotiveArm64DebugGlobalSynthetics
+> Task :morideobfuscator:compileDebugKotlin
+> Task :morideobfuscator:compileDebugJavaWithJavac NO-SOURCE
+> Task :app:checkFossAutomotiveArm64DebugDuplicateClasses
+> Task :app:desugarFossAutomotiveArm64DebugFileDependencies
+> Task :morideobfuscator:bundleLibCompileToJarDebug
+> Task :app:mergeExtDexFossAutomotiveArm64Debug
+
+The message received from the daemon indicates that the daemon has disappeared.
+Build request sent: Build{id=d1c6a731-c5a6-4cc7-b752-81ad0f38d93a, currentDir=/workspaces/MusicApp}
+Attempting to read last messages from the daemon log...
+Daemon pid: 5057
+  log file: /home/vscode/.gradle/daemon/9.7.1/daemon-5057.out.log
+----- Last 20 lines from daemon log file - daemon-5057.out.log -----
+Configuration 'gmsTvX86DebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsTvX86DebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsTvX86_64DebugCompileClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+Configuration 'gmsTvX86_64DebugRuntimeClasspath' was resolved during configuration time.
+This is a build performance and scalability issue.
+See https://github.com/gradle/gradle/issues/2298
+Run with --info for a stacktrace.
+w: file:///workspaces/MusicApp/core/src/main/kotlin/moe/rukamori/archivetune/innertube/pages/PodcastPage.kt:64:21 Unnecessary safe call on a non-null receiver of type 'BrowseResponse.Contents'.
+w: file:///workspaces/MusicApp/core/src/main/kotlin/moe/rukamori/archivetune/innertube/pages/PodcastPage.kt:133:17 Unnecessary safe call on a non-null receiver of type 'Runs'.
+w: file:///workspaces/MusicApp/core/src/main/kotlin/moe/rukamori/archivetune/innertube/pages/SearchSummaryPage.kt:178:37 Unnecessary safe call on a non-null receiver of type 'List<List<Run>>'.
+Daemon vm is shutting down... The daemon has exited normally or was terminated in response to a user interrupt.----- End of the daemon log -----
+
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Gradle build daemon disappeared unexpectedly (it may have been killed or may have crashed)
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights from a Build Scan (powered by Develocity).
+> Get more help at https://help.gradle.org.
+
+> Task :app:kspFossAutomotiveArm64DebugKotlin
