@@ -93,11 +93,8 @@ import moe.rukamori.archivetune.ui.screens.settings.LASTFM_LOGIN_ROUTE
 import moe.rukamori.archivetune.ui.screens.settings.LastFmLoginScreen
 import moe.rukamori.archivetune.ui.screens.settings.LASTFM_LIBREFM_LOGIN_ROUTE
 import moe.rukamori.archivetune.ui.screens.settings.LibreFmLoginScreen
-import moe.rukamori.archivetune.ui.screens.settings.TELEGRAM_LOGIN_ROUTE
-import moe.rukamori.archivetune.ui.screens.settings.TelegramLoginScreen
 import moe.rukamori.archivetune.ui.screens.settings.YOUTUBE_OAUTH_ROUTE
 import moe.rukamori.archivetune.ui.screens.settings.YouTubeOAuthLoginScreen
-import moe.rukamori.archivetune.ui.screens.settings.TelegramSettings
 import moe.rukamori.archivetune.ui.screens.settings.LastFMSettings
 import moe.rukamori.archivetune.ui.screens.settings.LastFmDashboardScreen
 import moe.rukamori.archivetune.ui.screens.settings.LanguagePackSettings

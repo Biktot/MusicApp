@@ -712,25 +712,6 @@ fun buildSettingsGroups(
             ),
         )
 
-    val telegramDetail =
-        SettingsItem(
-            key = "telegram",
-            icon = painterResource(R.drawable.ic_telegram),
-            title = "Telegram",
-            subtitle = "Telegram account and channels",
-            accentColor = MaterialTheme.colorScheme.tertiary,
-            keywords = listOf("telegram", "telegram channel", "telegram login", "telegram music", "telegram bots", "channel sync"),
-            onClick = { navController.navigate("settings/telegram") },
-            hidden = true,
-            children = listOf(
-                SettingsChild("Signed in as", "telegram_logged_in_as", listOf("telegram account", "signed in as", "telegram user")),
-                SettingsChild("Sign in with Telegram", "telegram_login", listOf("telegram login", "telegram sign in", "connect telegram", "phone code")),
-                SettingsChild("Sign out", "telegram_logout", listOf("telegram logout", "telegram sign out", "disconnect telegram")),
-                SettingsChild("Browse channels", "telegram_browse_channels", listOf("browse channels", "telegram channels", "music channels", "add channel")),
-                SettingsChild("Lossless files only", "telegram_lossless_only", listOf("lossless only", "telegram lossless", "flac only", "high quality only")) { SearchResultSwitch(TelegramLosslessOnlyKey, false) },
-                SettingsChild("Telegram bots", "telegram_bots_title", listOf("telegram bots", "bot token", "music bot")),
-            ),
-        )
     val aiIntegration =
         SettingsItem(
             key = "ai_integration",
@@ -1040,7 +1021,6 @@ fun buildSettingsGroups(
                     discordExperimental,
                     tidalDetail,
                     qobuzDetail,
-                    telegramDetail,
                     internet,
                     poToken,
                 ),
