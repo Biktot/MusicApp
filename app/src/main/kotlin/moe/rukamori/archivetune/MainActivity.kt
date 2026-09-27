@@ -284,7 +284,6 @@ import moe.rukamori.archivetune.playback.PlayerConnection
 import moe.rukamori.archivetune.playback.queues.ListQueue
 import moe.rukamori.archivetune.playback.queues.Queue
 import moe.rukamori.archivetune.playback.queues.YouTubeQueue
-import moe.rukamori.archivetune.utils.PoolAccountManager
 import moe.rukamori.archivetune.ui.component.BottomSheetMenu
 import moe.rukamori.archivetune.ui.component.BottomSheetPage
 import moe.rukamori.archivetune.ui.component.COLLAPSED_ANCHOR
@@ -323,7 +322,6 @@ import moe.rukamori.archivetune.ui.component.MarkdownText
 import moe.rukamori.archivetune.ui.component.NetworkStatusBanner
 import moe.rukamori.archivetune.ui.component.StarDialog
 import moe.rukamori.archivetune.ui.component.TopSearch
-import moe.rukamori.archivetune.ui.component.SearchSourcePicker
 import moe.rukamori.archivetune.ui.component.TvNavigationRail
 import moe.rukamori.archivetune.ui.component.rememberBottomSheetState
 import moe.rukamori.archivetune.ui.component.shimmer.ShimmerTheme
@@ -524,14 +522,8 @@ class MainActivity : ComponentActivity() {
 
         playerConnection?.service?.let { service ->
             val currentMediaId = playerConnection?.mediaMetadata?.value?.id
-            service.clearResolvedSources(currentMediaId)
         }
 
-        // Every-launch background pool refresh — silent, throttled to one
-        // server fetch per 10 minutes so restarts never hammer the feed.
-        lifecycleScope.launch(Dispatchers.IO) {
-            runCatching { PoolAccountManager.refreshForLaunch(this@MainActivity) }
-        }
     }
 
     /**
@@ -734,7 +726,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             val updateChannel by rememberEnumPreference(UpdateChannelKey, defaultValue = defaultUpdateChannel)
 
-            val effectiveUpdateChannel = if (isCanaryBuild) UpdateChannel.CANARY else updateChannel
+            val effectiveUpdateChannel = if (isCanaryBuild) UpdateChannel.ARTIFACT else updateChannel
 
             LaunchedEffect(Unit) {
                 while (playerConnection == null) {
@@ -749,10 +741,10 @@ class MainActivity : ComponentActivity() {
                     val channelString = withContext(Dispatchers.IO) { dataStore.data.first()[UpdateChannelKey] }
                     val userSelectedChannel = UpdateChannel.fromStoredName(channelString, defaultUpdateChannel)
                     val actualChannel =
-                        if (isCanaryBuild) UpdateChannel.CANARY else userSelectedChannel
+                        if (isCanaryBuild) UpdateChannel.ARTIFACT else userSelectedChannel
                     val versionResult =
                         when (actualChannel) {
-                            UpdateChannel.CANARY -> Updater.getLatestCanaryVersionName()
+                            UpdateChannel.ARTIFACT -> Updater.getLatestCanaryVersionName()
                             UpdateChannel.STABLE -> Updater.getLatestVersionName()
                         }
                     versionResult.onSuccess {
@@ -887,7 +879,7 @@ class MainActivity : ComponentActivity() {
                 ) {
                     val releaseNotesResult =
                         when (latestUpdateChannel) {
-                            UpdateChannel.CANARY -> Updater.getLatestCanaryReleaseNotes()
+                            UpdateChannel.ARTIFACT -> Updater.getLatestCanaryReleaseNotes()
                             UpdateChannel.STABLE -> Updater.getLatestReleaseNotes()
                         }
                     releaseNotesResult
@@ -2770,17 +2762,7 @@ class MainActivity : ComponentActivity() {
                                                                 )
                                                             }
                                                         }
-                                                        SearchSourcePicker(
-                                                            currentScope = searchSource,
-                                                            currentProvider = searchProvider,
-                                                            onSelection = selectSearchSource,
-                                                        )
                                                     } else if (currentRoute?.startsWith(OnlineSearchResultRoutePrefix) == true) {
-                                                        SearchSourcePicker(
-                                                            currentScope = SearchSource.ONLINE,
-                                                            currentProvider = searchProvider,
-                                                            onSelection = selectSearchSource,
-                                                        )
                                                         OnlineSearchSortMenu(
                                                             selectedSort = onlineSearchSort,
                                                             onSortSelected = { onlineSearchSort = it },
