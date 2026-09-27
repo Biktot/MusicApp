@@ -145,6 +145,18 @@ class DownloadUtil
                 }.build()
         }
 
+        fun prewarmDownloadConnections() {
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+            scope.launch {
+                for (host in listOf("www.youtube.com", "music.youtube.com")) {
+                    runCatching {
+                        val request = Request.Builder().url("https://$host/").head().build()
+                        mediaOkHttpClient.newCall(request).execute().use { }
+                    }
+                }
+            }
+        }
+
         val downloads = MutableStateFlow<Map<String, Download>>(emptyMap())
 
         private val resolvedNetworkDataSourceFactory =
